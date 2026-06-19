@@ -10,6 +10,13 @@
   <button type="submit">Загрузить и разобрать</button>
 </form>
 
+{% if periods.n_reports and not periods.consistent %}
+<div class="alert">⚠️ Периоды загруженных отчётов <b>не совпадают</b>:
+  {% for p, ts in periods.by_period.items() %}<br>• <b>{{ p }}</b> — {% for t in ts %}{{ rtype_ru.get(t, t) }}{% if not loop.last %}, {% endif %}{% endfor %}{% endfor %}
+  <br>Дашборд и воронка сравнивают отчёты между собой, поэтому периоды должны совпадать.
+  Загрузите отчёты за один период или нажмите «Сбросить отчёты».</div>
+{% endif %}
+
 <h2>Поддерживаемые отчёты и что они дают</h2>
 <table>
   <tr><th>Наименование отчёта (как в ЕИСЗ ПК)</th><th>Что даёт в системе</th><th>Где используется</th><th>Статус</th></tr>
@@ -25,7 +32,15 @@
 <p class="muted small">Минимально для базовой картины: «в разрезе врачей» + «неподписанные» + «ошибки ФЛК».
 Для полной воронки с шагом «подпись МО» добавьте «в разрезе МО»; для разбивки по точкам — «по ТВСП» и «не переданные в РЭМД».</p>
 
-<h2>Что уже загружено</h2>
+<div class="toolbar">
+  <h2 style="margin:0">Что уже загружено{% if periods.period %} <span class="small muted">— период {{ periods.period }}</span>{% endif %}</h2>
+  {% if meta %}
+  <form method="post" action="{{ url_for('reset') }}"
+        onsubmit="return confirm('Сбросить все загруженные отчёты? Почты врачей/зав. отделениями и настройки сохранятся.')">
+    <button type="submit" class="danger">🗑 Сбросить отчёты</button>
+  </form>
+  {% endif %}
+</div>
 <table>
   <tr><th>Тип</th><th>Файл</th><th>Период</th><th>Строк</th><th>Загружен</th></tr>
   {% for m in meta %}

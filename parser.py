@@ -9,6 +9,7 @@
   - flk      : «РЭМД. Детализация по ошибкам ФЛК»
   - mo       : «Отчет по отправке документов в РЭМД в разрезе МО» (воронка, опционально)
 """
+import re
 import xml.etree.ElementTree as ET
 
 SS = "urn:schemas-microsoft-com:office:spreadsheet"
@@ -70,6 +71,16 @@ def _period(rows):
         if "период" in low or ("с " in low and "по" in low and "202" in low):
             return joined
     return ""
+
+
+def norm_period(text):
+    """Нормализует строку периода к виду «ДД.ММ.ГГГГ — ДД.ММ.ГГГГ» для сравнения.
+    Возвращает '' если дат нет."""
+    m = re.search(r"(\d{2}\.\d{2}\.\d{4})\s*по\s*(\d{2}\.\d{2}\.\d{4})", text or "")
+    if m:
+        return f"{m.group(1)} — {m.group(2)}"
+    m = re.search(r"(\d{2}\.\d{2}\.\d{4})", text or "")
+    return m.group(1) if m else ""
 
 
 def parse(path):

@@ -99,6 +99,36 @@ def meta_all():
         return [dict(r) for r in c.execute("SELECT * FROM meta ORDER BY rtype")]
 
 
+def reset_reports():
+    """Удаляет данные всех загруженных отчётов (для загрузки нового периода).
+    СОХРАНЯЕТ справочные данные: почты врачей и зав. отделениями, журнал рассылки,
+    настройки SMTP/FreeIPA."""
+    init()
+    with _conn() as c:
+        for t in ("meta", "vrachi", "debts", "errors", "mo_funnel", "tvsp", "notrans"):
+            c.execute(f"DELETE FROM {t}")
+
+
+def periods_info():
+    """Сводка по периодам загруженных отчётов: общий период и согласованность."""
+    import parser
+    init()
+    with _conn() as c:
+        rows = [dict(r) for r in c.execute("SELECT rtype, period FROM meta")]
+    by_period = {}
+    for r in rows:
+        np = parser.norm_period(r["period"])
+        if np:
+            by_period.setdefault(np, []).append(r["rtype"])
+    periods = list(by_period)
+    return {
+        "by_period": by_period,
+        "consistent": len(periods) <= 1,
+        "period": periods[0] if len(periods) == 1 else "",
+        "n_reports": len(rows),
+    }
+
+
 def funnel():
     """Воронка из отчёта по врачам: сформировано / подписано / зарегистрировано."""
     with _conn() as c:

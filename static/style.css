@@ -55,6 +55,8 @@ input[type=email], input[type=text], input:not([type]) { border: 1px solid #cbd2
 .sort a { margin: 0 4px; } .sort a.on { font-weight: 700; }
 .pill { font-size: 11px; padding: 2px 7px; border-radius: 10px; }
 .pill.ok { background: #2f9e63; color: #fff; } .pill.warn { background: #d98324; color: #fff; }
+.pill.period { background: #2f6fb0; color: #fff; }
+button.danger { background: #b91c1c; } button.danger:hover { background: #991b1b; }
 .kv td:first-child { color: #6b7280; width: 180px; }
 .inline input { margin-right: 6px; }
 a.back { font-size: 13px; }

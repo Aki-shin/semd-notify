@@ -18,6 +18,8 @@
     <a href="{{ url_for('settings') }}">Настройки</a>
   </nav>
   <div class="who">
+    {% if periods.period %}<span class="pill period" title="Период загруженных отчётов">📅 {{ periods.period }}</span>
+    {% elif not periods.consistent %}<span class="pill warn" title="Периоды отчётов не совпадают — см. Загрузка">📅 периоды ≠</span>{% endif %}
     {{ user.name or user.login }}
     {% if not smtp_ok %}<span class="pill warn">SMTP не настроен</span>
     {% elif smtp_dry %}<span class="pill warn">DRYRUN</span>

@@ -87,7 +87,7 @@ def current_user():
 def inject():
     return {"user": current_user(), "rtype_ru": RTYPE_RU,
             "smtp_ok": mailer.configured(), "smtp_dry": mailer.is_dryrun(),
-            "ipa_ok": ipa.available()}
+            "ipa_ok": ipa.available(), "periods": storage.periods_info()}
 
 
 @app.route("/")
@@ -130,10 +130,25 @@ def upload():
             flash("Загружено: " + "; ".join(ok), "ok")
         if skipped:
             flash("Пропущено: " + "; ".join(skipped), "warn")
+        pi = storage.periods_info()
+        if not pi["consistent"]:
+            parts = "; ".join(f"{p} ({', '.join(RTYPE_RU.get(t, t) for t in ts)})"
+                              for p, ts in pi["by_period"].items())
+            flash("⚠️ Периоды отчётов НЕ совпадают: " + parts +
+                  ". Дашборд сравнивает отчёты между собой — загрузите отчёты за один период "
+                  "или нажмите «Сбросить отчёты».", "warn")
         return redirect(url_for("upload"))
     meta = storage.meta_all()
     loaded = {m["rtype"] for m in meta}
     return render_template("upload.html", meta=meta, reports=REPORTS_INFO, loaded=loaded)
+
+
+@app.route("/reset", methods=["POST"])
+def reset():
+    storage.reset_reports()
+    flash("Загруженные отчёты сброшены. Почты врачей/зав. отделениями и настройки "
+          "сохранены — можно загрузить новый период.", "ok")
+    return redirect(url_for("upload"))
 
 
 @app.route("/doctors")
