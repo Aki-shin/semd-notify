@@ -26,7 +26,7 @@ def init():
             sform INTEGER, podp INTEGER, nepodp INTEGER, zareg INTEGER);
         CREATE TABLE IF NOT EXISTS debts(
             vrach TEXT, patient TEXT, birth TEXT, case_no TEXT,
-            d_start TEXT, d_end TEXT, doc_type TEXT);
+            d_start TEXT, d_end TEXT, doc_type TEXT, otdelenie TEXT);
         CREATE TABLE IF NOT EXISTS errors(
             fio TEXT, snils TEXT, req_type TEXT, code TEXT, descr TEXT, extra TEXT);
         CREATE TABLE IF NOT EXISTS email_map(key TEXT PRIMARY KEY, email TEXT);
@@ -38,6 +38,10 @@ def init():
         CREATE TABLE IF NOT EXISTS notrans(k TEXT PRIMARY KEY, v INTEGER);
         CREATE TABLE IF NOT EXISTS config(k TEXT PRIMARY KEY, v TEXT);
         """)
+        # миграция старых БД: колонка отделения в таблице долгов
+        cols = {r["name"] for r in c.execute("PRAGMA table_info(debts)")}
+        if "otdelenie" not in cols:
+            c.execute("ALTER TABLE debts ADD COLUMN otdelenie TEXT DEFAULT ''")
 
 
 def cfg_get(key):
@@ -67,7 +71,8 @@ def replace_report(rtype, filename, period, nrows, records):
         elif rtype == "debts":
             c.execute("DELETE FROM debts")
             c.executemany(
-                "INSERT INTO debts VALUES(:vrach,:patient,:birth,:case_no,:d_start,:d_end,:doc_type)",
+                "INSERT INTO debts(vrach,patient,birth,case_no,d_start,d_end,doc_type,otdelenie) "
+                "VALUES(:vrach,:patient,:birth,:case_no,:d_start,:d_end,:doc_type,:otdelenie)",
                 records)
         elif rtype == "flk":
             c.execute("DELETE FROM errors")
@@ -175,7 +180,10 @@ def tvsp_list():
 
 
 def dept_summary():
-    """Сводка по подразделениям: агрегаты подписания + долги + врачи + почта зав. отделением."""
+    """Сводка по подразделениям: агрегаты подписания + долги + врачи + почта зав. отделением.
+    Врачи, которых нет в отчёте «в разрезе врачей», группируются по отделению из
+    отчёта долгов (c9) отдельными записями с пометкой from_debts (иначе их долги
+    не видны заведующим — номенклатура отделений в двух отчётах не совпадает)."""
     with _conn() as c:
         rows = c.execute("""
             SELECT podrazdelenie podr, vrach,
@@ -184,25 +192,40 @@ def dept_summary():
             GROUP BY podrazdelenie, vrach""").fetchall()
         debts = {r["vrach"]: r["c"] for r in c.execute(
             "SELECT vrach, COUNT(*) c FROM debts GROUP BY vrach")}
+        debt_od = c.execute(
+            "SELECT COALESCE(NULLIF(otdelenie,''),'(отделение не указано)') od, "
+            "vrach, COUNT(*) c FROM debts WHERE vrach<>'' GROUP BY od, vrach").fetchall()
         dmap = {r["podr"]: r["email"] for r in c.execute("SELECT * FROM dept_map")}
-    depts = {}
+    depts, covered = {}, set()
     for r in rows:
+        covered.add(r["vrach"])
         d = depts.setdefault(r["podr"], {"podr": r["podr"], "sform": 0, "podp": 0,
-                                         "nepodp": 0, "debts": 0, "vrachi": []})
+                                         "nepodp": 0, "debts": 0, "vrachi": [], "from_debts": False})
         d["sform"] += r["s"] or 0
         d["podp"] += r["p"] or 0
         d["nepodp"] += r["n"] or 0
         dbt = debts.get(r["vrach"], 0)
         d["debts"] += dbt
         if (r["n"] or 0) or dbt:
-            d["vrachi"].append({"vrach": r["vrach"], "nepodp": r["n"] or 0, "debts": dbt})
+            d["vrachi"].append({"vrach": r["vrach"], "nepodp": r["n"] or 0,
+                                "debts": dbt, "from_debts": False})
+    # врачи только из отчёта долгов → отдельные записи по отделению (c9)
+    for r in debt_od:
+        if r["vrach"] in covered:
+            continue
+        d = depts.setdefault(r["od"], {"podr": r["od"], "sform": 0, "podp": 0,
+                                       "nepodp": 0, "debts": 0, "vrachi": [], "from_debts": True})
+        d["from_debts"] = True
+        d["debts"] += r["c"]
+        d["vrachi"].append({"vrach": r["vrach"], "nepodp": 0,
+                            "debts": r["c"], "from_debts": True})
     out = []
     for d in depts.values():
         d["pct"] = round(100 * d["podp"] / d["sform"], 1) if d["sform"] else 0.0
         d["email"] = dmap.get(d["podr"], "")
-        d["vrachi"].sort(key=lambda x: -x["nepodp"])
+        d["vrachi"].sort(key=lambda x: (-x["nepodp"], -x["debts"]))
         out.append(d)
-    out.sort(key=lambda x: -x["nepodp"])
+    out.sort(key=lambda x: (-x["nepodp"], -x["debts"]))
     return out
 
 

@@ -61,17 +61,24 @@ def build_debt_html(vrach, debts):
 </body></html>"""
 
 
-def build_dept_html(podr, vrachi, total_nepodp):
+def build_dept_html(podr, vrachi, total_nepodp, total_debts=0, from_debts=False):
     rows = "".join(
         f"<tr><td>{i}</td><td>{v['vrach']}</td><td style='text-align:right'>{v['nepodp']}</td>"
         f"<td style='text-align:right'>{v['debts']}</td></tr>"
         for i, v in enumerate(vrachi, 1)
     )
+    if from_debts:
+        intro = (f"По отделению «{podr}» в ЕИСЗ ПК <b>{total_debts}</b> медицинских документов, "
+                 "подлежащих регистрации в РЭМД и не подписанных (по списку неподписанных документов). "
+                 "Просьба организовать подписание силами врачей отделения — "
+                 "неподписанные документы не передаются в федеральный реестр и снижают показатели учреждения.")
+    else:
+        intro = (f"По вашему подразделению в ЕИСЗ ПК <b>{total_nepodp}</b> неподписанных медицинских документов, "
+                 "подлежащих регистрации в РЭМД. Просьба организовать подписание силами врачей подразделения — "
+                 "неподписанные документы не передаются в федеральный реестр и снижают показатели учреждения.")
     return f"""<html><body style="font-family:Arial,sans-serif;font-size:14px;color:#222">
 <p>Уважаемый(ая) заведующий(ая) подразделением «{podr}»!</p>
-<p>По вашему подразделению в ЕИСЗ ПК <b>{total_nepodp}</b> неподписанных медицинских документов,
-подлежащих регистрации в РЭМД. Просьба организовать подписание силами врачей подразделения —
-неподписанные документы не передаются в федеральный реестр и снижают показатели учреждения.</p>
+<p>{intro}</p>
 <table border="1" cellspacing="0" cellpadding="5" style="border-collapse:collapse;font-size:13px">
 <tr style="background:#eef"><th>№</th><th>Врач</th><th>Не подписано</th><th>Долгов (документов)</th></tr>
 {rows}

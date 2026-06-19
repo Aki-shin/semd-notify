@@ -194,14 +194,15 @@ def departments_send():
         d = storage.dept_vrachi(podr)
         if not d or not d["vrachi"]:
             continue
+        cnt = d["nepodp"] or d["debts"]
         email = (request.form.get(f"email__{podr}") or "").strip()
         if not email:
             failed += 1
-            storage.log_send(f"[отд.] {podr}", "", d["nepodp"], "нет адреса")
+            storage.log_send(f"[отд.] {podr}", "", cnt, "нет адреса")
             continue
-        html = mailer.build_dept_html(podr, d["vrachi"], d["nepodp"])
-        ok, msg = mailer.send(email, f"Неподписанные документы по подразделению: {d['nepodp']} шт.", html)
-        storage.log_send(f"[отд.] {podr}", email, d["nepodp"], msg)
+        html = mailer.build_dept_html(podr, d["vrachi"], d["nepodp"], d["debts"], d.get("from_debts"))
+        ok, msg = mailer.send(email, f"Неподписанные документы по подразделению: {cnt} шт.", html)
+        storage.log_send(f"[отд.] {podr}", email, cnt, msg)
         sent += 1 if ok else 0
         failed += 0 if ok else 1
     flash(f"Отправлено: {sent}, ошибок: {failed}" + (" (DRYRUN)" if mailer.is_dryrun() else ""),

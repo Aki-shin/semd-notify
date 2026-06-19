@@ -15,11 +15,12 @@
     <tr><th></th><th>Подразделение</th><th>Сформ.</th><th>% подп.</th><th>Не подп.</th>
         <th>Долгов</th><th>Врачей в долгах</th><th>Почта зав. отделением</th></tr>
     {% for d in depts %}
-    <tr class="{{ 'lowpct' if d.pct < 50 }}">
+    <tr class="{{ 'lowpct' if d.pct < 50 and not d.from_debts }}">
       <td><input type="checkbox" name="podr" value="{{ d.podr }}" class="pick"
-                 {{ 'disabled' if not (d.nepodp and d.email) }}></td>
-      <td>{{ d.podr }}</td>
-      <td class="r">{{ d.sform }}</td><td class="r">{{ d.pct }}%</td>
+                 {{ 'disabled' if not ((d.nepodp or d.debts) and d.email) }}></td>
+      <td>{{ d.podr }}{% if d.from_debts %} <span class="pill warn" title="Врачи не из отчёта «в разрезе врачей»; отделение — из списка неподписанных">по списку долгов</span>{% endif %}</td>
+      <td class="r">{% if d.from_debts %}—{% else %}{{ d.sform }}{% endif %}</td>
+      <td class="r">{% if d.from_debts %}—{% else %}{{ d.pct }}%{% endif %}</td>
       <td class="r bad">{{ d.nepodp }}</td><td class="r">{{ d.debts }}</td>
       <td class="r">{{ d.vrachi|length }}</td>
       <td><input type="email" name="email__{{ d.podr }}" value="{{ d.email }}"

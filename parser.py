@@ -155,6 +155,7 @@ def _parse_debts(rows):
             "d_start": case["d_start"],
             "d_end": case["d_end"],
             "doc_type": doc_type,
+            "otdelenie": (r.get(9, "") or "").strip(),  # c9 — отделение/кабинет врача
         })
     return [x for x in out if x["vrach"]]
 
