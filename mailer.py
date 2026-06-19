@@ -34,18 +34,26 @@ def is_dryrun():
 
 
 def build_debt_html(vrach, debts):
-    rows = "".join(
-        f"<tr><td>{i}</td><td>{d.get('patient','')}</td><td>{d.get('case_no','')}</td>"
-        f"<td>{d.get('doc_type','')}</td><td>{d.get('d_start','')}</td></tr>"
-        for i, d in enumerate(debts, 1)
-    )
+    # ПДн-минимизация: в письмо НЕ включаем ФИО пациента и дату рождения.
+    # Документ идентифицируется по № случая — врач находит его в ЕИСЗ ПК.
+    body = []
+    for i, d in enumerate(debts, 1):
+        start, end = d.get("d_start", ""), d.get("d_end", "")
+        period = start if (not end or end == start) else f"{start} – {end}"
+        body.append(
+            f"<tr><td>{i}</td><td>{d.get('case_no','')}</td>"
+            f"<td>{d.get('doc_type','')}</td><td>{period}</td></tr>"
+        )
+    rows = "".join(body)
     return f"""<html><body style="font-family:Arial,sans-serif;font-size:14px;color:#222">
 <p>Уважаемый(ая) {vrach}!</p>
 <p>У вас <b>{len(debts)}</b> неподписанных медицинских документов, подлежащих регистрации в РЭМД.
 Просьба подписать их в ЕИСЗ ПК в ближайшее время — без подписи документы не передаются в федеральный реестр,
 что влияет на показатели учреждения.</p>
+<p style="color:#444">Документы перечислены <b>по номеру случая</b> (без персональных данных пациентов).
+Откройте случай в ЕИСЗ ПК по указанному номеру, чтобы найти и подписать документ.</p>
 <table border="1" cellspacing="0" cellpadding="5" style="border-collapse:collapse;font-size:13px">
-<tr style="background:#eef"><th>№</th><th>Пациент</th><th>№ случая</th><th>Вид документа</th><th>Дата</th></tr>
+<tr style="background:#eef"><th>№</th><th>№ случая</th><th>Вид документа</th><th>Период случая</th></tr>
 {rows}
 </table>
 <p style="color:#666;font-size:12px">Письмо сформировано автоматически системой мониторинга СЭМД.
