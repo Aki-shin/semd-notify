@@ -14,37 +14,32 @@
   <div class="card {{ 'bad' if funnel.pct_zareg < 50 else '' }}"><div class="num">{{ funnel.pct_zareg }}%</div><div class="lbl">Зарегистрировано в РЭМД ({{ funnel.zareg }})</div></div>
 </section>
 
-<h2>Воронка{% if mo %} (полная, с шагом «подпись МО»){% endif %}</h2>
+<h2>Воронка{% if full.has_mo %} (сквозная: врач → МО → РЭМД){% endif %}</h2>
 <div class="funnel">
-  {% if mo %}
-    {% set mx = mo.sform or 1 %}
-    <div class="frow"><span class="fl">Сформировано</span><div class="fbar"><i style="width:{{ (100*mo.sform/mx)|round(0) }}%">{{ mo.sform }}</i></div></div>
-    <div class="frow"><span class="fl">Подписано врачом</span><div class="fbar"><i class="g" style="width:{{ (100*mo.podp_vrach/mx)|round(0) }}%">{{ mo.podp_vrach }} ({{ mo.pct_podp_vrach }}%)</i></div></div>
-    <div class="frow"><span class="fl">Подписано МО</span><div class="fbar"><i class="g2" style="width:{{ (100*mo.podp_mo/mx)|round(0) }}%">{{ mo.podp_mo }} ({{ mo.pct_podp_mo }}%)</i></div></div>
-    <div class="frow"><span class="fl">В РЭМД</span><div class="fbar"><i class="b" style="width:{{ (100*mo.zareg/mx)|round(0) }}%">{{ mo.zareg }} ({{ mo.pct_zareg }}%)</i></div></div>
-  {% else %}
-    {% set mx = funnel.sform or 1 %}
-    <div class="frow"><span class="fl">Сформировано</span><div class="fbar"><i style="width:{{ (100*funnel.sform/mx)|round(0) }}%">{{ funnel.sform }}</i></div></div>
-    <div class="frow"><span class="fl">Подписано</span><div class="fbar"><i class="g" style="width:{{ (100*funnel.podp/mx)|round(0) }}%">{{ funnel.podp }}</i></div></div>
-    <div class="frow"><span class="fl">В РЭМД</span><div class="fbar"><i class="b" style="width:{{ (100*funnel.zareg/mx)|round(0) }}%">{{ funnel.zareg }}</i></div></div>
-    <div class="muted small">Загрузите отчёт «в разрезе МО» — добавится шаг «подпись МО».</div>
+  {% set mx = full.sform or 1 %}
+  <div class="frow"><span class="fl">Сформировано</span><div class="fbar"><i style="width:100%">{{ full.sform }}</i></div></div>
+  <div class="frow"><span class="fl">Подписано врачом</span><div class="fbar"><i class="g" style="width:{{ (100*full.podp_vrach/mx)|round(0) }}%">{{ full.podp_vrach }} ({{ full.pct_podp_vrach }}%)</i></div></div>
+  {% if full.has_mo %}
+  <div class="frow"><span class="fl">Подписано МО</span><div class="fbar"><i class="g2" style="width:{{ (100*full.podp_mo/mx)|round(0) }}%">{{ full.podp_mo }} ({{ full.pct_podp_mo }}%)</i></div></div>
   {% endif %}
+  <div class="frow"><span class="fl">В РЭМД</span><div class="fbar"><i class="b" style="width:{{ (100*full.zareg/mx)|round(0) }}%">{{ full.zareg }} ({{ full.pct_zareg }}%)</i></div></div>
+  {% if not full.has_mo %}<div class="muted small">Загрузите отчёт «в разрезе МО» — добавится шаг «подпись МО».</div>{% endif %}
+  <div class="muted small" style="margin-top:8px">Объём и подпись врача — из отчёта «в разрезе врачей» (полный объём ЭМД).
+  В отчёте «в разрезе МО» «подписано врачом» ≈100%, т.к. туда попадают только уже подписанные врачом документы — это не доля подписания, а условие входа.</div>
 </div>
 
-{% if mo %}
+{% if full.has_mo %}
 <section class="cards" style="grid-template-columns:repeat(3,1fr);margin-top:10px">
-  <div class="card {{ 'bad' if mo.gap_vrach_mo > 0 }}"><div class="num">{{ mo.gap_vrach_mo }}</div><div class="lbl">Подписаны врачом, но не подписаны МО (застряли на подписи МО)</div></div>
-  <div class="card {{ 'bad' if mo.err_reg > 0 }}"><div class="num">{{ mo.err_reg }}</div><div class="lbl">С ошибками регистрации</div></div>
-  <div class="card"><div class="num">{{ mo.bez_podp_mo }}</div><div class="lbl">Всего без подписи МО</div></div>
+  <div class="card {{ 'bad' if full.nepodp_vrach > 0 }}"><div class="num">{{ full.nepodp_vrach }}</div><div class="lbl">Не подписаны <b>врачом</b> (этап 1 — врачи)</div></div>
+  <div class="card {{ 'bad' if full.gap_vrach_mo > 0 }}"><div class="num">{{ full.gap_vrach_mo }}</div><div class="lbl">Подписаны врачом, но не подписаны <b>МО</b> (этап 2 — автоподписание МО)</div></div>
+  <div class="card {{ 'bad' if full.err_reg > 0 }}"><div class="num">{{ full.err_reg }}</div><div class="lbl">С ошибками регистрации</div></div>
 </section>
 {% endif %}
 
-{% set pz = (mo.pct_zareg if mo else funnel.pct_zareg) %}
-{% set pp = (mo.pct_podp_vrach if mo else funnel.pct_podp) %}
-{% if pz < 50 and pp > pz + 15 %}
-  <div class="alert">⚠️ Подписано {{ pp }}%, но в РЭМД только {{ pz }}% — подписанное не доходит до реестра.
-  Это <b>системная проблема</b> (см. <a href="{{ url_for('errors') }}">Ошибки</a>: маппинг подразделений), а не вина врачей.
-  {% if mo and mo.gap_vrach_mo > 0 %}Часть ({{ mo.gap_vrach_mo }}) застряла именно на <b>подписи МО</b> — проверьте автоподписание.{% endif %}</div>
+{% if full.pct_zareg < 50 %}
+  <div class="alert">⚠️ В РЭМД доходит лишь {{ full.pct_zareg }}% от сформированного. Два узких места:
+  <b>(1)</b> врачи подписали только {{ full.pct_podp_vrach }}% — не подписано <b>{{ full.nepodp_vrach }}</b> (рассылка долгов врачам);
+  {% if full.has_mo %}<b>(2)</b> из подписанного врачами на подписи <b>МО</b> застряло <b>{{ full.gap_vrach_mo }}</b> — это автоподписание МО, не вина врачей (см. <a href="{{ url_for('errors') }}">Ошибки</a>).{% endif %}</div>
 {% endif %}
 
 {% if notrans %}

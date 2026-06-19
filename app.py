@@ -95,6 +95,7 @@ def index():
     storage.init()
     return render_template("dashboard.html",
                            funnel=storage.funnel(),
+                           full=storage.full_funnel(),
                            mo=storage.mo_funnel(),
                            notrans=storage.notrans_get(),
                            tvsp=storage.tvsp_list(),

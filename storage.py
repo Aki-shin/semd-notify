@@ -164,6 +164,30 @@ def mo_funnel():
     return d
 
 
+def full_funnel():
+    """Единая сквозная воронка из наиболее полного источника.
+    ВАЖНО: в отчёте «в разрезе МО» «сформировано» — это уже подписанные врачом
+    документы (подпись врача — условие попадания в реестровый конвейер), поэтому
+    там «подписано врачом» ~100%. Полный объём ЭМД и реальная доля подписи врача —
+    только в отчёте «в разрезе врачей». Здесь склеиваем: объём и подпись врача —
+    из отчёта по врачам, подпись МО — из отчёта по МО, регистрация — из обоих (сходятся)."""
+    f = funnel()
+    m = mo_funnel()
+    s = f["sform"] or 0
+    pct = lambda a: round(100 * a / s, 1) if s else 0.0
+    out = {
+        "sform": s, "podp_vrach": f["podp"], "nepodp_vrach": f["nepodp"],
+        "zareg": f["zareg"], "pct_podp_vrach": pct(f["podp"]), "pct_zareg": pct(f["zareg"]),
+        "has_mo": bool(m),
+    }
+    if m:
+        out["podp_mo"] = m.get("podp_mo", 0)
+        out["pct_podp_mo"] = pct(m.get("podp_mo", 0))
+        out["gap_vrach_mo"] = max(0, f["podp"] - m.get("podp_mo", 0))  # подписаны врачом, но не МО
+        out["err_reg"] = m.get("err_reg", 0)
+    return out
+
+
 def notrans_get():
     with _conn() as c:
         d = {r["k"]: r["v"] for r in c.execute("SELECT * FROM notrans")}
