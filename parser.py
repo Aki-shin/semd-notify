@@ -120,25 +120,38 @@ def _parse_vrachi(rows):
 
 
 def _parse_debts(rows):
-    """Колонки: c2 ФИО пациента, c3 ДР, c4 № случая, c5 дата начала,
-    c6 дата окончания, c7 вид неподписанного, c8 ФИО врача."""
+    """Один документ = одна строка с «видом неподписанного документа» (c7) и врачом (c8).
+    Идентификация случая (c2 пациент, c3 ДР, c4 № случая, c5/c6 даты) объединена по группе
+    строк одного случая и заполнена ТОЛЬКО в первой строке группы — переносим её
+    на последующие строки-продолжения (у них c2–c6 пустые)."""
     out = []
-    for r in rows[11:]:
-        vrach = r.get(8, "")
-        patient = r.get(2, "")
-        if not vrach and not patient:
+    case = {"patient": "", "birth": "", "case_no": "", "d_start": "", "d_end": ""}
+    for r in rows[10:]:
+        patient = (r.get(2, "") or "").strip()
+        doc_type = (r.get(7, "") or "").strip()
+        vrach = (r.get(8, "") or "").strip()
+        # пропуск строк заголовка и строки нумерации колонок
+        if patient in ("ФИО пациента", "2"):
             continue
-        # пропускаем строки-заголовки/итоги (где c1 не число)
-        if not (r.get(7, "") or patient):
+        if patient:  # начало нового случая — запоминаем идентификацию
+            case = {
+                "patient": patient,
+                "birth": (r.get(3, "") or "").strip(),
+                "case_no": (r.get(4, "") or "").strip(),
+                "d_start": (r.get(5, "") or "").strip(),
+                "d_end": (r.get(6, "") or "").strip(),
+            }
+        if not doc_type or doc_type in ("7", "Вид  неподписанного документа",
+                                        "Вид неподписанного документа"):
             continue
         out.append({
-            "vrach": vrach.strip(),
-            "patient": patient.strip(),
-            "birth": r.get(3, ""),
-            "case_no": r.get(4, ""),
-            "d_start": r.get(5, ""),
-            "d_end": r.get(6, ""),
-            "doc_type": r.get(7, ""),
+            "vrach": vrach,
+            "patient": case["patient"],
+            "birth": case["birth"],
+            "case_no": case["case_no"],
+            "d_start": case["d_start"],
+            "d_end": case["d_end"],
+            "doc_type": doc_type,
         })
     return [x for x in out if x["vrach"]]
 
