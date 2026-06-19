@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>СЭМД-уведомления</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<header>
+  <div class="brand">📊 СЭМД-уведомления</div>
+  <nav>
+    <a href="{{ url_for('index') }}">Дашборд</a>
+    <a href="{{ url_for('upload') }}">Загрузка</a>
+    <a href="{{ url_for('doctors') }}">Врачи / долги</a>
+    <a href="{{ url_for('departments') }}">Отделения</a>
+    <a href="{{ url_for('errors') }}">Ошибки</a>
+    <a href="{{ url_for('settings') }}">Настройки</a>
+  </nav>
+  <div class="who">
+    {{ user.name or user.login }}
+    {% if not smtp_ok %}<span class="pill warn">SMTP не настроен</span>
+    {% elif smtp_dry %}<span class="pill warn">DRYRUN</span>
+    {% else %}<span class="pill ok">SMTP</span>{% endif %}
+  </div>
+</header>
+
+<main>
+  {% with msgs = get_flashed_messages(with_categories=true) %}
+    {% for cat, m in msgs %}
+      <div class="flash {{ cat }}">{{ m }}</div>
+    {% endfor %}
+  {% endwith %}
+  {% block body %}{% endblock %}
+</main>
+<footer>Отдел ИТ · ГБУЗ ПК «Осинская ЦРБ» · данные обрабатываются во внутреннем контуре</footer>
+</body>
+</html>

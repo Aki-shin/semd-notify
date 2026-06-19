@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>Ошибки ФЛК / регистрации в РЭМД</h1>
+<p class="muted">Это причины, по которым подписанные документы не попадают в реестр.
+Массовый <code>OBJECT_NOT_FOUND</code> / «подразделение не найдено» = проблема маппинга подразделений
+(часто после реорганизации) — чинится сверкой OID в ФРМО, а не врачами.</p>
+
+<div class="cols">
+  <div>
+    <h2>По кодам ошибок</h2>
+    <table>
+      <tr><th>Код</th><th>Кол-во</th></tr>
+      {% for c in e.by_code %}<tr><td>{{ c.code }}</td><td class="r">{{ c.c }}</td></tr>
+      {% else %}<tr><td colspan="2" class="empty">Отчёт ФЛК не загружен.</td></tr>{% endfor %}
+    </table>
+  </div>
+  <div>
+    <h2>По сотрудникам (топ-50)</h2>
+    <table>
+      <tr><th>Сотрудник</th><th>СНИЛС</th><th>Ошибок</th></tr>
+      {% for p in e.by_person %}<tr><td>{{ p.fio }}</td><td>{{ p.snils }}</td><td class="r">{{ p.c }}</td></tr>
+      {% else %}<tr><td colspan="3" class="empty">—</td></tr>{% endfor %}
+    </table>
+  </div>
+</div>
+
+<h2>Частые описания</h2>
+<table>
+  <tr><th>Код</th><th>Описание</th><th>Кол-во</th></tr>
+  {% for s in e.samples %}<tr><td>{{ s.code }}</td><td>{{ s.descr }}</td><td class="r">{{ s.c }}</td></tr>
+  {% else %}<tr><td colspan="3" class="empty">—</td></tr>{% endfor %}
+</table>
+{% endblock %}

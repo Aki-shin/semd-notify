@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>Врачи и долги по подписанию</h1>
+<p class="muted">Отметьте врачей и нажмите «Отправить долги» — каждому уйдёт письмо со списком
+его неподписанных документов. Почту можно поправить прямо в строке.
+{% if smtp_dry %}<b>Режим DRYRUN: письма не отправляются, только логируются.</b>{% endif %}</p>
+
+<div class="sort">Сортировка:
+  <a href="?order=nepodp" class="{{ 'on' if order=='nepodp' }}">по неподписанным</a>
+  <a href="?order=pct" class="{{ 'on' if order=='pct' }}">по % подписания</a>
+  <a href="?order=vrach" class="{{ 'on' if order=='vrach' }}">по ФИО</a>
+</div>
+
+<form method="post" action="{{ url_for('doctors_send') }}">
+  <div class="toolbar">
+    <label><input type="checkbox" id="all"> выбрать всех с долгами и почтой</label>
+    <button type="submit">✉ Отправить долги выбранным</button>
+  </div>
+  <table class="docs">
+    <tr><th></th><th>Врач</th><th>Сформ.</th><th>Подп.</th><th>Не подп.</th><th>% подп.</th>
+        <th>В РЭМД</th><th>Долгов</th><th>Почта</th></tr>
+    {% for d in docs %}
+    <tr class="{{ 'lowpct' if d.pct < 50 }}">
+      <td><input type="checkbox" name="vrach" value="{{ d.vrach }}"
+                 class="pick" {{ 'disabled' if not (d.debts and d.email) }}></td>
+      <td><a href="{{ url_for('doctor_detail', vrach=d.vrach) }}">{{ d.vrach }}</a></td>
+      <td class="r">{{ d.sform }}</td><td class="r">{{ d.podp }}</td>
+      <td class="r bad">{{ d.nepodp }}</td><td class="r">{{ d.pct }}%</td>
+      <td class="r">{{ d.zareg }}</td>
+      <td class="r">{% if d.debts %}<b>{{ d.debts }}</b>{% else %}0{% endif %}</td>
+      <td><input type="email" name="email__{{ d.vrach }}" value="{{ d.email }}"
+                 placeholder="{{ '@med.permkrai.ru' }}" class="email {{ 'noemail' if not d.email }}"></td>
+    </tr>
+    {% else %}<tr><td colspan="9" class="empty">Загрузите отчёт «в разрезе врачей».</td></tr>{% endfor %}
+  </table>
+</form>
+
+<h2>Журнал рассылки</h2>
+<table>
+  <tr><th>Время</th><th>Врач</th><th>Почта</th><th>Док-в</th><th>Статус</th></tr>
+  {% for l in log %}
+  <tr><td>{{ l.ts }}</td><td>{{ l.vrach }}</td><td>{{ l.email }}</td>
+      <td class="r">{{ l.cnt }}</td><td>{{ l.status }}</td></tr>
+  {% else %}<tr><td colspan="5" class="empty">пока пусто</td></tr>{% endfor %}
+</table>
+
+<script>
+document.getElementById('all').addEventListener('change', function(e){
+  document.querySelectorAll('.pick:not([disabled])').forEach(c => c.checked = e.target.checked);
+});
+</script>
+{% endblock %}

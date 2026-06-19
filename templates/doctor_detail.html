@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block body %}
+<a class="back" href="{{ url_for('doctors') }}">← к списку врачей</a>
+<h1>{{ vrach }}</h1>
+<p class="muted">Неподписанных документов: <b>{{ debts|length }}</b></p>
+<table>
+  <tr><th>№</th><th>Пациент</th><th>Дата рожд.</th><th>№ случая</th><th>Вид документа</th><th>Начало</th><th>Окончание</th></tr>
+  {% for d in debts %}
+  <tr><td>{{ loop.index }}</td><td>{{ d.patient }}</td><td>{{ d.birth }}</td>
+      <td>{{ d.case_no }}</td><td>{{ d.doc_type }}</td><td>{{ d.d_start }}</td><td>{{ d.d_end }}</td></tr>
+  {% else %}<tr><td colspan="7" class="empty">Долгов нет (или отчёт «неподписанные» не загружен).</td></tr>{% endfor %}
+</table>
+{% endblock %}

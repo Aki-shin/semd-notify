@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>Настройки</h1>
+<p class="muted">Параметры можно задать здесь (сохраняются в БД, приоритет над переменными окружения)
+либо через env в Host Manager. Пароли при отображении скрыты — оставьте поле пустым, чтобы не менять сохранённый.</p>
+
+<h2>Почта (SMTP) {% if smtp_ok %}{% if smtp_dry %}<span class="pill warn">DRYRUN</span>{% else %}<span class="pill ok">готово</span>{% endif %}{% else %}<span class="pill warn">не настроено</span>{% endif %}</h2>
+<form method="post" class="cfg">
+  <input type="hidden" name="action" value="save_smtp">
+  <label>SMTP-сервер <input name="SMTP_HOST" value="{{ smtp.SMTP_HOST }}" placeholder="mail.med.permkrai.ru"></label>
+  <label>Порт <input name="SMTP_PORT" value="{{ smtp.SMTP_PORT or '587' }}" size="6" placeholder="587"></label>
+  <label>Логин <input name="SMTP_USER" value="{{ smtp.SMTP_USER }}" placeholder="osacrb-semd@med.permkrai.ru"></label>
+  <label>Пароль <input type="password" name="SMTP_PASS" placeholder="{{ '•••• сохранён — оставьте пустым' if smtp.pass_set else 'не задан' }}"></label>
+  <label>От кого (адрес) <input name="SMTP_FROM" value="{{ smtp.SMTP_FROM }}" placeholder="osacrb-semd@med.permkrai.ru"></label>
+  <label>От кого (имя) <input name="SMTP_FROM_NAME" value="{{ smtp.SMTP_FROM_NAME }}"></label>
+  <label class="chk"><input type="checkbox" name="SMTP_TLS" {{ 'checked' if smtp.SMTP_TLS }}> STARTTLS</label>
+  <label class="chk"><input type="checkbox" name="SMTP_DRYRUN" {{ 'checked' if smtp.SMTP_DRYRUN }}> Тестовый режим (DRYRUN — не отправлять)</label>
+  <div><button type="submit">Сохранить почту</button></div>
+</form>
+
+<h2>FreeIPA — корпоративные почты {% if ipa_ok %}<span class="pill ok">подключено</span>{% else %}<span class="pill warn">не настроено</span>{% endif %}</h2>
+<form method="post" class="cfg">
+  <input type="hidden" name="action" value="save_ipa">
+  <label>LDAP URI <input name="IPA_LDAP_URI" value="{{ ipacfg.IPA_LDAP_URI }}" placeholder="ldaps://ipa.osacrb.local"></label>
+  <label>Base DN <input name="IPA_BASE_DN" value="{{ ipacfg.IPA_BASE_DN }}" placeholder="cn=users,cn=accounts,dc=osacrb,dc=local"></label>
+  <label>Bind DN <input name="IPA_BIND_DN" value="{{ ipacfg.IPA_BIND_DN }}" placeholder="uid=semd-svc,cn=users,..."></label>
+  <label>Bind пароль <input type="password" name="IPA_BIND_PW" placeholder="{{ '•••• сохранён — оставьте пустым' if ipacfg.pass_set else 'не задан' }}"></label>
+  <label class="chk"><input type="checkbox" name="IPA_AUTOSYNC" {{ 'checked' if ipacfg.IPA_AUTOSYNC }}> Автосинхронизация</label>
+  <label>Интервал, часов <input name="IPA_SYNC_HOURS" value="{{ ipacfg.IPA_SYNC_HOURS or '24' }}" size="5"></label>
+  <div><button type="submit">Сохранить FreeIPA</button></div>
+</form>
+<form method="post" class="inline" style="margin-top:8px">
+  <input type="hidden" name="action" value="ipa_sync">
+  <button type="submit" {{ 'disabled' if not ipa_ok }}>↻ Синхронизировать сейчас</button>
+  <span class="muted">
+    {% if ipacfg.IPA_AUTOSYNC %}Автосинхронизация раз в {{ ipacfg.IPA_SYNC_HOURS }} ч.{% else %}Автосинхронизация выключена.{% endif %}
+    {% if ipa_last[0] %} Последняя: {{ ipa_last[0] }} — {{ ipa_last[1] }}.{% else %} Ещё не выполнялась.{% endif %}
+  </span>
+</form>
+
+<h2>Ручное сопоставление почты врача</h2>
+<p class="muted">Если по ФИО не сопоставилось автоматически — задайте почту по СНИЛС или ФИО (как в отчёте).</p>
+<form method="post" class="inline">
+  <input type="hidden" name="action" value="set_email">
+  <input name="key" placeholder="СНИЛС или ФИО" size="36">
+  <input name="email" type="email" placeholder="ivanov@med.permkrai.ru" size="26">
+  <button type="submit">Сохранить</button>
+</form>
+<h3>Врачи без почты ({{ docs|selectattr('email','equalto','')|list|length }})</h3>
+<table>
+  <tr><th>Врач</th><th>СНИЛС</th><th>Долгов</th></tr>
+  {% for d in docs if not d.email %}
+  <tr><td>{{ d.vrach }}</td><td>{{ d.snils }}</td><td class="r">{{ d.debts }}</td></tr>
+  {% endfor %}
+</table>
+
+<h2>Почты заведующих отделениями</h2>
+<form method="post" class="inline">
+  <input type="hidden" name="action" value="set_dept">
+  <select name="podr">
+    {% for d in depts %}<option value="{{ d.podr }}">{{ d.podr }}{% if d.email %} ✓{% endif %}</option>{% endfor %}
+  </select>
+  <input name="email" type="email" placeholder="zav@med.permkrai.ru" size="26">
+  <button type="submit">Сохранить</button>
+</form>
+<table style="margin-top:8px">
+  <tr><th>Подразделение</th><th>Не подп.</th><th>Почта зав. отделением</th></tr>
+  {% for d in depts %}
+  <tr><td>{{ d.podr }}</td><td class="r">{{ d.nepodp }}</td><td>{{ d.email or '—' }}</td></tr>
+  {% endfor %}
+</table>
+{% endblock %}
