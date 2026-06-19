@@ -173,7 +173,8 @@ def doctors_send():
 @app.route("/doctor/<path:vrach>")
 def doctor_detail(vrach):
     return render_template("doctor_detail.html", vrach=vrach,
-                           debts=storage.doctor_debts(vrach))
+                           debts=storage.doctor_debts(vrach),
+                           bd=storage.doctor_breakdown(vrach))
 
 
 @app.route("/departments")

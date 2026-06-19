@@ -100,6 +100,9 @@ def _parse_vrachi(rows):
     cur_pod = cur_vrach = cur_snils = None
     for r in rows[10:]:
         c1, c2, c4, c5 = r.get(1, ""), r.get(2, ""), r.get(4, ""), r.get(5, "")
+        # строка нумерации колонок «1,2,3,4,…» — это не данные
+        if c1.strip() == "1" and c2.strip() == "2" and c5.strip() == "4":
+            continue
         if c1:
             cur_pod = c1
         sform = _num(r.get(6, ""))

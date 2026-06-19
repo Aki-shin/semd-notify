@@ -2,12 +2,35 @@
 {% block body %}
 <a class="back" href="{{ url_for('doctors') }}">← к списку врачей</a>
 <h1>{{ vrach }}</h1>
-<p class="muted">Неподписанных документов: <b>{{ debts|length }}</b></p>
+<p class="muted">
+  {% if bd.podrazdelenie %}Подразделение: {{ bd.podrazdelenie }}. {% endif %}
+  Неподписано ЭМД (отчёт по врачам): <b>{{ bd.total.nepodp }}</b> ·
+  к регистрации в РЭМД (список долгов): <b>{{ debts|length }}</b>
+</p>
+
+{% if bd.rows %}
+<h2>По видам документов <span class="small muted">— из отчёта «в разрезе врачей»</span></h2>
+<table>
+  <tr><th>Вид документа</th><th class="r">Сформ.</th><th class="r">Подп.</th>
+      <th class="r">Не подп.</th><th class="r">В РЭМД</th></tr>
+  {% for r in bd.rows %}
+  <tr><td>{{ r.doc_type }}</td><td class="r">{{ r.sform }}</td><td class="r">{{ r.podp }}</td>
+      <td class="r {{ 'bad' if r.nepodp }}">{{ r.nepodp }}</td><td class="r">{{ r.zareg }}</td></tr>
+  {% endfor %}
+  <tr><th>Итого</th><th class="r">{{ bd.total.sform }}</th><th class="r">{{ bd.total.podp }}</th>
+      <th class="r bad">{{ bd.total.nepodp }}</th><th class="r">{{ bd.total.zareg }}</th></tr>
+</table>
+{% endif %}
+
+<h2>Неподписанные документы к регистрации в РЭМД <span class="small muted">— из списка долгов</span></h2>
 <table>
   <tr><th>№</th><th>Пациент</th><th>Дата рожд.</th><th>№ случая</th><th>Вид документа</th><th>Начало</th><th>Окончание</th></tr>
   {% for d in debts %}
   <tr><td>{{ loop.index }}</td><td>{{ d.patient }}</td><td>{{ d.birth }}</td>
       <td>{{ d.case_no }}</td><td>{{ d.doc_type }}</td><td>{{ d.d_start }}</td><td>{{ d.d_end }}</td></tr>
-  {% else %}<tr><td colspan="7" class="empty">Долгов нет (или отчёт «неподписанные» не загружен).</td></tr>{% endfor %}
+  {% else %}<tr><td colspan="7" class="empty">
+      {% if bd.total.nepodp %}В списке «неподписанные к регистрации в РЭМД» этого врача нет
+      (отчёт долгов уже отдельных видов документов или ещё не загружен).
+      {% else %}Долгов нет.{% endif %}</td></tr>{% endfor %}
 </table>
 {% endblock %}

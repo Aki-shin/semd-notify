@@ -115,19 +115,30 @@ def doctors(order="nepodp"):
         debts = {r["vrach"]: r["c"] for r in c.execute(
             "SELECT vrach, COUNT(*) c FROM debts GROUP BY vrach")}
         emap = {r["key"]: r["email"] for r in c.execute("SELECT * FROM email_map")}
-    out = []
+    out, seen = [], set()
     for r in agg:
         sform = r["sform"] or 0
         pct = round(100 * (r["podp"] or 0) / sform, 1) if sform else 0.0
         email = emap.get((r["snils"] or "").replace(" ", "")) or emap.get(_norm(r["vrach"])) or ""
+        seen.add(r["vrach"])
         out.append({
             "vrach": r["vrach"], "snils": r["snils"] or "",
             "sform": sform, "podp": r["podp"] or 0, "nepodp": r["nepodp"] or 0,
             "zareg": r["zareg"] or 0, "pct": pct,
             "debts": debts.get(r["vrach"], 0), "email": email,
         })
-    key = {"nepodp": lambda x: -x["nepodp"], "pct": lambda x: x["pct"],
-           "vrach": lambda x: x["vrach"]}.get(order, lambda x: -x["nepodp"])
+    # врачи, которые есть только в отчёте долгов (нет в отчёте «в разрезе врачей»):
+    # без них долги «висят» и их нельзя разослать
+    for vrach, cnt in debts.items():
+        if vrach in seen:
+            continue
+        out.append({
+            "vrach": vrach, "snils": "",
+            "sform": 0, "podp": 0, "nepodp": 0, "zareg": 0, "pct": 0.0,
+            "debts": cnt, "email": emap.get(_norm(vrach)) or "",
+        })
+    key = {"nepodp": lambda x: (-x["nepodp"], -x["debts"]), "pct": lambda x: x["pct"],
+           "vrach": lambda x: x["vrach"]}.get(order, lambda x: (-x["nepodp"], -x["debts"]))
     out.sort(key=key)
     return out
 
@@ -211,6 +222,20 @@ def doctor_debts(vrach):
     with _conn() as c:
         return [dict(r) for r in c.execute(
             "SELECT * FROM debts WHERE vrach=? ORDER BY d_start", (vrach,))]
+
+
+def doctor_breakdown(vrach):
+    """Разбивка врача по видам документов из отчёта «в разрезе врачей»
+    (сформировано/подписано/не подписано/в РЭМД) + итоги и подразделение."""
+    with _conn() as c:
+        rows = [dict(r) for r in c.execute(
+            "SELECT doc_type, SUM(sform) sform, SUM(podp) podp, "
+            "SUM(nepodp) nepodp, SUM(zareg) zareg FROM vrachi WHERE vrach=? "
+            "GROUP BY doc_type ORDER BY nepodp DESC, sform DESC", (vrach,))]
+        pod = c.execute("SELECT podrazdelenie p FROM vrachi WHERE vrach=? "
+                        "AND podrazdelenie<>'' LIMIT 1", (vrach,)).fetchone()
+    total = {k: sum(r[k] or 0 for r in rows) for k in ("sform", "podp", "nepodp", "zareg")}
+    return {"rows": rows, "total": total, "podrazdelenie": pod["p"] if pod else ""}
 
 
 def errors_summary():
