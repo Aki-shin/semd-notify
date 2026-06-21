@@ -68,18 +68,23 @@
 </table>
 
 <h2>Почты заведующих отделениями</h2>
-<form method="post" class="inline">
-  <input type="hidden" name="action" value="set_dept">
-  <select name="podr">
-    {% for d in depts %}<option value="{{ d.podr }}">{{ d.podr }}{% if d.email %} ✓{% endif %}</option>{% endfor %}
-  </select>
-  <input name="email" type="email" placeholder="zav@med.permkrai.ru" size="26">
-  <button type="submit">Сохранить</button>
+<p class="muted">Впишите почту напротив подразделения и нажмите «Сохранить почты». Пустое поле — очистить.</p>
+<form method="post">
+  <input type="hidden" name="action" value="set_dept_bulk">
+  <div class="toolbar">
+    <span class="muted">Подразделений: {{ depts|length }}</span>
+    <button type="submit">💾 Сохранить почты отделений</button>
+  </div>
+  <table>
+    <tr><th>Подразделение</th><th>Не подп.</th><th>Долгов</th><th>Почта зав. отделением</th></tr>
+    {% for d in depts %}
+    <tr>
+      <td>{{ d.podr }}{% if d.from_debts %} <span class="pill warn">по списку долгов</span>{% endif %}</td>
+      <td class="r">{{ d.nepodp }}</td><td class="r">{{ d.debts }}</td>
+      <td><input type="email" name="dept_email__{{ d.podr }}" value="{{ d.email }}"
+                 placeholder="zav@med.permkrai.ru" class="email {{ 'noemail' if not d.email }}"></td>
+    </tr>
+    {% else %}<tr><td colspan="4" class="empty">Загрузите отчёт «в разрезе врачей».</td></tr>{% endfor %}
+  </table>
 </form>
-<table style="margin-top:8px">
-  <tr><th>Подразделение</th><th>Не подп.</th><th>Почта зав. отделением</th></tr>
-  {% for d in depts %}
-  <tr><td>{{ d.podr }}</td><td class="r">{{ d.nepodp }}</td><td>{{ d.email or '—' }}</td></tr>
-  {% endfor %}
-</table>
 {% endblock %}

@@ -285,6 +285,13 @@ def settings():
             if podr and email:
                 storage.set_dept_email(podr, email)
                 flash("Почта подразделения сохранена.", "ok")
+        elif action == "set_dept_bulk":
+            saved = 0
+            for key, val in request.form.items():
+                if key.startswith("dept_email__"):
+                    storage.set_dept_email(key[len("dept_email__"):], (val or "").strip())
+                    saved += 1
+            flash(f"Сохранены почты отделений ({saved}).", "ok")
         elif action == "save_smtp":
             for k in ("SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_FROM", "SMTP_FROM_NAME",
                       "SMTP_BATCH_DELAY", "SMTP_BATCH_SIZE", "SMTP_BATCH_PAUSE"):
