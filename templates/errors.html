@@ -5,6 +5,14 @@
 Массовый <code>OBJECT_NOT_FOUND</code> / «подразделение не найдено» = проблема маппинга подразделений
 (часто после реорганизации) — чинится сверкой OID в ФРМО, а не врачами.</p>
 
+<div class="toolbar">
+  <div class="muted">Ответственный за исправление:
+    {% if resp_email %}<b>{{ resp_name or resp_email }}</b> ({{ resp_email }}){% else %}<span class="pill warn">не задан</span> — укажите в <a href="{{ url_for('settings') }}">Настройках</a>{% endif %}</div>
+  <form method="post" action="{{ url_for('report_send') }}">
+    <button type="submit" {{ 'disabled' if not resp_email }}>✉ Отправить отчёт ответственному</button>
+  </form>
+</div>
+
 <div class="cols">
   <div>
     <h2>По кодам ошибок</h2>
@@ -23,6 +31,14 @@
     </table>
   </div>
 </div>
+
+<h2>Документы без указанного врача («Не указан»)</h2>
+<p class="muted">Не привязаны к врачу — рассылкой врачам не закрываются, входят в отчёт ответственному за исправление.</p>
+<table>
+  <tr><th>Врач</th><th>Вид документа</th><th>Не подписано</th></tr>
+  {% for u in unassigned %}<tr><td>{{ u.vrach }}</td><td>{{ u.doc_type }}</td><td class="r bad">{{ u.nepodp }}</td></tr>
+  {% else %}<tr><td colspan="3" class="empty">нет</td></tr>{% endfor %}
+</table>
 
 <h2>Частые описания</h2>
 <table>

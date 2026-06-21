@@ -140,6 +140,25 @@ def funnel():
             "pct_podp": pct(p, s), "pct_zareg": pct(z, s)}
 
 
+def _is_unassigned(vrach):
+    """Документы без конкретного врача («Не указан», пусто) — слать врачу нельзя."""
+    v = (vrach or "").strip().lower()
+    return v == "" or v.startswith("не указан")
+
+
+def unassigned_summary():
+    """Неподписанные документы без указанного врача (для отчёта ответственному):
+    разбивка по виду документа из отчёта «в разрезе врачей»."""
+    with _conn() as c:
+        rows = c.execute(
+            "SELECT vrach, doc_type, SUM(nepodp) nepodp FROM vrachi "
+            "GROUP BY vrach, doc_type HAVING SUM(nepodp)>0").fetchall()
+    out = [{"vrach": r["vrach"] or "(пусто)", "doc_type": r["doc_type"], "nepodp": r["nepodp"]}
+           for r in rows if _is_unassigned(r["vrach"])]
+    out.sort(key=lambda x: -x["nepodp"])
+    return out
+
+
 def doctors(order="nepodp"):
     """Сводка по врачам: агрегаты + долги + почта."""
     with _conn() as c:
@@ -161,6 +180,7 @@ def doctors(order="nepodp"):
             "sform": sform, "podp": r["podp"] or 0, "nepodp": r["nepodp"] or 0,
             "zareg": r["zareg"] or 0, "pct": pct,
             "debts": debts.get(r["vrach"], 0), "email": email,
+            "unassigned": _is_unassigned(r["vrach"]),
         })
     # врачи, которые есть только в отчёте долгов (нет в отчёте «в разрезе врачей»):
     # без них долги «висят» и их нельзя разослать
@@ -171,6 +191,7 @@ def doctors(order="nepodp"):
             "vrach": vrach, "snils": "",
             "sform": 0, "podp": 0, "nepodp": 0, "zareg": 0, "pct": 0.0,
             "debts": cnt, "email": emap.get(_norm(vrach)) or "",
+            "unassigned": _is_unassigned(vrach),
         })
     key = {"nepodp": lambda x: (-x["nepodp"], -x["debts"]), "pct": lambda x: x["pct"],
            "vrach": lambda x: x["vrach"]}.get(order, lambda x: (-x["nepodp"], -x["debts"]))

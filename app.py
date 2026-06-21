@@ -159,30 +159,39 @@ def doctors():
                            log=storage.send_log(30))
 
 
+def _dispatch_batch(items, label):
+    """Фоновая пакетная рассылка с троттлингом (чтобы не висел запрос и не блокировали за спам)."""
+    def run():
+        mailer.send_batch(items, on_result=lambda it, ok, msg:
+                          storage.log_send(it["log_vrach"], it.get("to", ""), it["cnt"], msg))
+    threading.Thread(target=run, name=f"mail-batch-{label}", daemon=True).start()
+
+
 @app.route("/doctors/send", methods=["POST"])
 def doctors_send():
     selected = request.form.getlist("vrach")
     if not selected:
         flash("Не выбрано ни одного врача.", "warn")
         return redirect(url_for("doctors"))
-    sent, failed = 0, 0
+    items, noaddr = [], 0
     for vrach in selected:
         debts = storage.doctor_debts(vrach)
         if not debts:
             continue
-        # почта: из формы (могли поправить) либо из агрегата
         email = (request.form.get(f"email__{vrach}") or "").strip()
         if not email:
-            failed += 1
+            noaddr += 1
             storage.log_send(vrach, "", len(debts), "нет адреса")
             continue
-        html = mailer.build_debt_html(vrach, debts)
-        ok, msg = mailer.send(email, f"Неподписанные документы РЭМД: {len(debts)} шт.", html)
-        storage.log_send(vrach, email, len(debts), msg)
-        sent += 1 if ok else 0
-        failed += 0 if ok else 1
-    flash(f"Отправлено: {sent}, ошибок: {failed}" + (" (режим DRYRUN — реально не слалось)" if mailer.is_dryrun() else ""),
-          "ok" if not failed else "warn")
+        items.append({"to": email, "log_vrach": vrach, "cnt": len(debts),
+                      "subject": f"Неподписанные документы РЭМД: {len(debts)} шт.",
+                      "html": mailer.build_debt_html(vrach, debts)})
+    if items:
+        _dispatch_batch(items, "doctors")
+    dry = " (режим DRYRUN — реально не слалось)" if mailer.is_dryrun() else ""
+    flash(f"Запущена пакетная рассылка: {len(items)} писем в фоне (с задержкой против спама)."
+          + (f" Без адреса: {noaddr}." if noaddr else "") + " Результат — в журнале ниже." + dry,
+          "ok" if items else "warn")
     return redirect(url_for("doctors"))
 
 
@@ -205,7 +214,7 @@ def departments_send():
     if not selected:
         flash("Не выбрано ни одного подразделения.", "warn")
         return redirect(url_for("departments"))
-    sent, failed = 0, 0
+    items, noaddr = [], 0
     for podr in selected:
         d = storage.dept_vrachi(podr)
         if not d or not d["vrachi"]:
@@ -213,22 +222,45 @@ def departments_send():
         cnt = d["nepodp"] or d["debts"]
         email = (request.form.get(f"email__{podr}") or "").strip()
         if not email:
-            failed += 1
+            noaddr += 1
             storage.log_send(f"[отд.] {podr}", "", cnt, "нет адреса")
             continue
-        html = mailer.build_dept_html(podr, d["vrachi"], d["nepodp"], d["debts"], d.get("from_debts"))
-        ok, msg = mailer.send(email, f"Неподписанные документы по подразделению: {cnt} шт.", html)
-        storage.log_send(f"[отд.] {podr}", email, cnt, msg)
-        sent += 1 if ok else 0
-        failed += 0 if ok else 1
-    flash(f"Отправлено: {sent}, ошибок: {failed}" + (" (DRYRUN)" if mailer.is_dryrun() else ""),
-          "ok" if not failed else "warn")
+        items.append({"to": email, "log_vrach": f"[отд.] {podr}", "cnt": cnt,
+                      "subject": f"Неподписанные документы по подразделению: {cnt} шт.",
+                      "html": mailer.build_dept_html(podr, d["vrachi"], d["nepodp"], d["debts"], d.get("from_debts"))})
+    if items:
+        _dispatch_batch(items, "depts")
+    dry = " (DRYRUN)" if mailer.is_dryrun() else ""
+    flash(f"Запущена пакетная рассылка: {len(items)} писем в фоне."
+          + (f" Без адреса: {noaddr}." if noaddr else "") + " Результат — в журнале." + dry,
+          "ok" if items else "warn")
     return redirect(url_for("departments"))
+
+
+@app.route("/report/send", methods=["POST"])
+def report_send():
+    name, email = mailer.report_recipient()
+    if not email:
+        flash("Не задан e-mail ответственного за исправление — укажите в Настройках.", "warn")
+        return redirect(request.referrer or url_for("errors"))
+    data = {"funnel": storage.funnel(),
+            "errors": storage.errors_summary()["by_code"],
+            "unassigned": storage.unassigned_summary(),
+            "mo_gap": (storage.mo_funnel() or {}).get("gap_vrach_mo")}
+    html = mailer.build_report_html(data)
+    ok, msg = mailer.send(email, "Отчёт по проблемам РЭМД (ответственному за исправление)", html)
+    storage.log_send(f"[отчёт] {name or email}", email, len(data["unassigned"]), msg)
+    dry = " (DRYRUN)" if mailer.is_dryrun() else ""
+    flash(f"Отчёт ответственному ({email}): {msg}.{dry}", "ok" if ok else "warn")
+    return redirect(request.referrer or url_for("errors"))
 
 
 @app.route("/errors")
 def errors():
-    return render_template("errors.html", e=storage.errors_summary())
+    resp_name, resp_email = mailer.report_recipient()
+    return render_template("errors.html", e=storage.errors_summary(),
+                           unassigned=storage.unassigned_summary(),
+                           resp_name=resp_name, resp_email=resp_email)
 
 
 @app.route("/settings", methods=["GET", "POST"])
@@ -254,7 +286,8 @@ def settings():
                 storage.set_dept_email(podr, email)
                 flash("Почта подразделения сохранена.", "ok")
         elif action == "save_smtp":
-            for k in ("SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_FROM", "SMTP_FROM_NAME"):
+            for k in ("SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_FROM", "SMTP_FROM_NAME",
+                      "SMTP_BATCH_DELAY", "SMTP_BATCH_SIZE", "SMTP_BATCH_PAUSE"):
                 appconfig.set(k, (request.form.get(k) or "").strip())
             appconfig.set("SMTP_TLS", "1" if request.form.get("SMTP_TLS") else "0")
             appconfig.set("SMTP_DRYRUN", "1" if request.form.get("SMTP_DRYRUN") else "0")
@@ -262,6 +295,10 @@ def settings():
             if pw:  # пустое поле — не перезаписываем сохранённый пароль
                 appconfig.set("SMTP_PASS", pw)
             flash("Настройки почты сохранены.", "ok")
+        elif action == "save_resp":
+            appconfig.set("RESP_NAME", (request.form.get("RESP_NAME") or "").strip())
+            appconfig.set("RESP_EMAIL", (request.form.get("RESP_EMAIL") or "").strip())
+            flash("Ответственный за исправление сохранён.", "ok")
         elif action == "save_ipa":
             for k in ("IPA_LDAP_URI", "IPA_BASE_DN", "IPA_BIND_DN"):
                 appconfig.set(k, (request.form.get(k) or "").strip())
@@ -278,12 +315,16 @@ def settings():
     smtp["SMTP_TLS"] = appconfig.get_bool("SMTP_TLS", True)
     smtp["SMTP_DRYRUN"] = appconfig.get_bool("SMTP_DRYRUN", False)
     smtp["pass_set"] = appconfig.is_set("SMTP_PASS")
+    smtp["SMTP_BATCH_DELAY"] = appconfig.get("SMTP_BATCH_DELAY", "2")
+    smtp["SMTP_BATCH_SIZE"] = appconfig.get("SMTP_BATCH_SIZE", "25")
+    smtp["SMTP_BATCH_PAUSE"] = appconfig.get("SMTP_BATCH_PAUSE", "30")
+    resp = {"RESP_NAME": appconfig.get("RESP_NAME", ""), "RESP_EMAIL": appconfig.get("RESP_EMAIL", "")}
     ipacfg = {k: appconfig.get(k, "") for k in ("IPA_LDAP_URI", "IPA_BASE_DN", "IPA_BIND_DN")}
     ipacfg["IPA_AUTOSYNC"] = appconfig.get_bool("IPA_AUTOSYNC", False)
     ipacfg["IPA_SYNC_HOURS"] = appconfig.get("IPA_SYNC_HOURS", "24")
     ipacfg["pass_set"] = appconfig.is_set("IPA_BIND_PW")
     last_ts, last_res = ipa.last_sync_info()
-    return render_template("settings.html", smtp=smtp, ipacfg=ipacfg,
+    return render_template("settings.html", smtp=smtp, ipacfg=ipacfg, resp=resp,
                            ipa_last=(last_ts, last_res),
                            docs=storage.doctors(), depts=storage.dept_summary())
 

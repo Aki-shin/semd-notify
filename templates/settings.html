@@ -15,7 +15,20 @@
   <label>От кого (имя) <input name="SMTP_FROM_NAME" value="{{ smtp.SMTP_FROM_NAME }}"></label>
   <label class="chk"><input type="checkbox" name="SMTP_TLS" {{ 'checked' if smtp.SMTP_TLS }}> STARTTLS</label>
   <label class="chk"><input type="checkbox" name="SMTP_DRYRUN" {{ 'checked' if smtp.SMTP_DRYRUN }}> Тестовый режим (DRYRUN — не отправлять)</label>
+  <p class="muted small" style="margin:10px 0 4px">Пакетная рассылка (защита от блокировки за спам):</p>
+  <label>Задержка между письмами, сек <input name="SMTP_BATCH_DELAY" value="{{ smtp.SMTP_BATCH_DELAY or '2' }}" size="5"></label>
+  <label>Размер пачки (после N — пауза) <input name="SMTP_BATCH_SIZE" value="{{ smtp.SMTP_BATCH_SIZE or '25' }}" size="5"></label>
+  <label>Пауза между пачками, сек <input name="SMTP_BATCH_PAUSE" value="{{ smtp.SMTP_BATCH_PAUSE or '30' }}" size="5"></label>
   <div><button type="submit">Сохранить почту</button></div>
+</form>
+
+<h2>Ответственный за исправление ошибок {% if resp.RESP_EMAIL %}<span class="pill ok">задан</span>{% else %}<span class="pill warn">не задан</span>{% endif %}</h2>
+<p class="muted">Ему уходит сводный отчёт по проблемам, не привязанным к врачам (ошибки ФЛК, документы без врача «Не указан», затор на подписи МО). Кнопка отправки — на странице <a href="{{ url_for('errors') }}">Ошибки</a>.</p>
+<form method="post" class="cfg">
+  <input type="hidden" name="action" value="save_resp">
+  <label>ФИО / должность <input name="RESP_NAME" value="{{ resp.RESP_NAME }}" placeholder="напр. оператор ЭВМ статистики"></label>
+  <label>E-mail <input type="email" name="RESP_EMAIL" value="{{ resp.RESP_EMAIL }}" placeholder="resp@med.permkrai.ru"></label>
+  <div><button type="submit">Сохранить ответственного</button></div>
 </form>
 
 <h2>FreeIPA — корпоративные почты {% if ipa_ok %}<span class="pill ok">подключено</span>{% else %}<span class="pill warn">не настроено</span>{% endif %}</h2>
@@ -46,10 +59,10 @@
   <input name="email" type="email" placeholder="ivanov@med.permkrai.ru" size="26">
   <button type="submit">Сохранить</button>
 </form>
-<h3>Врачи без почты ({{ docs|selectattr('email','equalto','')|list|length }})</h3>
+<h3>Врачи без почты ({{ docs|rejectattr('unassigned')|selectattr('email','equalto','')|list|length }})</h3>
 <table>
   <tr><th>Врач</th><th>СНИЛС</th><th>Долгов</th></tr>
-  {% for d in docs if not d.email %}
+  {% for d in docs if not d.email and not d.unassigned %}
   <tr><td>{{ d.vrach }}</td><td>{{ d.snils }}</td><td class="r">{{ d.debts }}</td></tr>
   {% endfor %}
 </table>
