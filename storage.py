@@ -37,6 +37,15 @@ def init():
         CREATE TABLE IF NOT EXISTS dept_map(podr TEXT PRIMARY KEY, email TEXT);
         CREATE TABLE IF NOT EXISTS notrans(k TEXT PRIMARY KEY, v INTEGER);
         CREATE TABLE IF NOT EXISTS config(k TEXT PRIMARY KEY, v TEXT);
+        CREATE TABLE IF NOT EXISTS fap(
+            fap TEXT, internet TEXT, fio TEXT, visits INTEGER, visits_doc INTEGER,
+            pct INTEGER, naprav INTEGER, recipes INTEGER, naznach INTEGER, eln INTEGER);
+        CREATE TABLE IF NOT EXISTS vidy(
+            doc_type TEXT, zareg INTEGER, sent INTEGER, err_sync INTEGER, err_reg INTEGER, total INTEGER);
+        CREATE TABLE IF NOT EXISTS docerr(
+            doc_type TEXT, not_found INTEGER, validation INTEGER, position INTEGER, total INTEGER);
+        CREATE TABLE IF NOT EXISTS fedkpi(k TEXT PRIMARY KEY, v REAL);
+        CREATE TABLE IF NOT EXISTS status(status TEXT, count INTEGER);
         """)
         # миграция старых БД: колонка отделения в таблице долгов
         cols = {r["name"] for r in c.execute("PRAGMA table_info(debts)")}
@@ -91,6 +100,23 @@ def replace_report(rtype, filename, period, nrows, records):
             c.execute("DELETE FROM notrans")
             if records:
                 c.executemany("INSERT INTO notrans VALUES(?,?)", list(records[0].items()))
+        elif rtype == "fap":
+            c.execute("DELETE FROM fap")
+            c.executemany("INSERT INTO fap VALUES(:fap,:internet,:fio,:visits,:visits_doc,"
+                          ":pct,:naprav,:recipes,:naznach,:eln)", records)
+        elif rtype == "vidy":
+            c.execute("DELETE FROM vidy")
+            c.executemany("INSERT INTO vidy VALUES(:doc_type,:zareg,:sent,:err_sync,:err_reg,:total)", records)
+        elif rtype == "docerr":
+            c.execute("DELETE FROM docerr")
+            c.executemany("INSERT INTO docerr VALUES(:doc_type,:not_found,:validation,:position,:total)", records)
+        elif rtype == "fedkpi":
+            c.execute("DELETE FROM fedkpi")
+            if records:
+                c.executemany("INSERT INTO fedkpi VALUES(?,?)", list(records[0].items()))
+        elif rtype == "status":
+            c.execute("DELETE FROM status")
+            c.executemany("INSERT INTO status VALUES(:status,:count)", records)
 
 
 def meta_all():
@@ -105,7 +131,8 @@ def reset_reports():
     настройки SMTP/FreeIPA."""
     init()
     with _conn() as c:
-        for t in ("meta", "vrachi", "debts", "errors", "mo_funnel", "tvsp", "notrans"):
+        for t in ("meta", "vrachi", "debts", "errors", "mo_funnel", "tvsp", "notrans",
+                  "fap", "vidy", "docerr", "fedkpi", "status"):
             c.execute(f"DELETE FROM {t}")
 
 
@@ -243,6 +270,50 @@ def notrans_get():
     with _conn() as c:
         d = {r["k"]: r["v"] for r in c.execute("SELECT * FROM notrans")}
     return d if d.get("total") is not None else None
+
+
+def vidy_list():
+    """Статистика по видам документов (что зарегистрировано/упало), по убыванию объёма."""
+    with _conn() as c:
+        return [dict(r) for r in c.execute("SELECT * FROM vidy ORDER BY total DESC")]
+
+
+def docerr_list():
+    """Ошибки по видам документов (для страницы «Ошибки» и отчёта ответственному)."""
+    with _conn() as c:
+        return [dict(r) for r in c.execute("SELECT * FROM docerr ORDER BY total DESC")]
+
+
+def status_list():
+    with _conn() as c:
+        return [dict(r) for r in c.execute("SELECT * FROM status ORDER BY count DESC")]
+
+
+def fedkpi_get():
+    with _conn() as c:
+        d = {r["k"]: r["v"] for r in c.execute("SELECT * FROM fedkpi")}
+    return d or None
+
+
+def fap_list():
+    with _conn() as c:
+        return [dict(r) for r in c.execute(
+            "SELECT * FROM fap ORDER BY pct ASC, visits DESC")]
+
+
+def fap_summary():
+    """Агрегаты по ФАП: всего фельдшеров, без интернета, средний % заполнения ЭМК."""
+    with _conn() as c:
+        rows = [dict(r) for r in c.execute("SELECT * FROM fap")]
+    if not rows:
+        return None
+    no_net = sum(1 for r in rows if (r["internet"] or "").strip().lower() in ("нет", "no"))
+    visits = sum(r["visits"] or 0 for r in rows)
+    visits_doc = sum(r["visits_doc"] or 0 for r in rows)
+    return {"n": len(rows), "no_internet": no_net,
+            "visits": visits, "visits_doc": visits_doc,
+            "pct": round(100 * visits_doc / visits, 1) if visits else 0.0,
+            "low": [r for r in rows if (r["pct"] or 0) < 100]}
 
 
 def tvsp_list():

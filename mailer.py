@@ -94,6 +94,7 @@ def build_report_html(data):
     f = data.get("funnel", {})
     errs = data.get("errors", []) or []
     un = data.get("unassigned", []) or []
+    docerr = data.get("docerr", []) or []
     mo_gap = data.get("mo_gap")
     err_rows = "".join(
         f"<tr><td>{e['code']}</td><td style='text-align:right'>{e['c']}</td></tr>" for e in errs[:15]
@@ -102,6 +103,16 @@ def build_report_html(data):
         f"<tr><td>{u['vrach']}</td><td>{u['doc_type']}</td><td style='text-align:right'>{u['nepodp']}</td></tr>"
         for u in un
     ) or "<tr><td colspan='3'>нет</td></tr>"
+    de_rows = "".join(
+        f"<tr><td>{d['doc_type']}</td><td style='text-align:right'>{d['not_found']}</td>"
+        f"<td style='text-align:right'>{d['validation']}</td><td style='text-align:right'>{d['position']}</td></tr>"
+        for d in docerr[:15]
+    )
+    de_block = (f"""<h3>Ошибки по видам документов</h3>
+<table border="1" cellspacing="0" cellpadding="5" style="border-collapse:collapse;font-size:13px">
+<tr style="background:#eef"><th>Вид документа</th><th>Не найдена запись справочника</th><th>Ошибка валидации</th><th>Должность</th></tr>
+{de_rows}
+</table>""") if docerr else ""
     mo_block = (f"<p>Подписаны врачом, но <b>не подписаны МО</b> (застряли на подписи МО): "
                 f"<b>{mo_gap}</b> — это автоподписание МО, не вина врачей.</p>") if mo_gap else ""
     return f"""<html><body style="font-family:Arial,sans-serif;font-size:14px;color:#222">
@@ -120,6 +131,7 @@ def build_report_html(data):
 <tr style="background:#eef"><th>Код ошибки</th><th>Кол-во</th></tr>
 {err_rows}
 </table>
+{de_block}
 <p style="color:#666;font-size:12px">Сформировано автоматически системой мониторинга СЭМД.</p>
 </body></html>"""
 

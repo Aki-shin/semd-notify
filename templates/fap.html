@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>ФАП — работа фельдшеров в ЭМК</h1>
+<p class="muted">Заполнение электронной медкарты по фельдшерско-акушерским пунктам: посещения, % оформления,
+рецепты, ЭЛН. «Молчащие» ФАПы и точки без интернета — точки роста по показателям.</p>
+
+{% if s %}
+<section class="cards">
+  <div class="card"><div class="num">{{ s.n }}</div><div class="lbl">Фельдшеров ФАП</div></div>
+  <div class="card"><div class="num">{{ s.pct }}%</div><div class="lbl">Заполнение ЭМК ({{ s.visits_doc }} из {{ s.visits }})</div></div>
+  <div class="card {{ 'bad' if s.low|length }}"><div class="num">{{ s.low|length }}</div><div class="lbl">С неполным заполнением (&lt;100%)</div></div>
+  <div class="card {{ 'bad' if s.no_internet }}"><div class="num">{{ s.no_internet }}</div><div class="lbl">ФАП без интернета</div></div>
+</section>
+
+<table>
+  <tr><th>ФАП</th><th>Фельдшер</th><th>Инт-т</th><th>Посещ.</th><th>С док.</th><th>% ЭМК</th>
+      <th>Направл.</th><th>Рецепты</th><th>Назнач.</th><th>ЭЛН</th></tr>
+  {% for r in rows %}
+  <tr class="{{ 'lowpct' if r.pct < 100 }}">
+    <td>{{ r.fap }}</td><td>{{ r.fio }}</td>
+    <td>{% if r.internet|lower == 'нет' %}<span class="pill warn">нет</span>{% else %}{{ r.internet }}{% endif %}</td>
+    <td class="r">{{ r.visits }}</td><td class="r">{{ r.visits_doc }}</td>
+    <td class="r {{ 'bad' if r.pct < 100 }}">{{ r.pct }}%</td>
+    <td class="r">{{ r.naprav }}</td><td class="r">{{ r.recipes }}</td>
+    <td class="r">{{ r.naznach }}</td><td class="r">{{ r.eln }}</td>
+  </tr>
+  {% else %}<tr><td colspan="10" class="empty">Загрузите «Отчёт по работе в ЭМК по фельдшерам ФАП».</td></tr>{% endfor %}
+</table>
+{% else %}
+<div class="empty">Отчёт по ФАП не загружен. <a href="{{ url_for('upload') }}">Загрузить</a></div>
+{% endif %}
+{% endblock %}

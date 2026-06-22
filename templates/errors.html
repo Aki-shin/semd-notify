@@ -40,6 +40,16 @@
   {% else %}<tr><td colspan="3" class="empty">нет</td></tr>{% endfor %}
 </table>
 
+<h2>Ошибки по видам документов <span class="small muted">— из отчёта «Статистика по ошибкам документов»</span></h2>
+<table>
+  <tr><th>Вид документа</th><th>Не найдена запись справочника</th><th>Ошибка валидации</th><th>Должность</th><th>Всего</th></tr>
+  {% for d in docerr %}<tr>
+    <td>{{ d.doc_type }}</td><td class="r {{ 'bad' if d.not_found }}">{{ d.not_found }}</td>
+    <td class="r">{{ d.validation }}</td><td class="r">{{ d.position }}</td><td class="r"><b>{{ d.total }}</b></td></tr>
+  {% else %}<tr><td colspan="5" class="empty">Отчёт «Статистика по ошибкам документов» не загружен.</td></tr>{% endfor %}
+</table>
+<p class="muted small">«Не найдена запись справочника» = тот самый OBJECT_NOT_FOUND (маппинг подразделений/должностей в ФРМО) — чинится не врачами.</p>
+
 <h2>Частые описания</h2>
 <table>
   <tr><th>Код</th><th>Описание</th><th>Кол-во</th></tr>

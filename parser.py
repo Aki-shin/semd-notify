@@ -47,12 +47,22 @@ def detect_type(rows):
     head = " ".join(
         (r.get(1, "") or "") for r in rows[:6]
     ).lower()
+    if "фельдшерам фап" in head or "работе в эмк" in head:
+        return "fap"
     if "в разрезе врачей" in head:
         return "vrachi"
     if "неподписанными документами" in head or "неподписанных документ" in head:
         return "debts"
+    if "в разрезе видов документов" in head:
+        return "vidy"
+    if "по статусам документ" in head:
+        return "status"
+    if "выполнение" in head and "показател" in head:
+        return "fedkpi"
     if "ошибк" in head and "флк" in head:
         return "flk"
+    if "по ошибкам документ" in head:
+        return "docerr"
     if "не передан" in head and "рэмд" in head:
         return "notrans"
     if "в разрезе твсп" in head:
@@ -101,7 +111,114 @@ def parse(path):
         res["records"] = _parse_tvsp(rows)
     elif rtype == "notrans":
         res["records"] = _parse_notrans(rows)
+    elif rtype == "fap":
+        res["records"] = _parse_fap(rows)
+    elif rtype == "vidy":
+        res["records"] = _parse_vidy(rows)
+    elif rtype == "docerr":
+        res["records"] = _parse_docerr(rows)
+    elif rtype == "fedkpi":
+        res["records"] = _parse_fedkpi(rows)
+    elif rtype == "status":
+        res["records"] = _parse_status(rows)
     return res
+
+
+def _parse_fap(rows):
+    """ФАП — работа фельдшеров в ЭМК. c2 ФАП, c6 интернет, c8 ФИО, c9 посещений,
+    c10 с документами, c11 % заполнения, c12 направлений, c13 рецептов,
+    c14 назначений, c15 ЭЛН."""
+    out = []
+    for r in rows:
+        fio = (r.get(8, "") or "").strip()
+        if not fio or fio.isdigit() or fio.lower().startswith("фио"):
+            continue
+        vis = _num(r.get(9, ""))
+        if vis is None:
+            continue
+        out.append({
+            "fap": (r.get(2, "") or "").strip().split("\n")[0],
+            "internet": (r.get(6, "") or "").strip(),
+            "fio": fio,
+            "visits": int(vis),
+            "visits_doc": int(_num(r.get(10, "")) or 0),
+            "pct": int(_num(r.get(11, "")) or 0),
+            "naprav": int(_num(r.get(12, "")) or 0),
+            "recipes": int(_num(r.get(13, "")) or 0),
+            "naznach": int(_num(r.get(14, "")) or 0),
+            "eln": int(_num(r.get(15, "")) or 0),
+        })
+    return out
+
+
+def _parse_vidy(rows):
+    """Статистика по видам документов: c2 вид, c4 зарегистрировано, c5 отправлено,
+    c6 ошибка синхронной отправки, c7 ошибка регистрации, c8 общий итог."""
+    out = []
+    for r in rows:
+        vid = (r.get(2, "") or "").strip()
+        total = _num(r.get(8, ""))
+        if not vid or vid.isdigit() or total is None:
+            continue
+        if vid.lower().startswith(("вид документ", "итог", "общий")):
+            continue
+        out.append({
+            "doc_type": vid,
+            "zareg": int(_num(r.get(4, "")) or 0),
+            "sent": int(_num(r.get(5, "")) or 0),
+            "err_sync": int(_num(r.get(6, "")) or 0),
+            "err_reg": int(_num(r.get(7, "")) or 0),
+            "total": int(total),
+        })
+    return out
+
+
+def _parse_docerr(rows):
+    """Статистика по ошибкам документов: c3 вид, c4 не найдена запись справочника,
+    c5 ошибка валидации значения, c6 переданная должность."""
+    out = []
+    for r in rows:
+        vid = (r.get(3, "") or "").strip()
+        if not vid or vid.isdigit() or vid.lower().startswith(("вид документ", "итог")):
+            continue
+        nf = int(_num(r.get(4, "")) or 0)
+        val = int(_num(r.get(5, "")) or 0)
+        pos = int(_num(r.get(6, "")) or 0)
+        if nf + val + pos == 0:
+            continue
+        out.append({"doc_type": vid, "not_found": nf, "validation": val,
+                    "position": pos, "total": nf + val + pos})
+    return out
+
+
+def _parse_fedkpi(rows):
+    """Выполнение фед. показателей ЕЦКЗ (агрегат по Осинской): c3 план ТВСП,
+    c4 факт ТВСП, c5 доля ТВСП %, c6 индивид. план %, c7 доля достижения %, c9 нужно ещё."""
+    for r in rows:
+        if "ОСИНСК" in (r.get(1, "") or "").upper():
+            return [{
+                "plan_tvsp": int(_num(r.get(3, "")) or 0),
+                "fact_tvsp": int(_num(r.get(4, "")) or 0),
+                "pct_tvsp": _num(r.get(5, "")) or 0,
+                "plan_indiv": _num(r.get(6, "")) or 0,
+                "pct_dostizh": _num(r.get(7, "")) or 0,
+                "need": int(_num(r.get(9, "")) or 0),
+            }]
+    return []
+
+
+def _parse_status(rows):
+    """Статистика по статусам документов: c3 статус, c4 количество."""
+    out = []
+    for r in rows:
+        st = (r.get(3, "") or "").strip()
+        cnt = _num(r.get(4, ""))
+        if not st or st.isdigit() or cnt is None:
+            continue
+        if st.lower().startswith(("итог", "статус документ")):
+            continue
+        out.append({"status": st, "count": int(cnt)})
+    return out
 
 
 def _parse_vrachi(rows):

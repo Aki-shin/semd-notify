@@ -66,6 +66,39 @@
 </table>
 {% endif %}
 
+{% if fedkpi %}
+<h2>Федеральные показатели ЕЦКЗ</h2>
+<section class="cards" style="grid-template-columns:repeat(4,1fr)">
+  <div class="card"><div class="num">{{ fedkpi.fact_tvsp|int }}</div><div class="lbl">Факт ТВСП передают</div></div>
+  <div class="card {{ 'bad' if fedkpi.pct_tvsp < 50 }}"><div class="num">{{ fedkpi.pct_tvsp }}%</div><div class="lbl">Доля ТВСП, передающих в РЭМД</div></div>
+  <div class="card {{ 'bad' if fedkpi.pct_dostizh < 50 }}"><div class="num">{{ fedkpi.pct_dostizh }}%</div><div class="lbl">Достижение индивид. плана</div></div>
+  <div class="card {{ 'bad' if fedkpi.need and fedkpi.need > 0 }}"><div class="num">{{ fedkpi.need|int }}</div><div class="lbl">Нужно ещё для плана</div></div>
+</section>
+{% endif %}
+
+{% if status %}
+<h2>Статусы документов в РЭМД</h2>
+<table>
+  <tr><th>Статус</th><th>Кол-во</th></tr>
+  {% for s in status %}
+  <tr><td>{{ s.status }}</td><td class="r {{ 'bad' if 'шибк' in s.status }}">{{ s.count }}</td></tr>
+  {% endfor %}
+</table>
+{% endif %}
+
+{% if vidy %}
+<h2>По видам документов <span class="small muted">— что регистрируется и что падает</span></h2>
+<table>
+  <tr><th>Вид документа</th><th>Зарегистр.</th><th>Отправлено</th><th>Ошибка синхр.</th><th>Ошибка рег.</th><th>Всего</th></tr>
+  {% for v in vidy[:20] %}
+  <tr class="{{ 'lowpct' if (v.err_sync + v.err_reg) > 0 }}">
+    <td>{{ v.doc_type }}</td><td class="r">{{ v.zareg }}</td><td class="r">{{ v.sent }}</td>
+    <td class="r {{ 'bad' if v.err_sync }}">{{ v.err_sync }}</td>
+    <td class="r {{ 'bad' if v.err_reg }}">{{ v.err_reg }}</td><td class="r">{{ v.total }}</td></tr>
+  {% endfor %}
+</table>
+{% endif %}
+
 <div class="cols">
   <div>
     <h2>Топ-15 по неподписанным <a class="small" href="{{ url_for('doctors') }}">все врачи →</a></h2>

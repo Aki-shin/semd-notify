@@ -32,10 +32,16 @@ RTYPE_RU = {
     "mo": "Воронка по МО (с подписью МО)",
     "tvsp": "По ТВСП",
     "notrans": "Не переданы в РЭМД",
+    "fap": "ФАП — работа в ЭМК",
+    "vidy": "По видам документов",
+    "docerr": "Ошибки по видам документов",
+    "fedkpi": "Выполнение фед. показателей",
+    "status": "Статусы документов",
     "state": "Состояние по ЭМД",
     "unknown": "Не распознан",
 }
-LOADABLE = ("vrachi", "debts", "flk", "mo", "tvsp", "notrans")
+LOADABLE = ("vrachi", "debts", "flk", "mo", "tvsp", "notrans",
+            "fap", "vidy", "docerr", "fedkpi", "status")
 
 # Справочник поддерживаемых отчётов: точное наименование (как в ЕИСЗ ПК) и что даёт в системе.
 REPORTS_INFO = [
@@ -69,6 +75,29 @@ REPORTS_INFO = [
      "gives": "Разбор «не в РЭМД»: не сформированы (клиническая сторона) vs сформированы, "
               "но не переданы (подпись МО / передача).",
      "section": "Дашборд (разбор причины)"},
+    {"key": "vidy",
+     "title": "РЭМД. Статистика отправки ЭМД в разрезе видов документов",
+     "gives": "По каждому виду документа: зарегистрировано / отправлено / ошибки. "
+              "Видно, какие виды документов проваливаются.",
+     "section": "Дашборд (по видам)"},
+    {"key": "docerr",
+     "title": "РЭМД. Статистика по ошибкам документов",
+     "gives": "Ошибки по видам документов и типам (не найдена запись справочника, валидация, должность). "
+              "Дополняет ФЛК; идёт в отчёт ответственному.",
+     "section": "Ошибки"},
+    {"key": "fedkpi",
+     "title": "РЭМД. Выполнение Фед. Показателей ЕЦКЗ по МО",
+     "gives": "План/факт ТВСП и % достижения индивидуального плана — KPI, по которым судят МО.",
+     "section": "Дашборд (показатели)"},
+    {"key": "status",
+     "title": "Статистика по статусам документов в РЭМД",
+     "gives": "Распределение по статусам: зарегистрировано / отправлено / готов / ошибка.",
+     "section": "Дашборд (статусы)"},
+    {"key": "fap",
+     "title": "Отчёт по работе в ЭМК по фельдшерам ФАП",
+     "gives": "По фельдшерам ФАП: посещения, % заполнения ЭМК, рецепты, ЭЛН, подключение к интернету. "
+              "Видно «молчащие» ФАПы и точки без интернета.",
+     "section": "Страница «ФАП»"},
 ]
 
 
@@ -99,6 +128,9 @@ def index():
                            mo=storage.mo_funnel(),
                            notrans=storage.notrans_get(),
                            tvsp=storage.tvsp_list(),
+                           vidy=storage.vidy_list(),
+                           status=storage.status_list(),
+                           fedkpi=storage.fedkpi_get(),
                            meta=storage.meta_all(),
                            top=storage.doctors("nepodp")[:15],
                            errors=storage.errors_summary())
@@ -246,6 +278,7 @@ def report_send():
     data = {"funnel": storage.funnel(),
             "errors": storage.errors_summary()["by_code"],
             "unassigned": storage.unassigned_summary(),
+            "docerr": storage.docerr_list(),
             "mo_gap": (storage.mo_funnel() or {}).get("gap_vrach_mo")}
     html = mailer.build_report_html(data)
     ok, msg = mailer.send(email, "Отчёт по проблемам РЭМД (ответственному за исправление)", html)
@@ -260,7 +293,13 @@ def errors():
     resp_name, resp_email = mailer.report_recipient()
     return render_template("errors.html", e=storage.errors_summary(),
                            unassigned=storage.unassigned_summary(),
+                           docerr=storage.docerr_list(),
                            resp_name=resp_name, resp_email=resp_email)
+
+
+@app.route("/fap")
+def fap():
+    return render_template("fap.html", rows=storage.fap_list(), s=storage.fap_summary())
 
 
 @app.route("/settings", methods=["GET", "POST"])
