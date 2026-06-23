@@ -147,6 +147,8 @@ def _parse_fap(rows):
             "recipes": int(_num(r.get(13, "")) or 0),
             "naznach": int(_num(r.get(14, "")) or 0),
             "eln": int(_num(r.get(15, "")) or 0),
+            "telemed": int(_num(r.get(16, "")) or 0),
+            "er": int(_num(r.get(17, "")) or 0),
         })
     return out
 

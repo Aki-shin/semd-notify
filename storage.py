@@ -39,7 +39,8 @@ def init():
         CREATE TABLE IF NOT EXISTS config(k TEXT PRIMARY KEY, v TEXT);
         CREATE TABLE IF NOT EXISTS fap(
             fap TEXT, internet TEXT, fio TEXT, visits INTEGER, visits_doc INTEGER,
-            pct INTEGER, naprav INTEGER, recipes INTEGER, naznach INTEGER, eln INTEGER);
+            pct INTEGER, naprav INTEGER, recipes INTEGER, naznach INTEGER, eln INTEGER,
+            telemed INTEGER, er INTEGER);
         CREATE TABLE IF NOT EXISTS vidy(
             doc_type TEXT, zareg INTEGER, sent INTEGER, err_sync INTEGER, err_reg INTEGER, total INTEGER);
         CREATE TABLE IF NOT EXISTS docerr(
@@ -54,6 +55,10 @@ def init():
         cols = {r["name"] for r in c.execute("PRAGMA table_info(debts)")}
         if "otdelenie" not in cols:
             c.execute("ALTER TABLE debts ADD COLUMN otdelenie TEXT DEFAULT ''")
+        fcols = {r["name"] for r in c.execute("PRAGMA table_info(fap)")}
+        for col in ("telemed", "er"):
+            if col not in fcols:
+                c.execute(f"ALTER TABLE fap ADD COLUMN {col} INTEGER DEFAULT 0")
 
 
 def cfg_get(key):
@@ -105,8 +110,10 @@ def replace_report(rtype, filename, period, nrows, records):
                 c.executemany("INSERT INTO notrans VALUES(?,?)", list(records[0].items()))
         elif rtype == "fap":
             c.execute("DELETE FROM fap")
-            c.executemany("INSERT INTO fap VALUES(:fap,:internet,:fio,:visits,:visits_doc,"
-                          ":pct,:naprav,:recipes,:naznach,:eln)", records)
+            c.executemany(
+                "INSERT INTO fap(fap,internet,fio,visits,visits_doc,pct,naprav,recipes,"
+                "naznach,eln,telemed,er) VALUES(:fap,:internet,:fio,:visits,:visits_doc,"
+                ":pct,:naprav,:recipes,:naznach,:eln,:telemed,:er)", records)
         elif rtype == "vidy":
             c.execute("DELETE FROM vidy")
             c.executemany("INSERT INTO vidy VALUES(:doc_type,:zareg,:sent,:err_sync,:err_reg,:total)", records)
@@ -381,11 +388,14 @@ def fap_summary():
     if not rows:
         return None
     no_net = sum(1 for r in rows if (r["internet"] or "").strip().lower() in ("нет", "no"))
-    visits = sum(r["visits"] or 0 for r in rows)
-    visits_doc = sum(r["visits_doc"] or 0 for r in rows)
+    def tot(k):
+        return sum(r[k] or 0 for r in rows)
+    visits, visits_doc = tot("visits"), tot("visits_doc")
     return {"n": len(rows), "no_internet": no_net,
             "visits": visits, "visits_doc": visits_doc,
             "pct": round(100 * visits_doc / visits, 1) if visits else 0.0,
+            "naprav": tot("naprav"), "recipes": tot("recipes"), "naznach": tot("naznach"),
+            "eln": tot("eln"), "telemed": tot("telemed"), "er": tot("er"),
             "low": [r for r in rows if (r["pct"] or 0) < 100]}
 
 

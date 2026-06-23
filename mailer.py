@@ -147,28 +147,30 @@ def fap_recipient():
 
 
 def build_fap_report_html(s, rows):
-    """Отчёт ответственному по ФАП: охват ЭМК, точки без интернета, неполное заполнение."""
-    low = [r for r in rows if (r.get("pct", 0) or 0) < 100]
-    no_net = [r for r in rows if (r.get("internet", "") or "").strip().lower() in ("нет", "no")]
-    net_rows = "".join(f"<tr><td>{r['fap']}</td><td>{r['fio']}</td></tr>" for r in no_net[:50]) \
-        or "<tr><td colspan='2'>нет</td></tr>"
-    low_rows = "".join(
-        f"<tr><td>{r['fap']}</td><td>{r['fio']}</td><td style='text-align:right'>{r['pct']}%</td>"
-        f"<td style='text-align:right'>{r['visits']}</td></tr>" for r in low[:50]
-    ) or "<tr><td colspan='4'>нет</td></tr>"
-    return f"""<html><body style="font-family:Arial,sans-serif;font-size:14px;color:#222">
-<p>Отчёт по работе фельдшеров ФАП в электронной медицинской карте (ЭМК).</p>
-<p>Фельдшеров: <b>{s.get('n',0)}</b> · заполнение ЭМК: <b>{s.get('pct',0)}%</b>
-({s.get('visits_doc',0)} из {s.get('visits',0)} посещений) · ФАП без интернета: <b>{len(no_net)}</b>.</p>
-<h3>ФАП без подключения к интернету ({len(no_net)})</h3>
-<table border="1" cellspacing="0" cellpadding="5" style="border-collapse:collapse;font-size:13px">
-<tr style="background:#eef"><th>ФАП</th><th>Фельдшер</th></tr>
-{net_rows}
-</table>
-<h3>Неполное заполнение ЭМК (&lt;100%) — {len(low)}</h3>
-<table border="1" cellspacing="0" cellpadding="5" style="border-collapse:collapse;font-size:13px">
-<tr style="background:#eef"><th>ФАП</th><th>Фельдшер</th><th>% ЭМК</th><th>Посещений</th></tr>
-{low_rows}
+    """Полная статистика работы фельдшеров ФАП в ЭМК — ответственному за ФАП."""
+    def td(v):
+        return f"<td style='text-align:right'>{v}</td>"
+    body = "".join(
+        f"<tr><td>{r['fap']}</td><td>{r['fio']}</td>"
+        + td(r['visits']) + td(r['visits_doc']) + td(str(r['pct']) + '%')
+        + td(r['naprav']) + td(r['recipes']) + td(r['naznach'])
+        + td(r['eln']) + td(r.get('telemed', 0)) + td(r.get('er', 0)) + "</tr>"
+        for r in rows
+    ) or "<tr><td colspan='11'>нет данных</td></tr>"
+    total = (f"<tr style='font-weight:bold;background:#eef'><td colspan='2'>ИТОГО ({s.get('n',0)})</td>"
+             + td(s.get('visits', 0)) + td(s.get('visits_doc', 0)) + td(str(s.get('pct', 0)) + '%')
+             + td(s.get('naprav', 0)) + td(s.get('recipes', 0)) + td(s.get('naznach', 0))
+             + td(s.get('eln', 0)) + td(s.get('telemed', 0)) + td(s.get('er', 0)) + "</tr>")
+    return f"""<html><body style="font-family:Arial,sans-serif;font-size:13px;color:#222">
+<p>Статистика работы фельдшеров ФАП в электронной медицинской карте (ЭМК) за период.</p>
+<p>Фельдшеров: <b>{s.get('n',0)}</b> · посещений: <b>{s.get('visits',0)}</b> ·
+с документами: <b>{s.get('visits_doc',0)}</b> ({s.get('pct',0)}% заполнения ЭМК).</p>
+<table border="1" cellspacing="0" cellpadding="4" style="border-collapse:collapse;font-size:12px">
+<tr style="background:#1e3a5f;color:#fff">
+<th>ФАП</th><th>Фельдшер</th><th>Посещ.</th><th>С док.</th><th>% ЭМК</th>
+<th>Направл.</th><th>Рецепты</th><th>Назнач.</th><th>ЭЛН</th><th>Телемед</th><th>Записи ЭР</th></tr>
+{body}
+{total}
 </table>
 <p style="color:#666;font-size:12px">Сформировано автоматически системой мониторинга СЭМД.</p>
 </body></html>"""
