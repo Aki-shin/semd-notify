@@ -52,10 +52,16 @@
 <div class="toolbar">
   <h2 style="margin:0">Что уже загружено{% if periods.period %} <span class="small muted">— период {{ periods.period }}</span>{% endif %}</h2>
   {% if meta %}
-  <form method="post" action="{{ url_for('reset') }}"
-        onsubmit="return confirm('Сбросить все загруженные отчёты? Почты врачей/зав. отделениями и настройки сохранятся.')">
-    <button type="submit" class="danger">🗑 Сбросить отчёты</button>
-  </form>
+  <div style="display:flex;gap:8px">
+    <form method="post" action="{{ url_for('reprocess') }}" style="margin:0"
+          title="Заново разобрать сохранённые файлы активного периода (после обновления приложения)">
+      <button type="submit">♻ Переобработать</button>
+    </form>
+    <form method="post" action="{{ url_for('reset') }}" style="margin:0"
+          onsubmit="return confirm('Сбросить все загруженные отчёты? Почты врачей/зав. отделениями и настройки сохранятся.')">
+      <button type="submit" class="danger">🗑 Сбросить отчёты</button>
+    </form>
+  </div>
   {% endif %}
 </div>
 <table>

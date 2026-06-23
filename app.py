@@ -215,6 +215,19 @@ def period_switch():
     return redirect(url_for("upload"))
 
 
+@app.route("/reprocess", methods=["POST"])
+def reprocess():
+    """Заново разбирает сохранённые файлы активного периода (после обновления парсера)."""
+    period = appconfig.get("active_period", "")
+    if not period:
+        flash("Нет активного периода. Сначала загрузите отчёты.", "warn")
+        return redirect(url_for("upload"))
+    n = storage.switch_period(period)
+    flash(f"Переобработано отчётов за «{period}»: {n} (сохранённые файлы разобраны заново).",
+          "ok" if n else "warn")
+    return redirect(url_for("upload"))
+
+
 @app.route("/export/<rtype>")
 def export(rtype):
     period = appconfig.get("active_period", "")
@@ -235,12 +248,61 @@ def doctors():
                            log=storage.send_log(30))
 
 
+# --- Единая очередь фоновой рассылки: задания идут по очереди (один воркер),
+#     чтобы троттлинг соблюдался и рассылки не шли параллельно через один SMTP ---
+import queue as _queue
+
+_send_q = _queue.Queue()
+_send_lock = threading.Lock()
+_send_status = {"active": False, "label": "", "done": 0, "total": 0,
+                "ok": 0, "failed": 0, "queued": 0, "ts": ""}
+_send_worker_started = False
+
+
+def _send_worker():
+    while True:
+        job = _send_q.get()
+        items, label = job["items"], job["label"]
+        with _send_lock:
+            _send_status.update({"active": True, "label": label, "done": 0, "total": len(items),
+                                 "ok": 0, "failed": 0, "queued": _send_q.qsize(),
+                                 "ts": time.strftime("%H:%M:%S")})
+
+        def on_result(it, ok, msg):
+            storage.log_send(it["log_vrach"], it.get("to", ""), it["cnt"], msg)
+            with _send_lock:
+                _send_status["done"] += 1
+                _send_status["ok" if ok else "failed"] += 1
+        try:
+            mailer.send_batch(items, on_result=on_result)
+        except Exception:
+            pass
+        with _send_lock:
+            _send_status["active"] = _send_q.qsize() > 0
+            _send_status["queued"] = _send_q.qsize()
+        _send_q.task_done()
+
+
+def _start_send_worker():
+    global _send_worker_started
+    if _send_worker_started:
+        return
+    _send_worker_started = True
+    threading.Thread(target=_send_worker, name="send-worker", daemon=True).start()
+
+
 def _dispatch_batch(items, label):
-    """Фоновая пакетная рассылка с троттлингом (чтобы не висел запрос и не блокировали за спам)."""
-    def run():
-        mailer.send_batch(items, on_result=lambda it, ok, msg:
-                          storage.log_send(it["log_vrach"], it.get("to", ""), it["cnt"], msg))
-    threading.Thread(target=run, name=f"mail-batch-{label}", daemon=True).start()
+    """Ставит пачку в очередь фоновой рассылки (один воркер обрабатывает по очереди)."""
+    _start_send_worker()
+    _send_q.put({"items": items, "label": label})
+    with _send_lock:
+        _send_status["queued"] = _send_q.qsize() + (1 if _send_status["active"] else 0)
+
+
+@app.route("/send/status")
+def send_status():
+    with _send_lock:
+        return dict(_send_status)
 
 
 @app.route("/doctors/send", methods=["POST"])

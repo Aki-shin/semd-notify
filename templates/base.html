@@ -19,6 +19,7 @@
     <a href="{{ url_for('settings') }}">Настройки</a>
   </nav>
   <div class="who">
+    <span id="sendchip"></span>
     {% if periods.period %}<span class="pill period" title="Период загруженных отчётов">📅 {{ periods.period }}</span>
     {% elif not periods.consistent %}<span class="pill warn" title="Периоды отчётов не совпадают — см. Загрузка">📅 периоды ≠</span>{% endif %}
     {{ user.name or user.login }}
@@ -37,5 +38,20 @@
   {% block body %}{% endblock %}
 </main>
 <footer>Отдел ИТ · ГБУЗ ПК «Осинская ЦРБ» · данные обрабатываются во внутреннем контуре</footer>
+<script>
+(function(){
+  function poll(){
+    fetch("{{ url_for('send_status') }}").then(function(r){return r.json();}).then(function(s){
+      var el=document.getElementById('sendchip'); if(!el)return;
+      if(s.active){
+        el.innerHTML='<span class="pill" style="background:#2f6fb0;color:#fff" title="Фоновая рассылка: '
+          +s.label+', успешно '+s.ok+', ошибок '+s.failed+(s.queued>0?', в очереди '+s.queued:'')+'">'
+          +'📤 '+s.done+'/'+s.total+(s.queued>0?' (+'+s.queued+')':'')+'</span> ';
+      } else { el.innerHTML=''; }
+    }).catch(function(){});
+  }
+  setInterval(poll, 2500); poll();
+})();
+</script>
 </body>
 </html>
