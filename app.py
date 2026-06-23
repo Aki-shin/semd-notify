@@ -338,6 +338,7 @@ def doctors_send():
     if not selected:
         flash("Не выбрано ни одного врача.", "warn")
         return redirect(url_for("doctors"))
+    rep = storage.report_period("debts")
     items, noaddr = [], 0
     for vrach in selected:
         debts = storage.doctor_debts(vrach)
@@ -348,9 +349,9 @@ def doctors_send():
             noaddr += 1
             storage.log_send(vrach, "", len(debts), "нет адреса")
             continue
-        items.append({"to": email, "log_vrach": vrach, "cnt": len(debts),
-                      "subject": f"Неподписанные документы РЭМД: {len(debts)} шт.",
-                      "html": mailer.build_debt_html(vrach, debts)})
+        subj = f"Неподписанные документы РЭМД: {len(debts)} шт." + (f" (период {rep})" if rep else "")
+        items.append({"to": email, "log_vrach": vrach, "cnt": len(debts), "subject": subj,
+                      "html": mailer.build_debt_html(vrach, debts, rep)})
     if items:
         _dispatch_batch(items, "doctors")
     dry = " (режим DRYRUN — реально не слалось)" if mailer.is_dryrun() else ""
@@ -379,6 +380,7 @@ def departments_send():
     if not selected:
         flash("Не выбрано ни одного подразделения.", "warn")
         return redirect(url_for("departments"))
+    rep = storage.report_period("vrachi")
     items, noaddr = [], 0
     for podr in selected:
         d = storage.dept_vrachi(podr)
@@ -390,9 +392,10 @@ def departments_send():
             noaddr += 1
             storage.log_send(f"[отд.] {podr}", "", cnt, "нет адреса")
             continue
-        items.append({"to": ", ".join(emails), "log_vrach": f"[отд.] {podr}", "cnt": cnt,
-                      "subject": f"Неподписанные документы по подразделению: {cnt} шт.",
-                      "html": mailer.build_dept_html(podr, d["vrachi"], d["nepodp"], d["debts"], d.get("from_debts"))})
+        subj = f"Неподписанные документы по подразделению: {cnt} шт." + (f" (период {rep})" if rep else "")
+        items.append({"to": ", ".join(emails), "log_vrach": f"[отд.] {podr}", "cnt": cnt, "subject": subj,
+                      "html": mailer.build_dept_html(podr, d["vrachi"], d["nepodp"], d["debts"],
+                                                     d.get("from_debts"), rep_period=rep)})
     if items:
         _dispatch_batch(items, "depts")
     dry = " (DRYRUN)" if mailer.is_dryrun() else ""
@@ -408,13 +411,16 @@ def report_send():
     if not email:
         flash("Не задан e-mail ответственного за исправление — укажите в Настройках.", "warn")
         return redirect(request.referrer or url_for("errors"))
+    rep = storage.report_period("vrachi")
     data = {"funnel": storage.funnel(),
             "errors": storage.errors_summary()["by_code"],
             "unassigned": storage.unassigned_summary(),
             "docerr": storage.docerr_list(),
-            "mo_gap": (storage.mo_funnel() or {}).get("gap_vrach_mo")}
+            "mo_gap": (storage.mo_funnel() or {}).get("gap_vrach_mo"),
+            "period": rep}
     html = mailer.build_report_html(data)
-    ok, msg = mailer.send(email, "Отчёт по проблемам РЭМД (ответственному за исправление)", html)
+    subj = "Отчёт по проблемам РЭМД (ответственному за исправление)" + (f" — период {rep}" if rep else "")
+    ok, msg = mailer.send(email, subj, html)
     storage.log_send(f"[отчёт] {name or email}", email, len(data["unassigned"]), msg)
     dry = " (DRYRUN)" if mailer.is_dryrun() else ""
     flash(f"Отчёт ответственному ({email}): {msg}.{dry}", "ok" if ok else "warn")
@@ -447,8 +453,10 @@ def fap_report_send():
     if not s:
         flash("Отчёт по ФАП не загружен.", "warn")
         return redirect(url_for("fap"))
-    html = mailer.build_fap_report_html(s, storage.fap_list())
-    ok, msg = mailer.send(email, "Отчёт по работе ФАП в ЭМК (ответственному)", html)
+    rep = storage.report_period("fap")
+    html = mailer.build_fap_report_html(s, storage.fap_list(), rep)
+    subj = "Отчёт по работе ФАП в ЭМК (ответственному)" + (f" — период {rep}" if rep else "")
+    ok, msg = mailer.send(email, subj, html)
     storage.log_send(f"[ФАП-отчёт] {name or email}", email, s.get("n", 0), msg)
     dry = " (DRYRUN)" if mailer.is_dryrun() else ""
     flash(f"Отчёт по ФАП ответственному ({email}): {msg}.{dry}", "ok" if ok else "warn")

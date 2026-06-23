@@ -34,21 +34,22 @@ def is_dryrun():
     return _cfg()["dryrun"]
 
 
-def build_debt_html(vrach, debts):
+def build_debt_html(vrach, debts, rep_period=""):
     # ПДн-минимизация: в письмо НЕ включаем ФИО пациента и дату рождения.
     # Документ идентифицируется по № случая — врач находит его в ЕИСЗ ПК.
     body = []
     for i, d in enumerate(debts, 1):
         start, end = d.get("d_start", ""), d.get("d_end", "")
-        period = start if (not end or end == start) else f"{start} – {end}"
+        cp = start if (not end or end == start) else f"{start} – {end}"
         body.append(
             f"<tr><td>{i}</td><td>{d.get('case_no','')}</td>"
-            f"<td>{d.get('doc_type','')}</td><td>{period}</td></tr>"
+            f"<td>{d.get('doc_type','')}</td><td>{cp}</td></tr>"
         )
     rows = "".join(body)
+    per = f" за период <b>{rep_period}</b> —" if rep_period else ""
     return f"""<html><body style="font-family:Arial,sans-serif;font-size:14px;color:#222">
 <p>Уважаемый(ая) {vrach}!</p>
-<p>У вас <b>{len(debts)}</b> неподписанных медицинских документов, подлежащих регистрации в РЭМД.
+<p>У вас{per} <b>{len(debts)}</b> неподписанных медицинских документов, подлежащих регистрации в РЭМД.
 Просьба подписать их в ЕИСЗ ПК в ближайшее время — без подписи документы не передаются в федеральный реестр,
 что влияет на показатели учреждения.</p>
 <p style="color:#444">Документы перечислены <b>по номеру случая</b> (без персональных данных пациентов).
@@ -62,19 +63,20 @@ def build_debt_html(vrach, debts):
 </body></html>"""
 
 
-def build_dept_html(podr, vrachi, total_nepodp, total_debts=0, from_debts=False):
+def build_dept_html(podr, vrachi, total_nepodp, total_debts=0, from_debts=False, rep_period=""):
     rows = "".join(
         f"<tr><td>{i}</td><td>{v['vrach']}</td><td style='text-align:right'>{v['nepodp']}</td>"
         f"<td style='text-align:right'>{v['debts']}</td></tr>"
         for i, v in enumerate(vrachi, 1)
     )
+    per = f" за период <b>{rep_period}</b>" if rep_period else ""
     if from_debts:
-        intro = (f"По отделению «{podr}» в ЕИСЗ ПК <b>{total_debts}</b> медицинских документов, "
+        intro = (f"По отделению «{podr}»{per} в ЕИСЗ ПК <b>{total_debts}</b> медицинских документов, "
                  "подлежащих регистрации в РЭМД и не подписанных (по списку неподписанных документов). "
                  "Просьба организовать подписание силами врачей отделения — "
                  "неподписанные документы не передаются в федеральный реестр и снижают показатели учреждения.")
     else:
-        intro = (f"По вашему подразделению в ЕИСЗ ПК <b>{total_nepodp}</b> неподписанных медицинских документов, "
+        intro = (f"По вашему подразделению{per} в ЕИСЗ ПК <b>{total_nepodp}</b> неподписанных медицинских документов, "
                  "подлежащих регистрации в РЭМД. Просьба организовать подписание силами врачей подразделения — "
                  "неподписанные документы не передаются в федеральный реестр и снижают показатели учреждения.")
     return f"""<html><body style="font-family:Arial,sans-serif;font-size:14px;color:#222">
@@ -115,9 +117,12 @@ def build_report_html(data):
 </table>""") if docerr else ""
     mo_block = (f"<p>Подписаны врачом, но <b>не подписаны МО</b> (застряли на подписи МО): "
                 f"<b>{mo_gap}</b> — это автоподписание МО, не вина врачей.</p>") if mo_gap else ""
+    per = data.get("period", "")
+    per_line = f"<p>Период отчёта: <b>{per}</b>.</p>" if per else ""
     return f"""<html><body style="font-family:Arial,sans-serif;font-size:14px;color:#222">
 <p>Отчёт по проблемам передачи документов в РЭМД, <b>требующим вмешательства</b>
 (не привязаны к конкретному врачу — рассылкой врачам не закрываются).</p>
+{per_line}
 <p>Сформировано: <b>{f.get('sform',0)}</b> · подписано: {f.get('podp',0)} ({f.get('pct_podp',0)}%) ·
 в РЭМД: {f.get('zareg',0)} ({f.get('pct_zareg',0)}%).</p>
 {mo_block}
@@ -146,7 +151,7 @@ def fap_recipient():
     return cfg.get("RESP_FAP_NAME", ""), cfg.get("RESP_FAP_EMAIL", "")
 
 
-def build_fap_report_html(s, rows):
+def build_fap_report_html(s, rows, rep_period=""):
     """Полная статистика работы фельдшеров ФАП в ЭМК — ответственному за ФАП."""
     def td(v):
         return f"<td style='text-align:right'>{v}</td>"
@@ -161,8 +166,9 @@ def build_fap_report_html(s, rows):
              + td(s.get('visits', 0)) + td(s.get('visits_doc', 0)) + td(str(s.get('pct', 0)) + '%')
              + td(s.get('naprav', 0)) + td(s.get('recipes', 0)) + td(s.get('naznach', 0))
              + td(s.get('eln', 0)) + td(s.get('telemed', 0)) + td(s.get('er', 0)) + "</tr>")
+    per = f" за период <b>{rep_period}</b>" if rep_period else ""
     return f"""<html><body style="font-family:Arial,sans-serif;font-size:13px;color:#222">
-<p>Статистика работы фельдшеров ФАП в электронной медицинской карте (ЭМК) за период.</p>
+<p>Статистика работы фельдшеров ФАП в электронной медицинской карте (ЭМК){per}.</p>
 <p>Фельдшеров: <b>{s.get('n',0)}</b> · посещений: <b>{s.get('visits',0)}</b> ·
 с документами: <b>{s.get('visits_doc',0)}</b> ({s.get('pct',0)}% заполнения ЭМК).</p>
 <table border="1" cellspacing="0" cellpadding="4" style="border-collapse:collapse;font-size:12px">

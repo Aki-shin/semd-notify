@@ -135,6 +135,18 @@ def meta_all():
         return [dict(r) for r in c.execute("SELECT * FROM meta ORDER BY rtype")]
 
 
+def report_period(rtype):
+    """Нормализованный период отчёта данного типа (для указания в письмах).
+    Если типа нет — общий активный период."""
+    import parser
+    init()
+    with _conn() as c:
+        r = c.execute("SELECT period FROM meta WHERE rtype=?", (rtype,)).fetchone()
+    if r and r["period"]:
+        return parser.norm_period(r["period"]) or r["period"]
+    return cfg_get("active_period") or ""
+
+
 def reset_reports():
     """Удаляет данные всех загруженных отчётов (для загрузки нового периода).
     СОХРАНЯЕТ справочные данные: почты врачей и зав. отделениями, журнал рассылки,
