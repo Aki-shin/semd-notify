@@ -141,6 +141,34 @@ def report_recipient():
     return cfg.get("RESP_NAME", ""), cfg.get("RESP_EMAIL", "")
 
 
+def build_fap_report_html(s, rows):
+    """Отчёт ответственному по ФАП: охват ЭМК, точки без интернета, неполное заполнение."""
+    low = [r for r in rows if (r.get("pct", 0) or 0) < 100]
+    no_net = [r for r in rows if (r.get("internet", "") or "").strip().lower() in ("нет", "no")]
+    net_rows = "".join(f"<tr><td>{r['fap']}</td><td>{r['fio']}</td></tr>" for r in no_net[:50]) \
+        or "<tr><td colspan='2'>нет</td></tr>"
+    low_rows = "".join(
+        f"<tr><td>{r['fap']}</td><td>{r['fio']}</td><td style='text-align:right'>{r['pct']}%</td>"
+        f"<td style='text-align:right'>{r['visits']}</td></tr>" for r in low[:50]
+    ) or "<tr><td colspan='4'>нет</td></tr>"
+    return f"""<html><body style="font-family:Arial,sans-serif;font-size:14px;color:#222">
+<p>Отчёт по работе фельдшеров ФАП в электронной медицинской карте (ЭМК).</p>
+<p>Фельдшеров: <b>{s.get('n',0)}</b> · заполнение ЭМК: <b>{s.get('pct',0)}%</b>
+({s.get('visits_doc',0)} из {s.get('visits',0)} посещений) · ФАП без интернета: <b>{len(no_net)}</b>.</p>
+<h3>ФАП без подключения к интернету ({len(no_net)})</h3>
+<table border="1" cellspacing="0" cellpadding="5" style="border-collapse:collapse;font-size:13px">
+<tr style="background:#eef"><th>ФАП</th><th>Фельдшер</th></tr>
+{net_rows}
+</table>
+<h3>Неполное заполнение ЭМК (&lt;100%) — {len(low)}</h3>
+<table border="1" cellspacing="0" cellpadding="5" style="border-collapse:collapse;font-size:13px">
+<tr style="background:#eef"><th>ФАП</th><th>Фельдшер</th><th>% ЭМК</th><th>Посещений</th></tr>
+{low_rows}
+</table>
+<p style="color:#666;font-size:12px">Сформировано автоматически системой мониторинга СЭМД.</p>
+</body></html>"""
+
+
 def _batch_cfg():
     def _i(key, default):
         try:

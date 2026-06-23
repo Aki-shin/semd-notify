@@ -86,7 +86,7 @@ def _period(rows):
 def norm_period(text):
     """Нормализует строку периода к виду «ДД.ММ.ГГГГ — ДД.ММ.ГГГГ» для сравнения.
     Возвращает '' если дат нет."""
-    m = re.search(r"(\d{2}\.\d{2}\.\d{4})\s*по\s*(\d{2}\.\d{2}\.\d{4})", text or "")
+    m = re.search(r"(\d{2}\.\d{2}\.\d{4})\s*(?:по|[-–—])\s*(\d{2}\.\d{2}\.\d{4})", text or "")
     if m:
         return f"{m.group(1)} — {m.group(2)}"
     m = re.search(r"(\d{2}\.\d{2}\.\d{4})", text or "")

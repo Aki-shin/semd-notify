@@ -68,7 +68,8 @@
 </table>
 
 <h2>Почты заведующих отделениями</h2>
-<p class="muted">Впишите почту напротив подразделения и нажмите «Сохранить почты». Пустое поле — очистить.</p>
+<p class="muted">Впишите почту напротив подразделения и нажмите «Сохранить почты». Пустое поле — очистить.
+<b>Можно несколько адресов через запятую</b> — письмо уйдёт всем.</p>
 <form method="post">
   <input type="hidden" name="action" value="set_dept_bulk">
   <div class="toolbar">
@@ -81,8 +82,9 @@
     <tr>
       <td>{{ d.podr }}{% if d.from_debts %} <span class="pill warn">по списку долгов</span>{% endif %}</td>
       <td class="r">{{ d.nepodp }}</td><td class="r">{{ d.debts }}</td>
-      <td><input type="email" name="dept_email__{{ d.podr }}" value="{{ d.email }}"
-                 placeholder="zav@med.permkrai.ru" class="email {{ 'noemail' if not d.email }}"></td>
+      <td><input type="text" name="dept_email__{{ d.podr }}" value="{{ d.email }}"
+                 placeholder="zav@med.permkrai.ru, zam@med.permkrai.ru" size="40"
+                 class="email {{ 'noemail' if not d.email }}"></td>
     </tr>
     {% else %}<tr><td colspan="4" class="empty">Загрузите отчёт «в разрезе врачей».</td></tr>{% endfor %}
   </table>

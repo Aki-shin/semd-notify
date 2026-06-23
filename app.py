@@ -7,10 +7,16 @@
 читает X-Remote-User / X-Remote-Name (с фиксом кодировки Latin-1 -> UTF-8).
 """
 import os
+import re
 import threading
 import time
 from flask import (Flask, request, render_template, redirect, url_for,
-                   flash, send_from_directory)
+                   flash, send_from_directory, send_file)
+
+
+def _split_emails(raw):
+    """Разбирает поле с несколькими адресами (запятая/точка с запятой/пробел)."""
+    return [e for e in (x.strip() for x in re.split(r"[,;\s]+", raw or "")) if e]
 
 import parser as report_parser
 import storage
@@ -142,6 +148,7 @@ def upload():
         files = request.files.getlist("files")
         os.makedirs(UPLOAD_DIR, exist_ok=True)
         ok, skipped = [], []
+        loaded_files = []   # (rtype, filename, raw_bytes, file_period)
         for f in files:
             if not f or not f.filename:
                 continue
@@ -155,9 +162,20 @@ def upload():
             if res["type"] in LOADABLE:
                 storage.replace_report(res["type"], os.path.basename(f.filename),
                                        res["period"], res["rows"], res["records"])
+                with open(path, "rb") as fh:
+                    loaded_files.append((res["type"], os.path.basename(f.filename), fh.read(),
+                                         report_parser.norm_period(res["period"])))
                 ok.append(f"{f.filename} → {RTYPE_RU[res['type']]} ({len(res['records'])} записей)")
             else:
                 skipped.append(f"{f.filename}: тип «{RTYPE_RU.get(res['type'], res['type'])}» пока не загружается")
+        if loaded_files:
+            # вся пачка — один период истории (по наиболее частому), чтобы переключаться целиком
+            from collections import Counter
+            ps = [fp for *_, fp in loaded_files if fp]
+            batch_period = Counter(ps).most_common(1)[0][0] if ps else "(без периода)"
+            for rtype, fn, raw, _ in loaded_files:
+                storage.save_period_file(batch_period, rtype, fn, raw)
+            appconfig.set("active_period", batch_period)
         if ok:
             flash("Загружено: " + "; ".join(ok), "ok")
         if skipped:
@@ -172,7 +190,10 @@ def upload():
         return redirect(url_for("upload"))
     meta = storage.meta_all()
     loaded = {m["rtype"] for m in meta}
-    return render_template("upload.html", meta=meta, reports=REPORTS_INFO, loaded=loaded)
+    active = appconfig.get("active_period", "")
+    return render_template("upload.html", meta=meta, reports=REPORTS_INFO, loaded=loaded,
+                           history=storage.periods_history(), active_period=active,
+                           exports={x["rtype"]: x["filename"] for x in storage.period_rtypes(active)})
 
 
 @app.route("/reset", methods=["POST"])
@@ -181,6 +202,29 @@ def reset():
     flash("Загруженные отчёты сброшены. Почты врачей/зав. отделениями и настройки "
           "сохранены — можно загрузить новый период.", "ok")
     return redirect(url_for("upload"))
+
+
+@app.route("/period/switch", methods=["POST"])
+def period_switch():
+    period = (request.form.get("period") or "").strip()
+    n = storage.switch_period(period)
+    if n:
+        flash(f"Переключено на период «{period}» (загружено отчётов: {n}).", "ok")
+    else:
+        flash(f"Для периода «{period}» нет сохранённых отчётов.", "warn")
+    return redirect(url_for("upload"))
+
+
+@app.route("/export/<rtype>")
+def export(rtype):
+    period = appconfig.get("active_period", "")
+    fn, data = storage.period_file(period, rtype)
+    if not data:
+        flash("Файл не найден для текущего периода.", "warn")
+        return redirect(url_for("upload"))
+    from io import BytesIO
+    return send_file(BytesIO(data), as_attachment=True, download_name=fn or f"{rtype}.xls",
+                     mimetype="application/vnd.ms-excel")
 
 
 @app.route("/doctors")
@@ -252,12 +296,12 @@ def departments_send():
         if not d or not d["vrachi"]:
             continue
         cnt = d["nepodp"] or d["debts"]
-        email = (request.form.get(f"email__{podr}") or "").strip()
-        if not email:
+        emails = _split_emails(request.form.get(f"email__{podr}"))
+        if not emails:
             noaddr += 1
             storage.log_send(f"[отд.] {podr}", "", cnt, "нет адреса")
             continue
-        items.append({"to": email, "log_vrach": f"[отд.] {podr}", "cnt": cnt,
+        items.append({"to": ", ".join(emails), "log_vrach": f"[отд.] {podr}", "cnt": cnt,
                       "subject": f"Неподписанные документы по подразделению: {cnt} шт.",
                       "html": mailer.build_dept_html(podr, d["vrachi"], d["nepodp"], d["debts"], d.get("from_debts"))})
     if items:
@@ -299,7 +343,27 @@ def errors():
 
 @app.route("/fap")
 def fap():
-    return render_template("fap.html", rows=storage.fap_list(), s=storage.fap_summary())
+    resp_name, resp_email = mailer.report_recipient()
+    return render_template("fap.html", rows=storage.fap_list(), s=storage.fap_summary(),
+                           resp_name=resp_name, resp_email=resp_email)
+
+
+@app.route("/fap/report/send", methods=["POST"])
+def fap_report_send():
+    name, email = mailer.report_recipient()
+    if not email:
+        flash("Не задан e-mail ответственного — укажите в Настройках.", "warn")
+        return redirect(url_for("fap"))
+    s = storage.fap_summary()
+    if not s:
+        flash("Отчёт по ФАП не загружен.", "warn")
+        return redirect(url_for("fap"))
+    html = mailer.build_fap_report_html(s, storage.fap_list())
+    ok, msg = mailer.send(email, "Отчёт по работе ФАП в ЭМК (ответственному)", html)
+    storage.log_send(f"[ФАП-отчёт] {name or email}", email, s.get("n", 0), msg)
+    dry = " (DRYRUN)" if mailer.is_dryrun() else ""
+    flash(f"Отчёт по ФАП ответственному ({email}): {msg}.{dry}", "ok" if ok else "warn")
+    return redirect(url_for("fap"))
 
 
 @app.route("/settings", methods=["GET", "POST"])

@@ -46,6 +46,9 @@ def init():
             doc_type TEXT, not_found INTEGER, validation INTEGER, position INTEGER, total INTEGER);
         CREATE TABLE IF NOT EXISTS fedkpi(k TEXT PRIMARY KEY, v REAL);
         CREATE TABLE IF NOT EXISTS status(status TEXT, count INTEGER);
+        CREATE TABLE IF NOT EXISTS period_files(
+            period TEXT, rtype TEXT, filename TEXT, uploaded_at TEXT, data BLOB,
+            PRIMARY KEY(period, rtype));
         """)
         # миграция старых БД: колонка отделения в таблице долгов
         cols = {r["name"] for r in c.execute("PRAGMA table_info(debts)")}
@@ -134,6 +137,76 @@ def reset_reports():
         for t in ("meta", "vrachi", "debts", "errors", "mo_funnel", "tvsp", "notrans",
                   "fap", "vidy", "docerr", "fedkpi", "status"):
             c.execute(f"DELETE FROM {t}")
+
+
+# --- История периодов: храним сырые файлы по периодам, можно вернуться и выгрузить ---
+
+def save_period_file(period, rtype, filename, data):
+    """Сохраняет сырой загруженный файл в историю (по периоду и типу)."""
+    init()
+    with _conn() as c:
+        c.execute("INSERT OR REPLACE INTO period_files(period,rtype,filename,uploaded_at,data) "
+                  "VALUES(?,?,?,?,?)",
+                  (period, rtype, filename,
+                   datetime.datetime.now().isoformat(timespec="seconds"), sqlite3.Binary(data)))
+
+
+def periods_history():
+    """Список сохранённых периодов (для переключения), новые сверху, активный помечен."""
+    init()
+    active = cfg_get("active_period") or ""
+    with _conn() as c:
+        rows = c.execute("SELECT period, COUNT(*) n, MAX(uploaded_at) ts "
+                         "FROM period_files GROUP BY period ORDER BY ts DESC").fetchall()
+    return [{"period": r["period"], "n": r["n"], "ts": r["ts"], "active": r["period"] == active}
+            for r in rows]
+
+
+def period_rtypes(period):
+    """Типы отчётов, сохранённые для периода (для ссылок выгрузки)."""
+    init()
+    with _conn() as c:
+        return [dict(r) for r in c.execute(
+            "SELECT rtype, filename FROM period_files WHERE period=? ORDER BY rtype", (period,))]
+
+
+def period_file(period, rtype):
+    """(имя файла, байты) сохранённого отчёта — для выгрузки обратно."""
+    init()
+    with _conn() as c:
+        r = c.execute("SELECT filename, data FROM period_files WHERE period=? AND rtype=?",
+                      (period, rtype)).fetchone()
+    return (r["filename"], bytes(r["data"])) if r else (None, None)
+
+
+def switch_period(period):
+    """Переключает рабочие данные на сохранённый период: чистит таблицы и
+    заново разбирает сырые файлы этого периода. Справочники (почты) не трогает."""
+    import parser, tempfile, os as _os
+    init()
+    with _conn() as c:
+        files = [(r["rtype"], r["filename"], bytes(r["data"]))
+                 for r in c.execute("SELECT rtype, filename, data FROM period_files WHERE period=?", (period,))]
+    if not files:
+        return 0
+    reset_reports()
+    n = 0
+    for rtype, fn, data in files:
+        tf = tempfile.NamedTemporaryFile(delete=False, suffix=".xls")
+        tf.write(data); tf.close()
+        try:
+            res = parser.parse(tf.name)
+            replace_report(rtype, fn, res["period"], res["rows"], res["records"])
+            n += 1
+        except Exception:
+            pass
+        finally:
+            try:
+                _os.unlink(tf.name)
+            except OSError:
+                pass
+    cfg_set("active_period", period)
+    return n
 
 
 def periods_info():
