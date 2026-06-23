@@ -230,16 +230,21 @@ def send(to_addr, subject, html):
         return False, f"ошибка: {e}"
 
 
-def send_batch(items, on_result=None):
+def send_batch(items, on_result=None, cancel=None):
     """Пакетная рассылка: одно SMTP-соединение + троттлинг (защита от спам-блокировки).
     items — список dict {to, subject, html, ...}. on_result(item, ok, msg) вызывается на каждое письмо.
+    cancel — функция без аргументов; если вернёт True, рассылка прерывается.
     Возвращает (отправлено, ошибок)."""
     c = _cfg()
     if c["dryrun"]:
+        n = 0
         for it in items:
+            if cancel and cancel():
+                break
             if on_result:
                 on_result(it, True, "dryrun (не отправлено)")
-        return len(items), 0
+            n += 1
+        return n, 0
     if not c["host"] or not c["from_addr"]:
         for it in items:
             if on_result:
@@ -250,6 +255,8 @@ def send_batch(items, on_result=None):
     server = None
     try:
         for idx, it in enumerate(items):
+            if cancel and cancel():
+                break
             to = (it.get("to") or "").strip()
             if not to:
                 failed += 1

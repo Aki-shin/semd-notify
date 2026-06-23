@@ -40,14 +40,22 @@
 <footer>Отдел ИТ · ГБУЗ ПК «Осинская ЦРБ» · данные обрабатываются во внутреннем контуре</footer>
 <script>
 (function(){
+  function esc(s){var d=document.createElement('div');d.textContent=(s==null?'':s);return d.innerHTML;}
   function poll(){
     fetch("{{ url_for('send_status') }}").then(function(r){return r.json();}).then(function(s){
-      var el=document.getElementById('sendchip'); if(!el)return;
-      if(s.active){
-        el.innerHTML='<span class="pill" style="background:#2f6fb0;color:#fff" title="Фоновая рассылка: '
-          +s.label+', успешно '+s.ok+', ошибок '+s.failed+(s.queued>0?', в очереди '+s.queued:'')+'">'
-          +'📤 '+s.done+'/'+s.total+(s.queued>0?' (+'+s.queued+')':'')+'</span> ';
-      } else { el.innerHTML=''; }
+      var active = s.active || s.queued>0;
+      var chip=document.getElementById('sendchip');
+      if(chip) chip.innerHTML = s.active
+        ? '<span class="pill" style="background:#2f6fb0;color:#fff" title="успешно '+s.ok+', ошибок '+s.failed
+          +(s.queued>0?', в очереди '+s.queued:'')+'">📤 '+s.done+'/'+s.total+(s.queued>0?' (+'+s.queued+')':'')+'</span> ' : '';
+      var line=document.getElementById('sendline');
+      if(line) line.textContent = active ? '— идёт отправка: '+s.done+'/'+s.total+' (ошибок '+s.failed+')'+(s.queued>0?', в очереди '+s.queued:'') : '';
+      var cf=document.getElementById('cancelform'); if(cf) cf.style.display = active ? '' : 'none';
+      var tb=document.getElementById('sendlog');
+      if(tb && s.log) tb.innerHTML = s.log.length ? s.log.map(function(l){
+        return '<tr><td>'+esc(l.ts)+'</td><td>'+esc(l.vrach)+'</td><td>'+esc(l.email)
+          +'</td><td class="r">'+esc(l.cnt)+'</td><td>'+esc(l.status)+'</td></tr>'; }).join('')
+        : '<tr><td colspan="5" class="empty">пока пусто</td></tr>';
     }).catch(function(){});
   }
   setInterval(poll, 2500); poll();

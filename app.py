@@ -257,6 +257,7 @@ _send_lock = threading.Lock()
 _send_status = {"active": False, "label": "", "done": 0, "total": 0,
                 "ok": 0, "failed": 0, "queued": 0, "ts": ""}
 _send_worker_started = False
+_send_cancel = threading.Event()
 
 
 def _send_worker():
@@ -274,9 +275,11 @@ def _send_worker():
                 _send_status["done"] += 1
                 _send_status["ok" if ok else "failed"] += 1
         try:
-            mailer.send_batch(items, on_result=on_result)
+            mailer.send_batch(items, on_result=on_result, cancel=lambda: _send_cancel.is_set())
         except Exception:
             pass
+        if _send_cancel.is_set():
+            _send_cancel.clear()
         with _send_lock:
             _send_status["active"] = _send_q.qsize() > 0
             _send_status["queued"] = _send_q.qsize()
@@ -302,7 +305,31 @@ def _dispatch_batch(items, label):
 @app.route("/send/status")
 def send_status():
     with _send_lock:
-        return dict(_send_status)
+        st = dict(_send_status)
+    st["log"] = storage.send_log(20)
+    return st
+
+
+@app.route("/send/cancel", methods=["POST"])
+def send_cancel():
+    with _send_lock:
+        active = _send_status["active"]
+    drained = 0
+    try:
+        while True:
+            _send_q.get_nowait()
+            _send_q.task_done()
+            drained += 1
+    except _queue.Empty:
+        pass
+    if active:
+        _send_cancel.set()  # прервать текущую пачку (воркер снимет флаг после)
+    if active or drained:
+        flash(f"Рассылка отменяется. Снято из очереди: {drained}."
+              + (" Текущая пачка остановится." if active else ""), "warn")
+    else:
+        flash("Активной рассылки нет.", "warn")
+    return redirect(request.referrer or url_for("doctors"))
 
 
 @app.route("/doctors/send", methods=["POST"])
