@@ -343,14 +343,14 @@ def errors():
 
 @app.route("/fap")
 def fap():
-    resp_name, resp_email = mailer.report_recipient()
+    resp_name, resp_email = mailer.fap_recipient()
     return render_template("fap.html", rows=storage.fap_list(), s=storage.fap_summary(),
                            resp_name=resp_name, resp_email=resp_email)
 
 
 @app.route("/fap/report/send", methods=["POST"])
 def fap_report_send():
-    name, email = mailer.report_recipient()
+    name, email = mailer.fap_recipient()
     if not email:
         flash("Не задан e-mail ответственного — укажите в Настройках.", "warn")
         return redirect(url_for("fap"))
@@ -406,9 +406,9 @@ def settings():
                 appconfig.set("SMTP_PASS", pw)
             flash("Настройки почты сохранены.", "ok")
         elif action == "save_resp":
-            appconfig.set("RESP_NAME", (request.form.get("RESP_NAME") or "").strip())
-            appconfig.set("RESP_EMAIL", (request.form.get("RESP_EMAIL") or "").strip())
-            flash("Ответственный за исправление сохранён.", "ok")
+            for k in ("RESP_NAME", "RESP_EMAIL", "RESP_FAP_NAME", "RESP_FAP_EMAIL"):
+                appconfig.set(k, (request.form.get(k) or "").strip())
+            flash("Ответственные сохранены.", "ok")
         elif action == "save_ipa":
             for k in ("IPA_LDAP_URI", "IPA_BASE_DN", "IPA_BIND_DN"):
                 appconfig.set(k, (request.form.get(k) or "").strip())
@@ -428,7 +428,8 @@ def settings():
     smtp["SMTP_BATCH_DELAY"] = appconfig.get("SMTP_BATCH_DELAY", "2")
     smtp["SMTP_BATCH_SIZE"] = appconfig.get("SMTP_BATCH_SIZE", "25")
     smtp["SMTP_BATCH_PAUSE"] = appconfig.get("SMTP_BATCH_PAUSE", "30")
-    resp = {"RESP_NAME": appconfig.get("RESP_NAME", ""), "RESP_EMAIL": appconfig.get("RESP_EMAIL", "")}
+    resp = {k: appconfig.get(k, "") for k in
+            ("RESP_NAME", "RESP_EMAIL", "RESP_FAP_NAME", "RESP_FAP_EMAIL")}
     ipacfg = {k: appconfig.get(k, "") for k in ("IPA_LDAP_URI", "IPA_BASE_DN", "IPA_BIND_DN")}
     ipacfg["IPA_AUTOSYNC"] = appconfig.get_bool("IPA_AUTOSYNC", False)
     ipacfg["IPA_SYNC_HOURS"] = appconfig.get("IPA_SYNC_HOURS", "24")

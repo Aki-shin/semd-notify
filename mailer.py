@@ -141,6 +141,11 @@ def report_recipient():
     return cfg.get("RESP_NAME", ""), cfg.get("RESP_EMAIL", "")
 
 
+def fap_recipient():
+    """(имя, e-mail) ответственного за ФАП — отдельный человек."""
+    return cfg.get("RESP_FAP_NAME", ""), cfg.get("RESP_FAP_EMAIL", "")
+
+
 def build_fap_report_html(s, rows):
     """Отчёт ответственному по ФАП: охват ЭМК, точки без интернета, неполное заполнение."""
     low = [r for r in rows if (r.get("pct", 0) or 0) < 100]
