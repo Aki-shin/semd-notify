@@ -24,12 +24,11 @@
 
 <h2>Неподписанные документы к регистрации в РЭМД <span class="small muted">— из списка долгов</span></h2>
 <table>
-  <tr><th>№</th><th>Пациент</th><th>Дата рожд.</th><th>№ случая</th><th>Вид документа</th><th>Отделение</th><th>Период случая</th></tr>
+  <tr><th>№</th><th>Пациент</th><th>Дата рожд.</th><th>№ случая</th><th>Вид документа</th><th>Отделение</th><th>Начало</th><th>Окончание</th></tr>
   {% for d in debts %}
   <tr><td>{{ loop.index }}</td><td>{{ d.patient }}</td><td>{{ d.birth }}</td>
-      <td>{{ d.case_no }}</td><td>{{ d.doc_type }}</td><td>{{ d.otdelenie }}</td>
-      <td>{% if not d.d_end or d.d_end == d.d_start %}{{ d.d_start }}{% else %}{{ d.d_start }} – {{ d.d_end }}{% endif %}</td></tr>
-  {% else %}<tr><td colspan="7" class="empty">
+      <td>{{ d.case_no }}</td><td>{{ d.doc_type }}</td><td>{{ d.otdelenie }}</td><td>{{ d.d_start }}</td><td>{{ d.d_end }}</td></tr>
+  {% else %}<tr><td colspan="8" class="empty">
       {% if bd.total.nepodp %}В списке «неподписанные к регистрации в РЭМД» этого врача нет
       (отчёт долгов уже отдельных видов документов или ещё не загружен).
       {% else %}Долгов нет.{% endif %}</td></tr>{% endfor %}

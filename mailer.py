@@ -51,7 +51,9 @@ def build_debt_html(vrach, debts, rep_period="", custom=""):
     body = []
     for i, d in enumerate(debts, 1):
         start, end = d.get("d_start", ""), d.get("d_end", "")
-        cp = start if (not end or end == start) else f"{start} – {end}"
+        # Период случая — как в исходном отчёте: всегда «начало – окончание»,
+        # в т. ч. для случая одного дня (15.06.2026 – 15.06.2026). Одна дата — только если конца нет.
+        cp = f"{start} – {end}" if end else start
         body.append(
             f"<tr><td>{i}</td><td>{d.get('case_no','')}</td>"
             f"<td>{d.get('birth','')}</td>"
