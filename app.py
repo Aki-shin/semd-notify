@@ -542,6 +542,12 @@ def healthz():
     return {"ok": True}
 
 
+@app.route("/favicon.ico")
+def favicon():
+    # Браузеры неявно запрашивают /favicon.ico — отдаём наш SVG-значок.
+    return redirect(url_for("static", filename="favicon.svg"))
+
+
 _scheduler_started = False
 
 
