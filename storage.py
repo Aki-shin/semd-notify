@@ -523,6 +523,17 @@ def bulk_set_emails(pairs):
         c.executemany("INSERT OR REPLACE INTO email_map(key,email) VALUES(?,?)", pairs)
 
 
+def bulk_set_doctor_emails(items):
+    """items: список (vrach, email). Сохраняет почту под тем же ключом, по которому её
+    ищет doctors(): СНИЛС (без пробелов) при наличии, иначе нормализованное ФИО."""
+    with _conn() as c:
+        smap = {r["vrach"]: (r["s"] or "").replace(" ", "")
+                for r in c.execute("SELECT vrach, MAX(snils) s FROM vrachi GROUP BY vrach")}
+        pairs = [(smap.get(v) or _norm(v), (e or "").strip()) for v, e in items]
+        c.executemany("INSERT OR REPLACE INTO email_map(key,email) VALUES(?,?)", pairs)
+    return len(pairs)
+
+
 def log_send(vrach, email, cnt, status):
     with _conn() as c:
         c.execute("INSERT INTO send_log VALUES(?,?,?,?,?)",

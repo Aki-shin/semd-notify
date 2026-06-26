@@ -362,6 +362,14 @@ def doctors_send():
     return redirect(url_for("doctors"))
 
 
+@app.route("/doctors/save_emails", methods=["POST"])
+def doctors_save_emails():
+    items = [(k[len("email__"):], v) for k, v in request.form.items() if k.startswith("email__")]
+    n = storage.bulk_set_doctor_emails(items) if items else 0
+    flash(f"Сохранены почты врачей ({n}).", "ok" if n else "warn")
+    return redirect(url_for("doctors"))
+
+
 @app.route("/doctor/<path:vrach>")
 def doctor_detail(vrach):
     return render_template("doctor_detail.html", vrach=vrach,
