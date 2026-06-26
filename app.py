@@ -339,6 +339,7 @@ def doctors_send():
         flash("Не выбрано ни одного врача.", "warn")
         return redirect(url_for("doctors"))
     rep = storage.report_period("debts")
+    cust = appconfig.get("CUSTOM_DEBT", "")
     items, noaddr = [], 0
     for vrach in selected:
         debts = storage.doctor_debts(vrach)
@@ -351,7 +352,7 @@ def doctors_send():
             continue
         subj = f"Неподписанные документы РЭМД: {len(debts)} шт." + (f" (период {rep})" if rep else "")
         items.append({"to": email, "log_vrach": vrach, "cnt": len(debts), "subject": subj,
-                      "html": mailer.build_debt_html(vrach, debts, rep)})
+                      "html": mailer.build_debt_html(vrach, debts, rep, cust)})
     if items:
         _dispatch_batch(items, "doctors")
     dry = " (режим DRYRUN — реально не слалось)" if mailer.is_dryrun() else ""
@@ -381,6 +382,7 @@ def departments_send():
         flash("Не выбрано ни одного подразделения.", "warn")
         return redirect(url_for("departments"))
     rep = storage.report_period("vrachi")
+    cust = appconfig.get("CUSTOM_DEPT", "")
     items, noaddr = [], 0
     for podr in selected:
         d = storage.dept_vrachi(podr)
@@ -395,7 +397,7 @@ def departments_send():
         subj = f"Неподписанные документы по подразделению: {cnt} шт." + (f" (период {rep})" if rep else "")
         items.append({"to": ", ".join(emails), "log_vrach": f"[отд.] {podr}", "cnt": cnt, "subject": subj,
                       "html": mailer.build_dept_html(podr, d["vrachi"], d["nepodp"], d["debts"],
-                                                     d.get("from_debts"), rep_period=rep)})
+                                                     d.get("from_debts"), rep_period=rep, custom=cust)})
     if items:
         _dispatch_batch(items, "depts")
     dry = " (DRYRUN)" if mailer.is_dryrun() else ""
@@ -418,7 +420,7 @@ def report_send():
             "docerr": storage.docerr_list(),
             "mo_gap": (storage.mo_funnel() or {}).get("gap_vrach_mo"),
             "period": rep}
-    html = mailer.build_report_html(data)
+    html = mailer.build_report_html(data, appconfig.get("CUSTOM_ERR", ""))
     subj = "Отчёт по проблемам РЭМД (ответственному за исправление)" + (f" — период {rep}" if rep else "")
     ok, msg = mailer.send(email, subj, html)
     storage.log_send(f"[отчёт] {name or email}", email, len(data["unassigned"]), msg)
@@ -454,7 +456,7 @@ def fap_report_send():
         flash("Отчёт по ФАП не загружен.", "warn")
         return redirect(url_for("fap"))
     rep = storage.report_period("fap")
-    html = mailer.build_fap_report_html(s, storage.fap_list(), rep)
+    html = mailer.build_fap_report_html(s, storage.fap_list(), rep, appconfig.get("CUSTOM_FAP", ""))
     subj = "Отчёт по работе ФАП в ЭМК (ответственному)" + (f" — период {rep}" if rep else "")
     ok, msg = mailer.send(email, subj, html)
     storage.log_send(f"[ФАП-отчёт] {name or email}", email, s.get("n", 0), msg)
@@ -506,6 +508,10 @@ def settings():
             for k in ("RESP_NAME", "RESP_EMAIL", "RESP_FAP_NAME", "RESP_FAP_EMAIL"):
                 appconfig.set(k, (request.form.get(k) or "").strip())
             flash("Ответственные сохранены.", "ok")
+        elif action == "save_custom":
+            for k in ("CUSTOM_DEBT", "CUSTOM_DEPT", "CUSTOM_ERR", "CUSTOM_FAP"):
+                appconfig.set(k, (request.form.get(k) or "").strip())
+            flash("Дополнительный текст писем сохранён.", "ok")
         elif action == "save_ipa":
             for k in ("IPA_LDAP_URI", "IPA_BASE_DN", "IPA_BIND_DN"):
                 appconfig.set(k, (request.form.get(k) or "").strip())
@@ -527,12 +533,14 @@ def settings():
     smtp["SMTP_BATCH_PAUSE"] = appconfig.get("SMTP_BATCH_PAUSE", "30")
     resp = {k: appconfig.get(k, "") for k in
             ("RESP_NAME", "RESP_EMAIL", "RESP_FAP_NAME", "RESP_FAP_EMAIL")}
+    custom = {k: appconfig.get(k, "") for k in
+              ("CUSTOM_DEBT", "CUSTOM_DEPT", "CUSTOM_ERR", "CUSTOM_FAP")}
     ipacfg = {k: appconfig.get(k, "") for k in ("IPA_LDAP_URI", "IPA_BASE_DN", "IPA_BIND_DN")}
     ipacfg["IPA_AUTOSYNC"] = appconfig.get_bool("IPA_AUTOSYNC", False)
     ipacfg["IPA_SYNC_HOURS"] = appconfig.get("IPA_SYNC_HOURS", "24")
     ipacfg["pass_set"] = appconfig.is_set("IPA_BIND_PW")
     last_ts, last_res = ipa.last_sync_info()
-    return render_template("settings.html", smtp=smtp, ipacfg=ipacfg, resp=resp,
+    return render_template("settings.html", smtp=smtp, ipacfg=ipacfg, resp=resp, custom=custom,
                            ipa_last=(last_ts, last_res),
                            docs=storage.doctors(), depts=storage.dept_summary())
 

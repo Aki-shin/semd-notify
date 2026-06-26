@@ -2,10 +2,21 @@
 """Рассылка долгов врачам через корпоративный SMTP.
 Поддерживает режим DRYRUN (ничего не отправляет, только логирует)."""
 import time
+import html
 import smtplib
 from email.message import EmailMessage
 from email.utils import formataddr
 import appconfig as cfg
+
+
+def _custom_block(text):
+    """Произвольный текст оператора (из Настроек), добавляемый в письмо.
+    Экранируется как простой текст; переводы строк → <br>."""
+    if not text or not str(text).strip():
+        return ""
+    safe = html.escape(str(text).strip()).replace("\n", "<br>")
+    return ('<div style="margin:14px 0;padding:10px 12px;background:#f3f6fb;'
+            'border-left:3px solid #1e3a5f;font-size:13px;color:#333">' + safe + "</div>")
 
 
 def _cfg():
@@ -34,7 +45,7 @@ def is_dryrun():
     return _cfg()["dryrun"]
 
 
-def build_debt_html(vrach, debts, rep_period=""):
+def build_debt_html(vrach, debts, rep_period="", custom=""):
     # ПДн-минимизация: в письмо НЕ включаем ФИО пациента.
     # Документ идентифицируется по № случая и дате рождения — врач находит его в ЕИСЗ ПК.
     body = []
@@ -59,12 +70,13 @@ def build_debt_html(vrach, debts, rep_period=""):
 <tr style="background:#eef"><th>№</th><th>№ случая</th><th>Дата рождения</th><th>Вид документа</th><th>Период случая</th></tr>
 {rows}
 </table>
+{_custom_block(custom)}
 <p style="color:#666;font-size:12px">Письмо сформировано автоматически системой мониторинга СЭМД.
 Отдел информационных технологий.</p>
 </body></html>"""
 
 
-def build_dept_html(podr, vrachi, total_nepodp, total_debts=0, from_debts=False, rep_period=""):
+def build_dept_html(podr, vrachi, total_nepodp, total_debts=0, from_debts=False, rep_period="", custom=""):
     rows = "".join(
         f"<tr><td>{i}</td><td>{v['vrach']}</td><td style='text-align:right'>{v['nepodp']}</td>"
         f"<td style='text-align:right'>{v['debts']}</td></tr>"
@@ -87,12 +99,13 @@ def build_dept_html(podr, vrachi, total_nepodp, total_debts=0, from_debts=False,
 <tr style="background:#eef"><th>№</th><th>Врач</th><th>Не подписано</th><th>Долгов (документов)</th></tr>
 {rows}
 </table>
+{_custom_block(custom)}
 <p style="color:#666;font-size:12px">Письмо сформировано автоматически системой мониторинга СЭМД.
 Отдел информационных технологий.</p>
 </body></html>"""
 
 
-def build_report_html(data):
+def build_report_html(data, custom=""):
     """Отчёт ответственному за исправление: проблемы, не привязанные к конкретному врачу."""
     f = data.get("funnel", {})
     errs = data.get("errors", []) or []
@@ -138,6 +151,7 @@ def build_report_html(data):
 {err_rows}
 </table>
 {de_block}
+{_custom_block(custom)}
 <p style="color:#666;font-size:12px">Сформировано автоматически системой мониторинга СЭМД.</p>
 </body></html>"""
 
@@ -152,7 +166,7 @@ def fap_recipient():
     return cfg.get("RESP_FAP_NAME", ""), cfg.get("RESP_FAP_EMAIL", "")
 
 
-def build_fap_report_html(s, rows, rep_period=""):
+def build_fap_report_html(s, rows, rep_period="", custom=""):
     """Полная статистика работы фельдшеров ФАП в ЭМК — ответственному за ФАП."""
     def td(v):
         return f"<td style='text-align:right'>{v}</td>"
@@ -179,6 +193,7 @@ def build_fap_report_html(s, rows, rep_period=""):
 {body}
 {total}
 </table>
+{_custom_block(custom)}
 <p style="color:#666;font-size:12px">Сформировано автоматически системой мониторинга СЭМД.</p>
 </body></html>"""
 

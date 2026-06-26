@@ -32,6 +32,7 @@ select { border: 1px solid #cbd2da; border-radius: 6px; padding: 6px 9px; font-s
 form.cfg { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 14px 16px; max-width: 640px; }
 form.cfg label { display: block; margin: 8px 0; font-size: 13px; color: #374151; }
 form.cfg label input { display: block; width: 100%; margin-top: 3px; }
+form.cfg label textarea { display: block; width: 100%; margin-top: 3px; box-sizing: border-box; font-family: inherit; font-size: 13px; padding: 6px 8px; resize: vertical; }
 form.cfg label.chk { display: flex; align-items: center; gap: 8px; }
 form.cfg label.chk input { width: auto; margin: 0; }
 input[type=password] { border: 1px solid #cbd2da; border-radius: 6px; padding: 6px 9px; font-size: 13px; }

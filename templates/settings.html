@@ -35,6 +35,22 @@
   <div><button type="submit">Сохранить ответственных</button></div>
 </form>
 
+<h2>Дополнительный текст в письмах</h2>
+<p class="muted">Произвольный текст добавляется <b>в конце</b> соответствующего письма (перед служебной подписью), в виде выделенного блока.
+Переводы строк сохраняются; HTML экранируется (вставляется как обычный текст). Пустое поле — ничего не добавляется.</p>
+<form method="post" class="cfg">
+  <input type="hidden" name="action" value="save_custom">
+  <label>Письмо врачу (долги по РЭМД)
+    <textarea name="CUSTOM_DEBT" rows="3" placeholder="напр.: Просьба подписать документы до конца недели. По вопросам — каб. 12, тел. 4-45-55.">{{ custom.CUSTOM_DEBT }}</textarea></label>
+  <label>Сводка заведующему отделением
+    <textarea name="CUSTOM_DEPT" rows="3" placeholder="напр.: Прошу довести до сведения врачей отделения и проконтролировать подписание.">{{ custom.CUSTOM_DEPT }}</textarea></label>
+  <label>Отчёт ответственному за исправление ошибок РЭМД
+    <textarea name="CUSTOM_ERR" rows="3" placeholder="напр.: Прошу отработать ошибки и сообщить о результатах.">{{ custom.CUSTOM_ERR }}</textarea></label>
+  <label>Отчёт ответственному за ФАП
+    <textarea name="CUSTOM_FAP" rows="3" placeholder="напр.: Прошу обеспечить заполнение ЭМК по всем посещениям.">{{ custom.CUSTOM_FAP }}</textarea></label>
+  <div><button type="submit">Сохранить текст писем</button></div>
+</form>
+
 <h2>FreeIPA — корпоративные почты {% if ipa_ok %}<span class="pill ok">подключено</span>{% else %}<span class="pill warn">не настроено</span>{% endif %}</h2>
 <form method="post" class="cfg">
   <input type="hidden" name="action" value="save_ipa">
