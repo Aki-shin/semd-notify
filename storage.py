@@ -136,14 +136,14 @@ def meta_all():
 
 
 def report_period(rtype):
-    """Период (неделя) отчёта данного типа — для указания в письмах.
+    """Нормализованный период отчёта данного типа (для указания в письмах).
     Если типа нет — общий активный период."""
     import parser
     init()
     with _conn() as c:
         r = c.execute("SELECT period FROM meta WHERE rtype=?", (rtype,)).fetchone()
     if r and r["period"]:
-        return parser.period_week(r["period"]) or parser.norm_period(r["period"]) or r["period"]
+        return parser.norm_period(r["period"]) or r["period"]
     return cfg_get("active_period") or ""
 
 
@@ -282,7 +282,7 @@ def periods_info():
         rows = [dict(r) for r in c.execute("SELECT rtype, period FROM meta")]
     by_period = {}
     for r in rows:
-        np = parser.period_week(r["period"])
+        np = parser.norm_period(r["period"])
         if np:
             by_period.setdefault(np, []).append(r["rtype"])
     periods = list(by_period)

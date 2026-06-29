@@ -167,9 +167,9 @@ def upload():
                 skipped.append(f"{f.filename}: тип «{RTYPE_RU.get(res['type'], res['type'])}» пока не загружается")
         if parsed:
             # идентичность периода — НЕДЕЛЯ начала (конец у ФЛК/статусов/ФАП может «дребезжать»)
-            weeks = [report_parser.period_week(res["period"]) for res, _, _ in parsed
-                     if report_parser.period_week(res["period"])]
-            batch_period = Counter(weeks).most_common(1)[0][0] if weeks else "(без периода)"
+            periods = [report_parser.norm_period(res["period"]) for res, _, _ in parsed
+                       if report_parser.norm_period(res["period"])]
+            batch_period = Counter(periods).most_common(1)[0][0] if periods else "(без периода)"
             # Файлы просто грузятся в текущую выгрузку (тот же тип — замещается).
             # Период с ранее загруженными НЕ сравниваем: для нового периода жмите «Новая выгрузка».
             for res, fn, raw in parsed:
@@ -181,19 +181,19 @@ def upload():
             flash("Загружено: " + "; ".join(ok), "ok")
         if skipped:
             flash("Пропущено: " + "; ".join(skipped), "warn")
-        # Предупреждение — только если в ОДНОЙ выгрузке отчёты за разные недели
+        # Предупреждение — только если в ОДНОЙ выгрузке отчёты за разные периоды
         pi = storage.periods_info()
         if not pi["consistent"]:
             parts = "; ".join(f"{p} ({', '.join(RTYPE_RU.get(t, t) for t in ts)})"
                               for p, ts in pi["by_period"].items())
-            flash("⚠️ В выгрузке отчёты за РАЗНЫЕ недели: " + parts +
-                  ". Оставьте одну неделю (удалите лишний отчёт) либо начните «Новую выгрузку» "
+            flash("⚠️ В выгрузке отчёты за РАЗНЫЕ периоды: " + parts +
+                  ". Оставьте один период (удалите лишний отчёт) либо начните «Новую выгрузку» "
                   "и загрузите один период.", "warn")
         return redirect(url_for("upload"))
     active = appconfig.get("active_period", "")
-    # статусы и «что загружено» — строго по активному периоду (неделе)
+    # статусы и «что загружено» — строго по активной выгрузке (периоду)
     meta = [m for m in storage.meta_all()
-            if active and (report_parser.period_week(m["period"]) or "(без периода)") == active]
+            if active and (report_parser.norm_period(m["period"]) or "(без периода)") == active]
     loaded = {m["rtype"] for m in meta}
     return render_template("upload.html", meta=meta, reports=REPORTS_INFO, loaded=loaded,
                            history=storage.periods_history(), active_period=active,
