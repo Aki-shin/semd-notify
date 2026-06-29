@@ -188,9 +188,11 @@ def upload():
                   ". Дашборд сравнивает отчёты между собой — загрузите отчёты за один период "
                   "или нажмите «Сбросить отчёты».", "warn")
         return redirect(url_for("upload"))
-    meta = storage.meta_all()
-    loaded = {m["rtype"] for m in meta}
     active = appconfig.get("active_period", "")
+    # статусы и «что загружено» — строго по активному периоду
+    meta = [m for m in storage.meta_all()
+            if active and (report_parser.norm_period(m["period"]) or "(без периода)") == active]
+    loaded = {m["rtype"] for m in meta}
     return render_template("upload.html", meta=meta, reports=REPORTS_INFO, loaded=loaded,
                            history=storage.periods_history(), active_period=active,
                            exports={x["rtype"]: x["filename"] for x in storage.period_rtypes(active)})
@@ -198,9 +200,31 @@ def upload():
 
 @app.route("/reset", methods=["POST"])
 def reset():
-    storage.reset_reports()
-    flash("Загруженные отчёты сброшены. Почты врачей/зав. отделениями и настройки "
-          "сохранены — можно загрузить новый период.", "ok")
+    active = appconfig.get("active_period", "")
+    if active:
+        storage.delete_period(active)
+        flash(f"Отчёты периода «{active}» сброшены (удалены, в т.ч. из истории). "
+              "Почты врачей/зав. отделениями и настройки сохранены.", "ok")
+    else:
+        storage.reset_reports()
+        flash("Рабочие данные очищены. Почты и настройки сохранены.", "ok")
+    return redirect(url_for("upload"))
+
+
+@app.route("/period/new", methods=["POST"])
+def period_new():
+    storage.new_period()
+    flash("Начат новый период. Загрузите отчёты — они сформируют новый период. "
+          "Прежний период остаётся в истории (можно вернуться).", "ok")
+    return redirect(url_for("upload"))
+
+
+@app.route("/period/delete_report", methods=["POST"])
+def period_delete_report():
+    rtype = (request.form.get("rtype") or "").strip()
+    active = appconfig.get("active_period", "")
+    storage.delete_report(active, rtype)
+    flash(f"Отчёт «{RTYPE_RU.get(rtype, rtype)}» удалён из периода.", "ok")
     return redirect(url_for("upload"))
 
 

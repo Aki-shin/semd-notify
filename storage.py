@@ -228,6 +228,52 @@ def switch_period(period):
     return n
 
 
+# rtype → рабочая таблица данных (для точечного удаления одного отчёта)
+RTYPE_TABLE = {
+    "vrachi": "vrachi", "debts": "debts", "flk": "errors", "mo": "mo_funnel",
+    "tvsp": "tvsp", "notrans": "notrans", "fap": "fap", "vidy": "vidy",
+    "docerr": "docerr", "fedkpi": "fedkpi", "status": "status",
+}
+
+
+def clear_report(rtype):
+    """Удаляет один тип отчёта из рабочих таблиц (meta + таблица данных)."""
+    init()
+    tbl = RTYPE_TABLE.get(rtype)
+    with _conn() as c:
+        c.execute("DELETE FROM meta WHERE rtype=?", (rtype,))
+        if tbl:
+            c.execute(f"DELETE FROM {tbl}")
+
+
+def delete_report(period, rtype):
+    """Удаляет отчёт данного типа: из истории периода и (если период активный) из рабочих таблиц."""
+    init()
+    with _conn() as c:
+        c.execute("DELETE FROM period_files WHERE period=? AND rtype=?", (period, rtype))
+    if (cfg_get("active_period") or "") == period:
+        clear_report(rtype)
+
+
+def delete_period(period):
+    """Полностью удаляет период: из истории; если активный — чистит рабочие таблицы
+    и сбрасывает active_period. Другие периоды в истории не трогает."""
+    init()
+    with _conn() as c:
+        c.execute("DELETE FROM period_files WHERE period=?", (period,))
+    if (cfg_get("active_period") or "") == period:
+        reset_reports()
+        cfg_set("active_period", "")
+
+
+def new_period():
+    """Начинает новый период: чистит рабочие таблицы и сбрасывает active_period.
+    История периодов (period_files) сохраняется — на неё можно вернуться."""
+    init()
+    reset_reports()
+    cfg_set("active_period", "")
+
+
 def periods_info():
     """Сводка по периодам загруженных отчётов: общий период и согласованность."""
     import parser

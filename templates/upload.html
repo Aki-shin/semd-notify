@@ -10,6 +10,14 @@
   <button type="submit">Загрузить и разобрать</button>
 </form>
 
+<div class="toolbar" style="margin-top:8px">
+  <form method="post" action="{{ url_for('period_new') }}" style="margin:0"
+        onsubmit="return confirm('Начать новый период? Текущие рабочие данные очистятся (останутся в истории), загрузка сформирует новый период.')">
+    <button type="submit">➕ Новый период</button>
+  </form>
+  <span class="muted small">{% if active_period %}Активный период: <b>{{ active_period }}</b>{% else %}Активного периода нет — загрузите отчёты{% endif %}</span>
+</div>
+
 {% if periods.n_reports and not periods.consistent %}
 <div class="alert">⚠️ Периоды загруженных отчётов <b>не совпадают</b>:
   {% for p, ts in periods.by_period.items() %}<br>• <b>{{ p }}</b> — {% for t in ts %}{{ rtype_ru.get(t, t) }}{% if not loop.last %}, {% endif %}{% endfor %}{% endfor %}
@@ -58,7 +66,7 @@
       <button type="submit">♻ Переобработать</button>
     </form>
     <form method="post" action="{{ url_for('reset') }}" style="margin:0"
-          onsubmit="return confirm('Сбросить все загруженные отчёты? Почты врачей/зав. отделениями и настройки сохранятся.')">
+          onsubmit="return confirm('Сбросить отчёты текущего периода{% if active_period %} «{{ active_period }}»{% endif %}? Они будут удалены (в т.ч. из истории). Почты и настройки сохранятся.')">
       <button type="submit" class="danger">🗑 Сбросить отчёты</button>
     </form>
   </div>
@@ -69,7 +77,12 @@
   {% for m in meta %}
   <tr><td>{{ rtype_ru.get(m.rtype, m.rtype) }}</td><td>{{ m.filename }}</td>
       <td>{{ m.period }}</td><td class="r">{{ m.rows }}</td><td>{{ m.uploaded_at }}</td>
-      <td>{% if m.rtype in exports %}<a class="small" href="{{ url_for('export', rtype=m.rtype) }}">⬇ скачать</a>{% endif %}</td></tr>
+      <td style="white-space:nowrap">{% if m.rtype in exports %}<a class="small" href="{{ url_for('export', rtype=m.rtype) }}">⬇ скачать</a>{% endif %}
+        <form method="post" action="{{ url_for('period_delete_report') }}" style="display:inline;margin:0"
+              onsubmit="return confirm('Удалить отчёт «{{ rtype_ru.get(m.rtype, m.rtype) }}» из периода?')">
+          <input type="hidden" name="rtype" value="{{ m.rtype }}">
+          <button type="submit" class="danger" style="padding:2px 8px;font-size:12px">🗑 удалить</button>
+        </form></td></tr>
   {% else %}<tr><td colspan="6" class="empty">пока ничего</td></tr>{% endfor %}
 </table>
 {% endblock %}
