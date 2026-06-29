@@ -10,6 +10,7 @@
   - mo       : «Отчет по отправке документов в РЭМД в разрезе МО» (воронка, опционально)
 """
 import re
+import datetime
 import xml.etree.ElementTree as ET
 
 SS = "urn:schemas-microsoft-com:office:spreadsheet"
@@ -91,6 +92,24 @@ def norm_period(text):
         return f"{m.group(1)} — {m.group(2)}"
     m = re.search(r"(\d{2}\.\d{2}\.\d{4})", text or "")
     return m.group(1) if m else ""
+
+
+def period_week(text):
+    """Канонический ключ периода — НЕДЕЛЯ (Пн–Вс), содержащая дату НАЧАЛА диапазона.
+    Отчёты одной недели в ЕИСЗ ПК часто имеют разный конец периода (ФЛК/статусы
+    отстают на 1–3 дня, ФАП — Пн–Пн), поэтому за идентичность периода берём неделю
+    начала — иначе один и тот же недельный набор ложно распадается на разные периоды.
+    Возвращает «ДД.ММ.ГГГГ — ДД.ММ.ГГГГ» (Пн–Вс) или '' если дат нет."""
+    m = re.search(r"(\d{2})\.(\d{2})\.(\d{4})", text or "")
+    if not m:
+        return ""
+    try:
+        dt = datetime.date(int(m.group(3)), int(m.group(2)), int(m.group(1)))
+    except ValueError:
+        return norm_period(text)
+    monday = dt - datetime.timedelta(days=dt.weekday())
+    sunday = monday + datetime.timedelta(days=6)
+    return f"{monday.strftime('%d.%m.%Y')} — {sunday.strftime('%d.%m.%Y')}"
 
 
 def parse(path):

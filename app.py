@@ -147,8 +147,9 @@ def upload():
     if request.method == "POST":
         files = request.files.getlist("files")
         os.makedirs(UPLOAD_DIR, exist_ok=True)
+        from collections import Counter
         ok, skipped = [], []
-        loaded_files = []   # (rtype, filename, raw_bytes, file_period)
+        parsed = []   # (res, filename, raw_bytes)
         for f in files:
             if not f or not f.filename:
                 continue
@@ -160,38 +161,45 @@ def upload():
                 skipped.append(f"{f.filename}: ошибка разбора ({e})")
                 continue
             if res["type"] in LOADABLE:
-                storage.replace_report(res["type"], os.path.basename(f.filename),
-                                       res["period"], res["rows"], res["records"])
                 with open(path, "rb") as fh:
-                    loaded_files.append((res["type"], os.path.basename(f.filename), fh.read(),
-                                         report_parser.norm_period(res["period"])))
-                ok.append(f"{f.filename} → {RTYPE_RU[res['type']]} ({len(res['records'])} записей)")
+                    parsed.append((res, os.path.basename(f.filename), fh.read()))
             else:
                 skipped.append(f"{f.filename}: тип «{RTYPE_RU.get(res['type'], res['type'])}» пока не загружается")
-        if loaded_files:
-            # вся пачка — один период истории (по наиболее частому), чтобы переключаться целиком
-            from collections import Counter
-            ps = [fp for *_, fp in loaded_files if fp]
-            batch_period = Counter(ps).most_common(1)[0][0] if ps else "(без периода)"
-            for rtype, fn, raw, _ in loaded_files:
-                storage.save_period_file(batch_period, rtype, fn, raw)
+        new_week = False
+        batch_period = ""
+        if parsed:
+            # идентичность периода — НЕДЕЛЯ начала (конец у ФЛК/статусов/ФАП «дребезжит»)
+            weeks = [report_parser.period_week(res["period"]) for res, _, _ in parsed
+                     if report_parser.period_week(res["period"])]
+            batch_period = Counter(weeks).most_common(1)[0][0] if weeks else "(без периода)"
+            active = appconfig.get("active_period", "")
+            # загрузка ДРУГОЙ недели = новый период: рабочие данные прежней недели чистим
+            # (она остаётся в истории и переключаема)
+            if active and batch_period != active:
+                storage.reset_reports()
+                new_week = True
+            for res, fn, raw in parsed:
+                storage.replace_report(res["type"], fn, res["period"], res["rows"], res["records"])
+                storage.save_period_file(batch_period, res["type"], fn, raw)
+                ok.append(f"{fn} → {RTYPE_RU[res['type']]} ({len(res['records'])} записей)")
             appconfig.set("active_period", batch_period)
         if ok:
-            flash("Загружено: " + "; ".join(ok), "ok")
+            pre = f"Новый период «{batch_period}» (прежний — в истории). " if new_week else ""
+            flash(pre + "Загружено: " + "; ".join(ok), "ok")
         if skipped:
             flash("Пропущено: " + "; ".join(skipped), "warn")
         pi = storage.periods_info()
         if not pi["consistent"]:
             parts = "; ".join(f"{p} ({', '.join(RTYPE_RU.get(t, t) for t in ts)})"
                               for p, ts in pi["by_period"].items())
-            flash("⚠️ Периоды отчётов НЕ совпадают: " + parts +
-                  ". Дашборд сравнивает отчёты между собой — загрузите отчёты за один период "
-                  "или нажмите «Сбросить отчёты».", "warn")
+            flash("⚠️ Загружены отчёты за РАЗНЫЕ недели: " + parts +
+                  ". Дашборд сравнивает отчёты между собой — оставьте одну неделю "
+                  "(удалите лишний отчёт) или нажмите «Сбросить отчёты».", "warn")
         return redirect(url_for("upload"))
     active = appconfig.get("active_period", "")
-    # статусы и «что загружено» — строго по активному периоду
+    # статусы и «что загружено» — строго по активному периоду (неделе)
     meta = [m for m in storage.meta_all()
-            if active and (report_parser.norm_period(m["period"]) or "(без периода)") == active]
+            if active and (report_parser.period_week(m["period"]) or "(без периода)") == active]
     loaded = {m["rtype"] for m in meta}
     return render_template("upload.html", meta=meta, reports=REPORTS_INFO, loaded=loaded,
                            history=storage.periods_history(), active_period=active,
