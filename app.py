@@ -147,7 +147,6 @@ def upload():
     if request.method == "POST":
         files = request.files.getlist("files")
         os.makedirs(UPLOAD_DIR, exist_ok=True)
-        from collections import Counter
         ok, skipped = [], []
         parsed = []   # (res, filename, raw_bytes)
         for f in files:
@@ -167,9 +166,8 @@ def upload():
                 skipped.append(f"{f.filename}: тип «{RTYPE_RU.get(res['type'], res['type'])}» пока не загружается")
         if parsed:
             # идентичность периода — НЕДЕЛЯ начала (конец у ФЛК/статусов/ФАП может «дребезжать»)
-            periods = [report_parser.norm_period(res["period"]) for res, _, _ in parsed
-                       if report_parser.norm_period(res["period"])]
-            batch_period = Counter(periods).most_common(1)[0][0] if periods else "(без периода)"
+            # период выгрузки = максимальный охват загруженных отчётов
+            batch_period = report_parser.max_period([res["period"] for res, _, _ in parsed]) or "(без периода)"
             # Файлы просто грузятся в текущую выгрузку (тот же тип — замещается).
             # Период с ранее загруженными НЕ сравниваем: для нового периода жмите «Новая выгрузка».
             for res, fn, raw in parsed:
@@ -191,13 +189,12 @@ def upload():
                   "и загрузите один период.", "warn")
         return redirect(url_for("upload"))
     active = appconfig.get("active_period", "")
-    # статусы и «что загружено» — строго по активной выгрузке (периоду)
-    meta = [m for m in storage.meta_all()
-            if active and (report_parser.norm_period(m["period"]) or "(без периода)") == active]
-    loaded = {m["rtype"] for m in meta}
+    # статусы и «что загружено» — строго по набору отчётов активной выгрузки
+    exports = {x["rtype"]: x["filename"] for x in storage.period_rtypes(active)} if active else {}
+    meta = [m for m in storage.meta_all() if m["rtype"] in exports]
+    loaded = set(exports)
     return render_template("upload.html", meta=meta, reports=REPORTS_INFO, loaded=loaded,
-                           history=storage.periods_history(), active_period=active,
-                           exports={x["rtype"]: x["filename"] for x in storage.period_rtypes(active)})
+                           history=storage.periods_history(), active_period=active, exports=exports)
 
 
 @app.route("/reset", methods=["POST"])

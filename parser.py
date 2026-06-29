@@ -10,6 +10,7 @@
   - mo       : «Отчет по отправке документов в РЭМД в разрезе МО» (воронка, опционально)
 """
 import re
+import datetime
 import xml.etree.ElementTree as ET
 
 SS = "urn:schemas-microsoft-com:office:spreadsheet"
@@ -91,6 +92,34 @@ def norm_period(text):
         return f"{m.group(1)} — {m.group(2)}"
     m = re.search(r"(\d{2}\.\d{2}\.\d{4})", text or "")
     return m.group(1) if m else ""
+
+
+def _date(s):
+    try:
+        d, m, y = s.split(".")
+        return datetime.date(int(y), int(m), int(d))
+    except (ValueError, AttributeError):
+        return None
+
+
+def max_period(period_texts):
+    """Период выгрузки — максимальный охват отчётов: самое раннее начало и самый
+    поздний конец среди нормализованных периодов. «ДД.ММ.ГГГГ — ДД.ММ.ГГГГ» или ''."""
+    starts, ends = [], []
+    for t in period_texts:
+        np = norm_period(t)
+        if not np:
+            continue
+        parts = np.split(" — ")
+        s, e = _date(parts[0]), _date(parts[-1])
+        if s:
+            starts.append(s)
+        if e:
+            ends.append(e)
+    if not starts:
+        return ""
+    lo, hi = min(starts), max(ends or starts)
+    return lo.strftime("%d.%m.%Y") if lo == hi else f"{lo.strftime('%d.%m.%Y')} — {hi.strftime('%d.%m.%Y')}"
 
 
 def parse(path):
