@@ -165,36 +165,30 @@ def upload():
                     parsed.append((res, os.path.basename(f.filename), fh.read()))
             else:
                 skipped.append(f"{f.filename}: тип «{RTYPE_RU.get(res['type'], res['type'])}» пока не загружается")
-        new_week = False
-        batch_period = ""
         if parsed:
-            # идентичность периода — НЕДЕЛЯ начала (конец у ФЛК/статусов/ФАП «дребезжит»)
+            # идентичность периода — НЕДЕЛЯ начала (конец у ФЛК/статусов/ФАП может «дребезжать»)
             weeks = [report_parser.period_week(res["period"]) for res, _, _ in parsed
                      if report_parser.period_week(res["period"])]
             batch_period = Counter(weeks).most_common(1)[0][0] if weeks else "(без периода)"
-            active = appconfig.get("active_period", "")
-            # загрузка ДРУГОЙ недели = новый период: рабочие данные прежней недели чистим
-            # (она остаётся в истории и переключаема)
-            if active and batch_period != active:
-                storage.reset_reports()
-                new_week = True
+            # Файлы просто грузятся в текущую выгрузку (тот же тип — замещается).
+            # Период с ранее загруженными НЕ сравниваем: для нового периода жмите «Новая выгрузка».
             for res, fn, raw in parsed:
                 storage.replace_report(res["type"], fn, res["period"], res["rows"], res["records"])
                 storage.save_period_file(batch_period, res["type"], fn, raw)
                 ok.append(f"{fn} → {RTYPE_RU[res['type']]} ({len(res['records'])} записей)")
             appconfig.set("active_period", batch_period)
         if ok:
-            pre = f"Новый период «{batch_period}» (прежний — в истории). " if new_week else ""
-            flash(pre + "Загружено: " + "; ".join(ok), "ok")
+            flash("Загружено: " + "; ".join(ok), "ok")
         if skipped:
             flash("Пропущено: " + "; ".join(skipped), "warn")
+        # Предупреждение — только если в ОДНОЙ выгрузке отчёты за разные недели
         pi = storage.periods_info()
         if not pi["consistent"]:
             parts = "; ".join(f"{p} ({', '.join(RTYPE_RU.get(t, t) for t in ts)})"
                               for p, ts in pi["by_period"].items())
-            flash("⚠️ Загружены отчёты за РАЗНЫЕ недели: " + parts +
-                  ". Дашборд сравнивает отчёты между собой — оставьте одну неделю "
-                  "(удалите лишний отчёт) или нажмите «Сбросить отчёты».", "warn")
+            flash("⚠️ В выгрузке отчёты за РАЗНЫЕ недели: " + parts +
+                  ". Оставьте одну неделю (удалите лишний отчёт) либо начните «Новую выгрузку» "
+                  "и загрузите один период.", "warn")
         return redirect(url_for("upload"))
     active = appconfig.get("active_period", "")
     # статусы и «что загружено» — строго по активному периоду (неделе)
@@ -222,8 +216,8 @@ def reset():
 @app.route("/period/new", methods=["POST"])
 def period_new():
     storage.new_period()
-    flash("Начат новый период. Загрузите отчёты — они сформируют новый период. "
-          "Прежний период остаётся в истории (можно вернуться).", "ok")
+    flash("Начата новая выгрузка — загрузите отчёты нового периода. "
+          "Прежняя выгрузка остаётся в истории (можно вернуться).", "ok")
     return redirect(url_for("upload"))
 
 

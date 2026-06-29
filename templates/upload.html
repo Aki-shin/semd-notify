@@ -12,17 +12,18 @@
 
 <div class="toolbar" style="margin-top:8px">
   <form method="post" action="{{ url_for('period_new') }}" style="margin:0"
-        onsubmit="return confirm('Начать новый период? Текущие рабочие данные очистятся (останутся в истории), загрузка сформирует новый период.')">
-    <button type="submit">➕ Новый период</button>
+        onsubmit="return confirm('Начать новую выгрузку? Текущие отчёты очистятся (останутся в истории), затем загрузите новый период.')">
+    <button type="submit">🔄 Новая выгрузка</button>
   </form>
-  <span class="muted small">{% if active_period %}Активный период: <b>{{ active_period }}</b>{% else %}Активного периода нет — загрузите отчёты{% endif %}</span>
+  <span class="muted small">{% if active_period %}Текущая выгрузка (период): <b>{{ active_period }}</b>{% else %}Выгрузка не загружена — выберите файлы выше{% endif %}</span>
 </div>
+<p class="muted small" style="margin:4px 0 0">Порядок: загрузите отчёты периода → для следующего периода нажмите «🔄 Новая выгрузка» → загрузите его. Пересечение периодов с уже загруженными не мешает.</p>
 
 {% if periods.n_reports and not periods.consistent %}
-<div class="alert">⚠️ Периоды загруженных отчётов <b>не совпадают</b>:
+<div class="alert">⚠️ В выгрузке отчёты за <b>разные недели</b>:
   {% for p, ts in periods.by_period.items() %}<br>• <b>{{ p }}</b> — {% for t in ts %}{{ rtype_ru.get(t, t) }}{% if not loop.last %}, {% endif %}{% endfor %}{% endfor %}
-  <br>Дашборд и воронка сравнивают отчёты между собой, поэтому периоды должны совпадать.
-  Загрузите отчёты за один период или нажмите «Сбросить отчёты».</div>
+  <br>Дашборд и воронка сравнивают отчёты между собой, поэтому в одной выгрузке должна быть одна неделя.
+  Удалите лишний отчёт либо начните «🔄 Новую выгрузку» и загрузите один период.</div>
 {% endif %}
 
 {% if history %}
