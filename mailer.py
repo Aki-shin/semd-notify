@@ -213,15 +213,20 @@ def _koiki_rows_html(wards, show_resp=False):
         zan = w.get("zan")
         if w.get("no_beds"):
             note = "коек нет в справочнике"
-        elif w.get("day") and zan is not None and zan > 100:
-            note = "дневной, 2 смены"
-        elif w.get("overload"):
+        elif w.get("overload") and not w.get("day"):
             note = "проверить коечный фонд"
         else:
             note = ""
         zt = "—" if zan is None else f"{zan}%"
-        red = zan is not None and zan > 100 and not w.get("day")
-        color = "#c0392b" if red else "#222"
+        # синий — план перевыполнен (>100%); красный — ниже 80%; иначе обычный
+        if zan is None:
+            color = "#222"
+        elif zan > 100:
+            color = "#2563eb"
+        elif zan < 80:
+            color = "#c0392b"
+        else:
+            color = "#222"
         resp_td = f"<td style='font-size:12px'>{w.get('resp','') or '—'}</td>" if show_resp else ""
         out.append(
             f"<tr><td>{w['otdelenie']}</td>{resp_td}"
@@ -234,9 +239,11 @@ def _koiki_rows_html(wards, show_resp=False):
     return "".join(out) or "<tr><td colspan='8'>нет данных</td></tr>"
 
 
-_KOIKI_NOTE = ("Занятость = койко-дни ÷ (число коек × дни периода). Значение выше 100 % "
-               "по круглосуточным койкам означает, что фактически развёрнуто больше коек, "
-               "чем указано в справочнике Промед, — просьба проверить и актуализировать коечный фонд. "
+_KOIKI_NOTE = ("Занятость = койко-дни ÷ (число коек × дни периода). "
+               "<b style='color:#2563eb'>Синим</b> — занятость выше 100 % (план по койко-дням перевыполнен; "
+               "для круглосуточных коек это также может означать, что коек в справочнике Промед меньше "
+               "фактически развёрнутых — стоит проверить). "
+               "<b style='color:#c0392b'>Красным</b> — ниже 80 % (недозагрузка коек). "
                "Оборот койки = выписано ÷ коек; средняя длительность = койко-дни ÷ выписано.")
 
 

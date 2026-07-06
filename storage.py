@@ -509,7 +509,8 @@ def koiki_list():
 
 
 def koiki_totals():
-    """Итоги по учреждению: всего / круглосуточные / дневные (места считаем отдельно)."""
+    """Итоги по учреждению: всего / круглосуточные / дневные (места считаем отдельно),
+    плюс счётчики отделений с перевыполнением (>100%) и недозагрузкой (<80%)."""
     days = _koiki_days()
     with _conn() as c:
         rows = [dict(r) for r in c.execute("SELECT koek, kd, day FROM koiki")]
@@ -518,7 +519,16 @@ def koiki_totals():
         k = sum(r["koek"] for r in rows if sel(r))
         d = sum(r["kd"] for r in rows if sel(r))
         return {"koek": k, "kd": d, "zan": round(d / (k * days) * 100, 1) if k else None}
-    return {"days": days, "n": len(rows),
+    over = low = 0
+    for r in rows:
+        if not r["koek"]:
+            continue
+        z = r["kd"] / (r["koek"] * days) * 100
+        if z > 100:
+            over += 1
+        elif z < 80:
+            low += 1
+    return {"days": days, "n": len(rows), "over": over, "low": low,
             "all": agg(lambda r: True),
             "kruglo": agg(lambda r: not r["day"]),
             "day": agg(lambda r: r["day"])}
