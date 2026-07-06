@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>Койки — занятость стационара</h1>
+<p class="muted">Занятость = койко-дни ÷ (число коек × дни периода). Значение &gt;100% по круглосуточным койкам —
+сигнал, что фактически развёрнуто больше коек, чем в справочнике Промед (проверить коечный фонд).
+Дневные стационары считаются отдельно (места, работа в 2 смены).
+{% if period %}<b>Период: {{ period }}</b> ({{ totals.days }} дн.){% endif %}
+{% if smtp_dry %} <b>DRYRUN: письма не отправляются.</b>{% endif %}</p>
+
+{% if wards %}
+<section class="cards">
+  <div class="card"><div class="num">{{ totals.all.zan if totals.all.zan is not none else '—' }}%</div>
+    <div class="lbl">Занятость всего ({{ totals.all.koek }} коек · {{ totals.all.kd }} к/дн)</div></div>
+  <div class="card"><div class="num">{{ totals.kruglo.zan if totals.kruglo.zan is not none else '—' }}%</div>
+    <div class="lbl">Круглосуточные ({{ totals.kruglo.koek }} коек)</div></div>
+  <div class="card"><div class="num">{{ totals.day.zan if totals.day.zan is not none else '—' }}%</div>
+    <div class="lbl">Дневные стационары ({{ totals.day.koek }} мест)</div></div>
+  <div class="card {{ 'bad' if wards|selectattr('overload')|list|length }}">
+    <div class="num">{{ wards|selectattr('overload')|list|length }}</div>
+    <div class="lbl">Отделений с занятостью &gt;100%</div></div>
+</section>
+
+<!-- Сводный отчёт ответственному за коечный фонд -->
+<div class="toolbar">
+  <div class="muted">Ответственный за коечный фонд:
+    {% if resp_email %}<b>{{ resp_name or resp_email }}</b> ({{ resp_email }}){% else %}<span class="pill warn">не задан</span> — укажите в <a href="{{ url_for('settings') }}">Настройках</a>{% endif %}</div>
+  <form method="post" action="{{ url_for('koiki_report_send') }}">
+    <button type="submit" {{ 'disabled' if not resp_email }}>✉ Отправить сводный отчёт</button>
+  </form>
+</div>
+
+<!-- Отделения: показатели + назначение ответственных -->
+<form method="post" action="{{ url_for('koiki_save_map') }}">
+  <div class="toolbar">
+    <h2 style="margin:0">Отделения и занятость</h2>
+    <button type="submit">💾 Сохранить ответственных</button>
+  </div>
+  <table>
+    <tr><th>Отделение</th><th>Коек</th><th>Койко-дни</th><th>Занятость</th><th>Оборот</th>
+        <th>Ср.&nbsp;длит.</th><th>Примечание</th><th>Ответственный</th><th>Почта</th></tr>
+    {% for w in wards %}
+    <tr class="{{ 'lowpct' if w.overload }}">
+      <td>{{ w.otdelenie }}{% if w.day %} <span class="pill" title="Дневной стационар">дн.</span>{% endif %}</td>
+      <td class="r">{{ w.koek }}</td>
+      <td class="r">{{ w.kd }}</td>
+      <td class="r {{ 'bad' if w.zan is not none and w.zan > 100 and not w.day }}">
+        {{ (w.zan ~ '%') if w.zan is not none else '—' }}</td>
+      <td class="r">{{ w.oborot if w.oborot is not none else '—' }}</td>
+      <td class="r">{{ w.dlit if w.dlit is not none else '—' }}</td>
+      <td class="small muted">
+        {%- if w.no_beds %}коек нет в справочнике
+        {%- elif w.day and w.zan is not none and w.zan > 100 %}дневной, 2 смены
+        {%- elif w.overload %}проверить коечный фонд{% endif %}</td>
+      <td><input type="text" name="resp__{{ w.otdelenie }}" value="{{ w.resp }}"
+                 class="email" placeholder="Зав. отделением"></td>
+      <td><input type="email" name="email__{{ w.otdelenie }}" value="{{ w.email }}"
+                 class="email {{ 'noemail' if not w.email }}" placeholder="zav@med.permkrai.ru"></td>
+    </tr>
+    {% endfor %}
+  </table>
+</form>
+
+<!-- Рассылка по ответственным (группировка по почте) -->
+<form method="post" action="{{ url_for('koiki_send') }}">
+  <div class="toolbar">
+    <h2 style="margin:0">Рассылка ответственным за отделения</h2>
+    <label><input type="checkbox" id="all"> выбрать всех</label>
+    <button type="submit">✉ Отправить выбранным</button>
+  </div>
+  <p class="muted small">Каждому ответственному уйдёт письмо с занятостью только его отделений.
+  Ответственные берутся из таблицы выше — сначала задайте почту и нажмите «Сохранить».</p>
+  <table>
+    <tr><th></th><th>Ответственный</th><th>Почта</th><th>Отделений</th><th>Коек</th><th>Занятость</th></tr>
+    {% for g in groups %}
+    <tr>
+      <td><input type="checkbox" name="grp" value="{{ g.email }}" class="pick"></td>
+      <td>{{ g.resp or '—' }}</td>
+      <td>{{ g.email }}</td>
+      <td class="r">{{ g.wards|length }}</td>
+      <td class="r">{{ g.koek }}</td>
+      <td class="r">{{ (g.zan ~ '%') if g.zan is not none else '—' }}</td>
+    </tr>
+    {% else %}<tr><td colspan="6" class="empty">Назначьте отделениям ответственных с почтой и сохраните.</td></tr>{% endfor %}
+  </table>
+</form>
+
+<div class="toolbar">
+  <h2 style="margin:0">Журнал рассылки <span id="sendline" class="small muted"></span></h2>
+  <form method="post" action="{{ url_for('send_cancel') }}" id="cancelform" style="margin:0;display:none">
+    <button type="submit" class="danger">⛔ Отменить рассылку</button>
+  </form>
+</div>
+<table>
+  <thead><tr><th>Время</th><th>Адресат</th><th>Почта</th><th>Отд.</th><th>Статус</th></tr></thead>
+  <tbody id="sendlog">
+  {% for l in log %}
+  <tr><td>{{ l.ts }}</td><td>{{ l.vrach }}</td><td>{{ l.email }}</td>
+      <td class="r">{{ l.cnt }}</td><td>{{ l.status }}</td></tr>
+  {% else %}<tr><td colspan="5" class="empty">пока пусто</td></tr>{% endfor %}
+  </tbody>
+</table>
+
+<script>
+document.getElementById('all').addEventListener('change', function(e){
+  document.querySelectorAll('.pick:not([disabled])').forEach(c => c.checked = e.target.checked);
+});
+</script>
+{% else %}
+<div class="empty">Отчёт по койкам не загружен.
+  <a href="{{ url_for('upload') }}">Загрузите</a> «Сводную ведомость движения пациентов и коечного фонда».</div>
+{% endif %}
+{% endblock %}

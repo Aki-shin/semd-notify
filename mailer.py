@@ -200,6 +200,90 @@ def build_fap_report_html(s, rows, rep_period="", custom=""):
 </body></html>"""
 
 
+def koiki_recipient():
+    """(имя, e-mail) ответственного за коечный фонд (общий сводный отчёт)."""
+    return cfg.get("RESP_KOIKI_NAME", ""), cfg.get("RESP_KOIKI_EMAIL", "")
+
+
+def _koiki_rows_html(wards, show_resp=False):
+    def c(v):
+        return "—" if v is None else v
+    out = []
+    for w in wards:
+        zan = w.get("zan")
+        if w.get("no_beds"):
+            note = "коек нет в справочнике"
+        elif w.get("day") and zan is not None and zan > 100:
+            note = "дневной, 2 смены"
+        elif w.get("overload"):
+            note = "проверить коечный фонд"
+        else:
+            note = ""
+        zt = "—" if zan is None else f"{zan}%"
+        red = zan is not None and zan > 100 and not w.get("day")
+        color = "#c0392b" if red else "#222"
+        resp_td = f"<td style='font-size:12px'>{w.get('resp','') or '—'}</td>" if show_resp else ""
+        out.append(
+            f"<tr><td>{w['otdelenie']}</td>{resp_td}"
+            f"<td style='text-align:right'>{w['koek']}</td>"
+            f"<td style='text-align:right'>{w['kd']}</td>"
+            f"<td style='text-align:right;color:{color}'><b>{zt}</b></td>"
+            f"<td style='text-align:right'>{c(w.get('oborot'))}</td>"
+            f"<td style='text-align:right'>{c(w.get('dlit'))}</td>"
+            f"<td style='font-size:12px;color:#777'>{note}</td></tr>")
+    return "".join(out) or "<tr><td colspan='8'>нет данных</td></tr>"
+
+
+_KOIKI_NOTE = ("Занятость = койко-дни ÷ (число коек × дни периода). Значение выше 100 % "
+               "по круглосуточным койкам означает, что фактически развёрнуто больше коек, "
+               "чем указано в справочнике Промед, — просьба проверить и актуализировать коечный фонд. "
+               "Оборот койки = выписано ÷ коек; средняя длительность = койко-дни ÷ выписано.")
+
+
+def build_koiki_resp_html(resp, wards, days, rep_period="", custom=""):
+    """Занятость коек по отделениям конкретного ответственного (заведующего)."""
+    per = f" за период <b>{rep_period}</b>" if rep_period else ""
+    who = f"Уважаемый(ая) {resp}!" if resp else "Уважаемый коллега!"
+    return f"""<html><body style="font-family:Arial,sans-serif;font-size:14px;color:#222">
+<p>{who}</p>
+<p>Показатели <b>занятости коек</b> по закреплённым за вами отделениям{per} (в периоде {days} дн.).</p>
+<table border="1" cellspacing="0" cellpadding="5" style="border-collapse:collapse;font-size:13px">
+<tr style="background:#1e3a5f;color:#fff"><th>Отделение</th><th>Коек</th><th>Койко-дни</th>
+<th>Занятость</th><th>Оборот</th><th>Ср. длит.</th><th>Примечание</th></tr>
+{_koiki_rows_html(wards)}
+</table>
+<p style="color:#555;font-size:12px">{_KOIKI_NOTE}</p>
+{_custom_block(custom)}
+<p style="color:#666;font-size:12px">Сформировано автоматически. Отдел информационных технологий.</p>
+</body></html>"""
+
+
+def build_koiki_overall_html(wards, totals, rep_period="", custom=""):
+    """Общий сводный отчёт по занятости коек — ответственному за коечный фонд."""
+    per = f" за период <b>{rep_period}</b>" if rep_period else ""
+    t = totals
+    def line(lbl, a):
+        z = "—" if a["zan"] is None else f"{a['zan']}%"
+        return f"<tr><td>{lbl}</td><td style='text-align:right'>{a['koek']}</td><td style='text-align:right'>{a['kd']}</td><td style='text-align:right'><b>{z}</b></td></tr>"
+    return f"""<html><body style="font-family:Arial,sans-serif;font-size:14px;color:#222">
+<p>Сводный отчёт по <b>занятости коечного фонда</b>{per} (в периоде {t['days']} дн.).</p>
+<table border="1" cellspacing="0" cellpadding="5" style="border-collapse:collapse;font-size:13px;margin-bottom:10px">
+<tr style="background:#eef"><th>Категория</th><th>Коек</th><th>Койко-дни</th><th>Занятость</th></tr>
+{line('Всего по учреждению', t['all'])}
+{line('Круглосуточные койки', t['kruglo'])}
+{line('Дневные стационары (места)', t['day'])}
+</table>
+<table border="1" cellspacing="0" cellpadding="5" style="border-collapse:collapse;font-size:13px">
+<tr style="background:#1e3a5f;color:#fff"><th>Отделение</th><th>Ответственный</th><th>Коек</th><th>Койко-дни</th>
+<th>Занятость</th><th>Оборот</th><th>Ср. длит.</th><th>Примечание</th></tr>
+{_koiki_rows_html(wards, show_resp=True)}
+</table>
+<p style="color:#555;font-size:12px">{_KOIKI_NOTE}</p>
+{_custom_block(custom)}
+<p style="color:#666;font-size:12px">Сформировано автоматически. Отдел информационных технологий.</p>
+</body></html>"""
+
+
 def _batch_cfg():
     def _i(key, default):
         try:

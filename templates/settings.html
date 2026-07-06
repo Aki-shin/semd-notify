@@ -32,6 +32,9 @@
   <p class="muted small" style="margin:12px 0 2px"><b>За ФАП</b> {% if resp.RESP_FAP_EMAIL %}<span class="pill ok">задан</span>{% else %}<span class="pill warn">не задан</span>{% endif %} — отчёт со страницы <a href="{{ url_for('fap') }}">ФАП</a> (ФАП без интернета, неполное заполнение ЭМК):</p>
   <label>ФИО / должность <input name="RESP_FAP_NAME" value="{{ resp.RESP_FAP_NAME }}" placeholder="напр. ответственный за ФАП"></label>
   <label>E-mail <input type="email" name="RESP_FAP_EMAIL" value="{{ resp.RESP_FAP_EMAIL }}" placeholder="fap-resp@med.permkrai.ru"></label>
+  <p class="muted small" style="margin:12px 0 2px"><b>За коечный фонд</b> {% if resp.RESP_KOIKI_EMAIL %}<span class="pill ok">задан</span>{% else %}<span class="pill warn">не задан</span>{% endif %} — сводный отчёт по занятости коек со страницы <a href="{{ url_for('koiki') }}">Койки</a> (ответственный за всё):</p>
+  <label>ФИО / должность <input name="RESP_KOIKI_NAME" value="{{ resp.RESP_KOIKI_NAME }}" placeholder="напр. зам. главврача по мед. части"></label>
+  <label>E-mail <input type="email" name="RESP_KOIKI_EMAIL" value="{{ resp.RESP_KOIKI_EMAIL }}" placeholder="koiki-resp@med.permkrai.ru"></label>
   <div><button type="submit">Сохранить ответственных</button></div>
 </form>
 
@@ -48,6 +51,8 @@
     <textarea name="CUSTOM_ERR" rows="3" placeholder="напр.: Прошу отработать ошибки и сообщить о результатах.">{{ custom.CUSTOM_ERR }}</textarea></label>
   <label>Отчёт ответственному за ФАП
     <textarea name="CUSTOM_FAP" rows="3" placeholder="напр.: Прошу обеспечить заполнение ЭМК по всем посещениям.">{{ custom.CUSTOM_FAP }}</textarea></label>
+  <label>Письма по занятости коек (ответственным и сводный)
+    <textarea name="CUSTOM_KOIKI" rows="3" placeholder="напр.: Прошу проанализировать занятость и при отклонениях представить пояснения.">{{ custom.CUSTOM_KOIKI }}</textarea></label>
   <div><button type="submit">Сохранить текст писем</button></div>
 </form>
 

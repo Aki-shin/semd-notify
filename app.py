@@ -43,11 +43,12 @@ RTYPE_RU = {
     "docerr": "Ошибки по видам документов",
     "fedkpi": "Выполнение фед. показателей",
     "status": "Статусы документов",
+    "koiki": "Койки — занятость (стационар)",
     "state": "Состояние по ЭМД",
     "unknown": "Не распознан",
 }
 LOADABLE = ("vrachi", "debts", "flk", "mo", "tvsp", "notrans",
-            "fap", "vidy", "docerr", "fedkpi", "status")
+            "fap", "vidy", "docerr", "fedkpi", "status", "koiki")
 
 # Справочник поддерживаемых отчётов: точное наименование (как в ЕИСЗ ПК) и что даёт в системе.
 REPORTS_INFO = [
@@ -104,6 +105,11 @@ REPORTS_INFO = [
      "gives": "По фельдшерам ФАП: посещения, % заполнения ЭМК, рецепты, ЭЛН, подключение к интернету. "
               "Видно «молчащие» ФАПы и точки без интернета.",
      "section": "Страница «ФАП»"},
+    {"key": "koiki",
+     "title": "Сводная ведомость движения пациентов и коечного фонда (стационар/дневной)",
+     "gives": "Занятость коек по отделениям: койко-дни, занятость %, оборот, средняя длительность. "
+              "Рассылка ответственным за отделения и сводный отчёт ответственному за коечный фонд.",
+     "section": "Страница «Койки»"},
 ]
 
 
@@ -496,6 +502,75 @@ def fap_report_send():
     return redirect(url_for("fap"))
 
 
+@app.route("/koiki")
+def koiki():
+    kname, kemail = mailer.koiki_recipient()
+    return render_template("koiki.html",
+                           wards=storage.koiki_list(),
+                           totals=storage.koiki_totals(),
+                           groups=storage.koiki_groups(),
+                           resp_name=kname, resp_email=kemail,
+                           period=storage.report_period("koiki"),
+                           log=storage.send_log(30))
+
+
+@app.route("/koiki/save_map", methods=["POST"])
+def koiki_save_map():
+    resp_items = {k[len("resp__"):]: v for k, v in request.form.items() if k.startswith("resp__")}
+    email_items = {k[len("email__"):]: v for k, v in request.form.items() if k.startswith("email__")}
+    ods = set(resp_items) | set(email_items)
+    for od in ods:
+        storage.set_koiki_resp(od, resp_items.get(od, ""), email_items.get(od, ""))
+    flash(f"Сохранено сопоставление отделений ({len(ods)}).", "ok" if ods else "warn")
+    return redirect(url_for("koiki"))
+
+
+@app.route("/koiki/send", methods=["POST"])
+def koiki_send():
+    selected = {e.lower() for e in request.form.getlist("grp")}
+    if not selected:
+        flash("Не выбрано ни одного ответственного.", "warn")
+        return redirect(url_for("koiki"))
+    rep = storage.report_period("koiki")
+    days = storage.koiki_totals()["days"]
+    cust = appconfig.get("CUSTOM_KOIKI", "")
+    items = []
+    for g in storage.koiki_groups():
+        if g["email"].lower() not in selected:
+            continue
+        subj = "Занятость коек по отделениям" + (f" (период {rep})" if rep else "")
+        items.append({"to": g["email"], "log_vrach": f"[койки] {g['resp'] or g['email']}",
+                      "cnt": len(g["wards"]), "subject": subj,
+                      "html": mailer.build_koiki_resp_html(g["resp"], g["wards"], days, rep, cust)})
+    if items:
+        _dispatch_batch(items, "koiki")
+    dry = " (DRYRUN)" if mailer.is_dryrun() else ""
+    flash(f"Запущена рассылка ответственным за отделения: {len(items)} писем.{dry}",
+          "ok" if items else "warn")
+    return redirect(url_for("koiki"))
+
+
+@app.route("/koiki/report/send", methods=["POST"])
+def koiki_report_send():
+    name, email = mailer.koiki_recipient()
+    if not email:
+        flash("Не задан e-mail ответственного за коечный фонд — укажите в Настройках.", "warn")
+        return redirect(url_for("koiki"))
+    wards = storage.koiki_list()
+    if not wards:
+        flash("Отчёт по койкам не загружен.", "warn")
+        return redirect(url_for("koiki"))
+    rep = storage.report_period("koiki")
+    html = mailer.build_koiki_overall_html(wards, storage.koiki_totals(), rep,
+                                           appconfig.get("CUSTOM_KOIKI", ""))
+    subj = "Сводный отчёт: занятость коечного фонда" + (f" — период {rep}" if rep else "")
+    ok, msg = mailer.send(email, subj, html)
+    storage.log_send(f"[койки-свод] {name or email}", email, len(wards), msg)
+    dry = " (DRYRUN)" if mailer.is_dryrun() else ""
+    flash(f"Сводный отчёт по койкам ({email}): {msg}.{dry}", "ok" if ok else "warn")
+    return redirect(url_for("koiki"))
+
+
 @app.route("/settings", methods=["GET", "POST"])
 def settings():
     if request.method == "POST":
@@ -536,11 +611,12 @@ def settings():
                 appconfig.set("SMTP_PASS", pw)
             flash("Настройки почты сохранены.", "ok")
         elif action == "save_resp":
-            for k in ("RESP_NAME", "RESP_EMAIL", "RESP_FAP_NAME", "RESP_FAP_EMAIL"):
+            for k in ("RESP_NAME", "RESP_EMAIL", "RESP_FAP_NAME", "RESP_FAP_EMAIL",
+                      "RESP_KOIKI_NAME", "RESP_KOIKI_EMAIL"):
                 appconfig.set(k, (request.form.get(k) or "").strip())
             flash("Ответственные сохранены.", "ok")
         elif action == "save_custom":
-            for k in ("CUSTOM_DEBT", "CUSTOM_DEPT", "CUSTOM_ERR", "CUSTOM_FAP"):
+            for k in ("CUSTOM_DEBT", "CUSTOM_DEPT", "CUSTOM_ERR", "CUSTOM_FAP", "CUSTOM_KOIKI"):
                 appconfig.set(k, (request.form.get(k) or "").strip())
             flash("Дополнительный текст писем сохранён.", "ok")
         elif action == "save_ipa":
@@ -563,9 +639,10 @@ def settings():
     smtp["SMTP_BATCH_SIZE"] = appconfig.get("SMTP_BATCH_SIZE", "25")
     smtp["SMTP_BATCH_PAUSE"] = appconfig.get("SMTP_BATCH_PAUSE", "30")
     resp = {k: appconfig.get(k, "") for k in
-            ("RESP_NAME", "RESP_EMAIL", "RESP_FAP_NAME", "RESP_FAP_EMAIL")}
+            ("RESP_NAME", "RESP_EMAIL", "RESP_FAP_NAME", "RESP_FAP_EMAIL",
+             "RESP_KOIKI_NAME", "RESP_KOIKI_EMAIL")}
     custom = {k: appconfig.get(k, "") for k in
-              ("CUSTOM_DEBT", "CUSTOM_DEPT", "CUSTOM_ERR", "CUSTOM_FAP")}
+              ("CUSTOM_DEBT", "CUSTOM_DEPT", "CUSTOM_ERR", "CUSTOM_FAP", "CUSTOM_KOIKI")}
     ipacfg = {k: appconfig.get(k, "") for k in ("IPA_LDAP_URI", "IPA_BASE_DN", "IPA_BIND_DN")}
     ipacfg["IPA_AUTOSYNC"] = appconfig.get_bool("IPA_AUTOSYNC", False)
     ipacfg["IPA_SYNC_HOURS"] = appconfig.get("IPA_SYNC_HOURS", "24")

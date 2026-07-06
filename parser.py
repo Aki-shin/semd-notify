@@ -18,6 +18,7 @@ CELL = f"{{{SS}}}Cell"
 DATA = f"{{{SS}}}Data"
 ROW = f"{{{SS}}}Row"
 IDX = f"{{{SS}}}Index"
+MERGE = f"{{{SS}}}MergeAcross"
 
 
 def _rows(path):
@@ -36,6 +37,28 @@ def _rows(path):
     return out
 
 
+def _rows_merged(path):
+    """Как _rows, но учитывает объединённые ячейки (ss:MergeAcross): значение кладётся на
+    СТАРТОВУЮ колонку диапазона, а следующая ячейка сдвигается на ширину объединения.
+    Нужно для отчётов с многоуровневой шапкой и объединёнными ячейками в данных
+    (напр., «Сводная ведомость движения пациентов и коечного фонда»)."""
+    out = []
+    for ev, el in ET.iterparse(path, events=("end",)):
+        if el.tag == ROW:
+            cells, col = {}, 1
+            for c in el.findall(CELL):
+                i = c.get(IDX)
+                if i:
+                    col = int(i)
+                d = c.find(DATA)
+                cells[col] = (d.text or "").strip() if d is not None else ""
+                span = c.get(MERGE)
+                col += (int(span) if span else 0) + 1
+            out.append(cells)
+            el.clear()
+    return out
+
+
 def _num(x):
     try:
         return float(str(x).replace(" ", "").replace(",", "."))
@@ -45,6 +68,10 @@ def _num(x):
 
 def detect_type(rows):
     """Определяет тип отчёта по тексту первых строк."""
+    # «Коечный фонд» — заголовок в объединённой ячейке (не в колонке 1), ищем по всем ячейкам шапки
+    allhead = " ".join(v for r in rows[:8] for v in r.values() if v).lower()
+    if "коечного фонда" in allhead or "движения пациентов и коечного" in allhead:
+        return "koiki"
     head = " ".join(
         (r.get(1, "") or "") for r in rows[:6]
     ).lower()
@@ -122,13 +149,29 @@ def max_period(period_texts):
     return lo.strftime("%d.%m.%Y") if lo == hi else f"{lo.strftime('%d.%m.%Y')} — {hi.strftime('%d.%m.%Y')}"
 
 
+def period_days(text):
+    """Число календарных дней в периоде (включительно) — знаменатель для занятости коек.
+    По умолчанию 7 (неделя), если период не распознан или задан одной датой."""
+    np = norm_period(text or "")
+    if not np:
+        return 7
+    parts = np.split(" — ")
+    s = _date(parts[0])
+    e = _date(parts[-1]) if len(parts) > 1 else None
+    if s and e:
+        return (e - s).days + 1
+    return 7
+
+
 def parse(path):
     """Главная функция. Возвращает dict с типом, периодом и записями."""
     rows = _rows(path)
     rtype = detect_type(rows)
     res = {"type": rtype, "period": _period(rows), "rows": len(rows), "records": []}
 
-    if rtype == "vrachi":
+    if rtype == "koiki":
+        res["records"] = _parse_koiki(_rows_merged(path))
+    elif rtype == "vrachi":
         res["records"] = _parse_vrachi(rows)
     elif rtype == "debts":
         res["records"] = _parse_debts(rows)
@@ -393,5 +436,39 @@ def _parse_tvsp(rows):
             "tvsp": name.split("\n")[0].strip(),
             "total": int(total),
             "loaded": int(_num(r.get(5, "")) or 0),
+        })
+    return out
+
+
+def _parse_koiki(rows):
+    """«Сводная ведомость движения пациентов и коечного фонда» (стационары/дневные).
+    rows — из _rows_merged (учтены объединённые ячейки шапки). Колонки по графам формы:
+      c1 наименование, c4 число коек (гр.3), c8 состояло на начало (гр.6),
+      c9 поступило (гр.7), c18 выписано (гр.14), c23 умерло (гр.18),
+      c27 состояло на конец (гр.21), c28 проведено пациентами койко-дней (гр.22).
+    Занятость и производные (оборот, длительность) считаются в storage — здесь только сырьё.
+    Койко-дни берём как есть из отчёта (это фактическая сумма дней каждого пациента)."""
+    out = []
+    for r in rows:
+        name = (r.get(1, "") or "").strip()
+        if not name:
+            continue
+        low = name.lower()
+        if name in ("1", "2") or low.startswith(("итого", "наименование")):
+            continue
+        koek = _num(r.get(4, ""))
+        kd = _num(r.get(28, ""))
+        if koek is None and kd is None:  # строка шапки/служебная — не данные
+            continue
+        out.append({
+            "otdelenie": name.split("\n")[0].strip(),
+            "koek": int(koek or 0),
+            "kd": int(kd or 0),
+            "nach": int(_num(r.get(8, "")) or 0),
+            "postup": int(_num(r.get(9, "")) or 0),
+            "vyp": int(_num(r.get(18, "")) or 0),
+            "umer": int(_num(r.get(23, "")) or 0),
+            "kon": int(_num(r.get(27, "")) or 0),
+            "day": 1 if ("дневн" in low or "пациенто" in low) else 0,
         })
     return out

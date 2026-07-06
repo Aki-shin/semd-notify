@@ -47,6 +47,10 @@ def init():
             doc_type TEXT, not_found INTEGER, validation INTEGER, position INTEGER, total INTEGER);
         CREATE TABLE IF NOT EXISTS fedkpi(k TEXT PRIMARY KEY, v REAL);
         CREATE TABLE IF NOT EXISTS status(status TEXT, count INTEGER);
+        CREATE TABLE IF NOT EXISTS koiki(
+            otdelenie TEXT PRIMARY KEY, koek INTEGER, kd INTEGER, nach INTEGER,
+            postup INTEGER, vyp INTEGER, umer INTEGER, kon INTEGER, day INTEGER);
+        CREATE TABLE IF NOT EXISTS koiki_map(otdelenie TEXT PRIMARY KEY, resp TEXT, email TEXT);
         CREATE TABLE IF NOT EXISTS period_files(
             period TEXT, rtype TEXT, filename TEXT, uploaded_at TEXT, data BLOB,
             PRIMARY KEY(period, rtype));
@@ -127,6 +131,11 @@ def replace_report(rtype, filename, period, nrows, records):
         elif rtype == "status":
             c.execute("DELETE FROM status")
             c.executemany("INSERT INTO status VALUES(:status,:count)", records)
+        elif rtype == "koiki":
+            c.execute("DELETE FROM koiki")
+            c.executemany(
+                "INSERT OR REPLACE INTO koiki(otdelenie,koek,kd,nach,postup,vyp,umer,kon,day) "
+                "VALUES(:otdelenie,:koek,:kd,:nach,:postup,:vyp,:umer,:kon,:day)", records)
 
 
 def meta_all():
@@ -154,7 +163,7 @@ def reset_reports():
     init()
     with _conn() as c:
         for t in ("meta", "vrachi", "debts", "errors", "mo_funnel", "tvsp", "notrans",
-                  "fap", "vidy", "docerr", "fedkpi", "status"):
+                  "fap", "vidy", "docerr", "fedkpi", "status", "koiki"):
             c.execute(f"DELETE FROM {t}")
 
 
@@ -233,6 +242,7 @@ RTYPE_TABLE = {
     "vrachi": "vrachi", "debts": "debts", "flk": "errors", "mo": "mo_funnel",
     "tvsp": "tvsp", "notrans": "notrans", "fap": "fap", "vidy": "vidy",
     "docerr": "docerr", "fedkpi": "fedkpi", "status": "status",
+    "koiki": "koiki",
 }
 
 
@@ -464,6 +474,79 @@ def tvsp_list():
         r["pct"] = round(100 * (r["loaded"] or 0) / r["total"], 1) if r["total"] else 0.0
     rows.sort(key=lambda x: (x["pct"], -x["total"]))
     return rows
+
+
+# --- Коечный фонд (занятость коек в стационарах) ---
+
+def _koiki_days():
+    import parser
+    return parser.period_days(report_period("koiki") or "")
+
+
+def koiki_list():
+    """Отделения стационара с рассчитанными показателями:
+      zan     — занятость, % = койко-дни / (коек × дни периода) × 100;
+      oborot  — оборот койки = выписано / коек;
+      dlit    — средняя длительность = койко-дни / выписано;
+      overload— койко-дни или пациенты превышают коечный фонд (коек в справочнике занижено);
+      no_beds — коек в отчёте 0, а движение есть (койки не заведены в справочнике).
+    Плюс ответственный (resp/email) из koiki_map. Сортировка по убыванию занятости."""
+    days = _koiki_days()
+    with _conn() as c:
+        rows = [dict(r) for r in c.execute("SELECT * FROM koiki")]
+        rmap = {r["otdelenie"]: dict(r) for r in c.execute("SELECT * FROM koiki_map")}
+    for r in rows:
+        koek, kd, vyp = r["koek"], r["kd"], r["vyp"]
+        r["zan"] = round(kd / (koek * days) * 100, 1) if koek else None
+        r["oborot"] = round(vyp / koek, 1) if koek else None
+        r["dlit"] = round(kd / vyp, 1) if vyp else None
+        r["overload"] = bool(koek and (kd > koek * days or r["kon"] > koek))
+        r["no_beds"] = koek == 0
+        m = rmap.get(r["otdelenie"], {})
+        r["resp"], r["email"] = m.get("resp", ""), m.get("email", "")
+    rows.sort(key=lambda x: (x["zan"] is None, -(x["zan"] or 0)))
+    return rows
+
+
+def koiki_totals():
+    """Итоги по учреждению: всего / круглосуточные / дневные (места считаем отдельно)."""
+    days = _koiki_days()
+    with _conn() as c:
+        rows = [dict(r) for r in c.execute("SELECT koek, kd, day FROM koiki")]
+
+    def agg(sel):
+        k = sum(r["koek"] for r in rows if sel(r))
+        d = sum(r["kd"] for r in rows if sel(r))
+        return {"koek": k, "kd": d, "zan": round(d / (k * days) * 100, 1) if k else None}
+    return {"days": days, "n": len(rows),
+            "all": agg(lambda r: True),
+            "kruglo": agg(lambda r: not r["day"]),
+            "day": agg(lambda r: r["day"])}
+
+
+def koiki_groups():
+    """Отделения, сгруппированные по ответственному (по e-mail) — для рассылки по подразделениям.
+    Отделения без заданного адреса в группы не попадают (рассылать некому)."""
+    days = _koiki_days()
+    groups = {}
+    for w in koiki_list():
+        email = (w["email"] or "").strip()
+        if not email:
+            continue
+        g = groups.setdefault(email.lower(),
+                              {"resp": w["resp"], "email": email, "wards": [], "koek": 0, "kd": 0})
+        g["wards"].append(w)
+        g["koek"] += w["koek"]
+        g["kd"] += w["kd"]
+    for g in groups.values():
+        g["zan"] = round(g["kd"] / (g["koek"] * days) * 100, 1) if g["koek"] else None
+    return sorted(groups.values(), key=lambda x: x["resp"] or x["email"])
+
+
+def set_koiki_resp(otdelenie, resp, email):
+    with _conn() as c:
+        c.execute("INSERT OR REPLACE INTO koiki_map(otdelenie,resp,email) VALUES(?,?,?)",
+                  (otdelenie, (resp or "").strip(), (email or "").strip()))
 
 
 def dept_summary():
