@@ -545,7 +545,6 @@ def koiki():
     return render_template("koiki.html",
                            wards=storage.koiki_list(),
                            totals=storage.koiki_totals(),
-                           groups=storage.koiki_groups(),
                            resp=storage.resp_list("koiki"),
                            period=storage.report_period("koiki"))
 
@@ -563,17 +562,29 @@ def koiki_save_map():
 
 @app.route("/koiki/send", methods=["POST"])
 def koiki_send():
-    selected = {e.lower() for e in request.form.getlist("grp")}
-    if not selected:
-        flash("Не выбрано ни одного ответственного.", "warn")
+    picked = request.form.getlist("pick")
+    if not picked:
+        flash("Не выбрано ни одного отделения.", "warn")
         return redirect(url_for("koiki"))
     rep = storage.report_period("koiki")
     days = storage.koiki_totals()["days"]
     cust = appconfig.get("CUSTOM_KOIKI", "")
-    items = []
-    for g in storage.koiki_groups():
-        if g["email"].lower() not in selected:
+    wmap = {w["otdelenie"]: w for w in storage.koiki_list()}
+    # группируем выбранные отделения по e-mail (инлайн из формы) — одному ответственному одно письмо
+    groups, noaddr = {}, 0
+    for od in picked:
+        w = wmap.get(od)
+        if not w:
             continue
+        email = (request.form.get(f"email__{od}") or "").strip()
+        if not email:
+            noaddr += 1
+            continue
+        resp = (request.form.get(f"resp__{od}") or "").strip()
+        g = groups.setdefault(email.lower(), {"email": email, "resp": resp, "wards": []})
+        g["wards"].append(w)
+    items = []
+    for g in groups.values():
         subj = "Занятость коек по отделениям" + (f" (период {rep})" if rep else "")
         items.append({"to": g["email"], "log_vrach": f"[стационары] {g['resp'] or g['email']}",
                       "cnt": len(g["wards"]), "subject": subj,
@@ -581,7 +592,8 @@ def koiki_send():
     if items:
         _dispatch_batch(items, "koiki")
     dry = " (DRYRUN)" if mailer.is_dryrun() else ""
-    flash(f"Запущена рассылка ответственным за отделения: {len(items)} писем.{dry}",
+    flash(f"Запущена рассылка: {len(items)} писем ({len(picked)} отд.)."
+          + (f" Без почты пропущено: {noaddr}." if noaddr else "") + dry,
           "ok" if items else "warn")
     return redirect(url_for("koiki"))
 

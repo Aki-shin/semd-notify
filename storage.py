@@ -535,25 +535,6 @@ def koiki_totals():
             "day": agg(lambda r: r["day"])}
 
 
-def koiki_groups():
-    """Отделения, сгруппированные по ответственному (по e-mail) — для рассылки по подразделениям.
-    Отделения без заданного адреса в группы не попадают (рассылать некому)."""
-    days = _koiki_days()
-    groups = {}
-    for w in koiki_list():
-        email = (w["email"] or "").strip()
-        if not email:
-            continue
-        g = groups.setdefault(email.lower(),
-                              {"resp": w["resp"], "email": email, "wards": [], "koek": 0, "kd": 0})
-        g["wards"].append(w)
-        g["koek"] += w["koek"]
-        g["kd"] += w["kd"]
-    for g in groups.values():
-        g["zan"] = round(g["kd"] / (g["koek"] * days) * 100, 1) if g["koek"] else None
-    return sorted(groups.values(), key=lambda x: x["resp"] or x["email"])
-
-
 def set_koiki_resp(otdelenie, resp, email):
     with _conn() as c:
         c.execute("INSERT OR REPLACE INTO koiki_map(otdelenie,resp,email) VALUES(?,?,?)",

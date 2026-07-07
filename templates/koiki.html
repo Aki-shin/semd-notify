@@ -27,17 +27,24 @@
 <p class="muted small"><b style="color:#2563eb">Синим</b> — занятость выше 100% (план перевыполнен);
 <b style="color:#c0392b">красным</b> — ниже 80% (недозагрузка). Перевыполнили план: <b>{{ totals.over }}</b> отд.</p>
 
-<!-- Отделения: показатели + назначение ответственных -->
+<!-- Отделения: занятость, ответственные и рассылка (одной таблицей, как «Отделения») -->
 <form method="post" action="{{ url_for('koiki_save_map') }}">
   <div class="toolbar">
-    <h2 style="margin:0">Отделения и занятость</h2>
-    <button type="submit">💾 Сохранить ответственных</button>
+    <h2 style="margin:0">Отделения, занятость и рассылка</h2>
+    <div style="display:flex;gap:8px;align-items:center">
+      <label class="small"><input type="checkbox" id="all"> выбрать все с почтой</label>
+      <button type="submit" formaction="{{ url_for('koiki_save_map') }}">💾 Сохранить</button>
+      <button type="submit" formaction="{{ url_for('koiki_send') }}">✉ Отправить выбранным</button>
+    </div>
   </div>
+  <p class="muted small">Отметьте отделения и нажмите «Отправить» — каждому ответственному уйдёт одно письмо
+  с занятостью только его отделений (группировка по почте). «Сохранить» запоминает ответственных на следующие недели.</p>
   <table>
-    <tr><th>Отделение</th><th>Коек</th><th>Койко-дни</th><th>Занятость</th><th>Оборот</th>
+    <tr><th></th><th>Отделение</th><th>Коек</th><th>Койко-дни</th><th>Занятость</th><th>Оборот</th>
         <th>Ср.&nbsp;длит.</th><th>Примечание</th><th>Ответственный</th><th>Почта</th></tr>
     {% for w in wards %}
     <tr>
+      <td><input type="checkbox" name="pick" value="{{ w.otdelenie }}" class="pick"></td>
       <td>{{ w.otdelenie }}{% if w.day %} <span class="pill" title="Дневной стационар — места работают в 2 смены">дн.</span>{% endif %}</td>
       <td class="r">{{ w.koek }}</td>
       <td class="r">{{ w.kd }}</td>
@@ -57,33 +64,12 @@
   </table>
 </form>
 
-<!-- Рассылка по ответственным (группировка по почте) -->
-<form method="post" action="{{ url_for('koiki_send') }}">
-  <div class="toolbar">
-    <h2 style="margin:0">Рассылка ответственным за отделения</h2>
-    <label><input type="checkbox" id="all"> выбрать всех</label>
-    <button type="submit">✉ Отправить выбранным</button>
-  </div>
-  <p class="muted small">Каждому ответственному уйдёт письмо с занятостью только его отделений.
-  Ответственные берутся из таблицы выше — сначала задайте почту и нажмите «Сохранить».</p>
-  <table>
-    <tr><th></th><th>Ответственный</th><th>Почта</th><th>Отделений</th><th>Коек</th><th>Занятость</th></tr>
-    {% for g in groups %}
-    <tr>
-      <td><input type="checkbox" name="grp" value="{{ g.email }}" class="pick"></td>
-      <td>{{ g.resp or '—' }}</td>
-      <td>{{ g.email }}</td>
-      <td class="r">{{ g.wards|length }}</td>
-      <td class="r">{{ g.koek }}</td>
-      <td class="r">{{ (g.zan ~ '%') if g.zan is not none else '—' }}</td>
-    </tr>
-    {% else %}<tr><td colspan="6" class="empty">Назначьте отделениям ответственных с почтой и сохраните.</td></tr>{% endfor %}
-  </table>
-</form>
-
 <script>
 document.getElementById('all').addEventListener('change', function(e){
-  document.querySelectorAll('.pick:not([disabled])').forEach(c => c.checked = e.target.checked);
+  document.querySelectorAll('table tr').forEach(function(tr){
+    var pick = tr.querySelector('.pick'), em = tr.querySelector('input[type=email]');
+    if(pick && em) pick.checked = e.target.checked && em.value.trim() !== '';
+  });
 });
 </script>
 {% else %}
