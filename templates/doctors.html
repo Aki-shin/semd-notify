@@ -36,22 +36,6 @@
   </table>
 </form>
 
-<div class="toolbar">
-  <h2 style="margin:0">Журнал рассылки <span id="sendline" class="small muted"></span></h2>
-  <form method="post" action="{{ url_for('send_cancel') }}" id="cancelform" style="margin:0;display:none">
-    <button type="submit" class="danger">⛔ Отменить рассылку</button>
-  </form>
-</div>
-<table>
-  <thead><tr><th>Время</th><th>Врач</th><th>Почта</th><th>Док-в</th><th>Статус</th></tr></thead>
-  <tbody id="sendlog">
-  {% for l in log %}
-  <tr><td>{{ l.ts }}</td><td>{{ l.vrach }}</td><td>{{ l.email }}</td>
-      <td class="r">{{ l.cnt }}</td><td>{{ l.status }}</td></tr>
-  {% else %}<tr><td colspan="5" class="empty">пока пусто</td></tr>{% endfor %}
-  </tbody>
-</table>
-
 <script>
 document.getElementById('all').addEventListener('change', function(e){
   document.querySelectorAll('.pick:not([disabled])').forEach(c => c.checked = e.target.checked);

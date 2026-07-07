@@ -158,16 +158,6 @@ def build_report_html(data, custom=""):
 </body></html>"""
 
 
-def report_recipient():
-    """(имя, e-mail) ответственного за исправление ошибок."""
-    return cfg.get("RESP_NAME", ""), cfg.get("RESP_EMAIL", "")
-
-
-def fap_recipient():
-    """(имя, e-mail) ответственного за ФАП — отдельный человек."""
-    return cfg.get("RESP_FAP_NAME", ""), cfg.get("RESP_FAP_EMAIL", "")
-
-
 def build_fap_report_html(s, rows, rep_period="", custom=""):
     """Полная статистика работы фельдшеров ФАП в ЭМК — ответственному за ФАП."""
     def td(v):
@@ -198,11 +188,6 @@ def build_fap_report_html(s, rows, rep_period="", custom=""):
 {_custom_block(custom)}
 <p style="color:#666;font-size:12px">Сформировано автоматически системой мониторинга СЭМД.</p>
 </body></html>"""
-
-
-def koiki_recipient():
-    """(имя, e-mail) ответственного за коечный фонд (общий сводный отчёт)."""
-    return cfg.get("RESP_KOIKI_NAME", ""), cfg.get("RESP_KOIKI_EMAIL", "")
 
 
 def _koiki_rows_html(wards, show_resp=False):

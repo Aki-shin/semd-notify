@@ -51,6 +51,7 @@ def init():
             otdelenie TEXT PRIMARY KEY, koek INTEGER, kd INTEGER, nach INTEGER,
             postup INTEGER, vyp INTEGER, umer INTEGER, kon INTEGER, day INTEGER);
         CREATE TABLE IF NOT EXISTS koiki_map(otdelenie TEXT PRIMARY KEY, resp TEXT, email TEXT);
+        CREATE TABLE IF NOT EXISTS report_resp(report TEXT, email TEXT, name TEXT DEFAULT '', PRIMARY KEY(report, email));
         CREATE TABLE IF NOT EXISTS period_files(
             period TEXT, rtype TEXT, filename TEXT, uploaded_at TEXT, data BLOB,
             PRIMARY KEY(period, rtype));
@@ -557,6 +558,28 @@ def set_koiki_resp(otdelenie, resp, email):
     with _conn() as c:
         c.execute("INSERT OR REPLACE INTO koiki_map(otdelenie,resp,email) VALUES(?,?,?)",
                   (otdelenie, (resp or "").strip(), (email or "").strip()))
+
+
+# --- Получатели сводных отчётов (несколько на отчёт). report: 'err' | 'fap' | 'koiki' ---
+
+def resp_list(report):
+    with _conn() as c:
+        return [dict(r) for r in c.execute(
+            "SELECT email, name FROM report_resp WHERE report=? ORDER BY name, email", (report,))]
+
+
+def resp_add(report, email, name=""):
+    email = (email or "").strip()
+    if not email:
+        return
+    with _conn() as c:
+        c.execute("INSERT OR REPLACE INTO report_resp(report,email,name) VALUES(?,?,?)",
+                  (report, email, (name or "").strip()))
+
+
+def resp_remove(report, email):
+    with _conn() as c:
+        c.execute("DELETE FROM report_resp WHERE report=? AND email=?", (report, (email or "").strip()))
 
 
 def dept_summary():

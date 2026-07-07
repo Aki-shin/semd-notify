@@ -4,13 +4,9 @@
 <p class="muted">Заполнение электронной медкарты по фельдшерско-акушерским пунктам: посещения, % оформления,
 рецепты, ЭЛН. «Молчащие» ФАПы и точки без интернета — точки роста по показателям.</p>
 
-<div class="toolbar">
-  <div class="muted">Ответственный:
-    {% if resp_email %}<b>{{ resp_name or resp_email }}</b> ({{ resp_email }}){% else %}<span class="pill warn">не задан</span> — укажите в <a href="{{ url_for('settings') }}">Настройках</a>{% endif %}</div>
-  <form method="post" action="{{ url_for('fap_report_send') }}">
-    <button type="submit" {{ 'disabled' if not (resp_email and s) }}>✉ Отправить отчёт по ФАП ответственному</button>
-  </form>
-</div>
+{% set report = 'fap' %}
+{% set send_action = url_for('fap_report_send') %}
+{% include "_resp_box.html" %}
 
 {% if s %}
 <section class="cards">

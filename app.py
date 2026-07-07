@@ -312,8 +312,7 @@ def export(rtype):
 def doctors():
     order = request.args.get("order", "nepodp")
     docs = storage.doctors(order)
-    return render_template("doctors.html", docs=docs, order=order,
-                           log=storage.send_log(30))
+    return render_template("doctors.html", docs=docs, order=order)
 
 
 # --- Единая очередь фоновой рассылки: задания идут по очереди (один воркер),
@@ -448,7 +447,7 @@ def doctor_detail(vrach):
 @app.route("/departments")
 def departments():
     return render_template("departments.html",
-                           depts=storage.dept_summary(), log=storage.send_log(30))
+                           depts=storage.dept_summary())
 
 
 @app.route("/departments/send", methods=["POST"])
@@ -485,9 +484,9 @@ def departments_send():
 
 @app.route("/report/send", methods=["POST"])
 def report_send():
-    name, email = mailer.report_recipient()
-    if not email:
-        flash("Не задан e-mail ответственного за исправление — укажите в Настройках.", "warn")
+    resp = storage.resp_list("err")
+    if not resp:
+        flash("Не заданы получатели отчёта об ошибках — добавьте на странице «Ошибки».", "warn")
         return redirect(request.referrer or url_for("errors"))
     rep = storage.report_period("vrachi")
     data = {"funnel": storage.funnel(),
@@ -498,34 +497,33 @@ def report_send():
             "period": rep}
     html = mailer.build_report_html(data, appconfig.get("CUSTOM_ERR", ""))
     subj = "Отчёт по проблемам РЭМД (ответственному за исправление)" + (f" — период {rep}" if rep else "")
-    ok, msg = mailer.send(email, subj, html)
-    storage.log_send(f"[отчёт] {name or email}", email, len(data["unassigned"]), msg)
+    to = ", ".join(r["email"] for r in resp)
+    ok, msg = mailer.send(to, subj, html)
+    storage.log_send("[отчёт] ошибки РЭМД", to, len(data["unassigned"]), msg)
     dry = " (DRYRUN)" if mailer.is_dryrun() else ""
-    flash(f"Отчёт ответственному ({email}): {msg}.{dry}", "ok" if ok else "warn")
+    flash(f"Отчёт об ошибках ({to}): {msg}.{dry}", "ok" if ok else "warn")
     return redirect(request.referrer or url_for("errors"))
 
 
 @app.route("/errors")
 def errors():
-    resp_name, resp_email = mailer.report_recipient()
     return render_template("errors.html", e=storage.errors_summary(),
                            unassigned=storage.unassigned_summary(),
                            docerr=storage.docerr_list(),
-                           resp_name=resp_name, resp_email=resp_email)
+                           resp=storage.resp_list("err"))
 
 
 @app.route("/fap")
 def fap():
-    resp_name, resp_email = mailer.fap_recipient()
     return render_template("fap.html", rows=storage.fap_list(), s=storage.fap_summary(),
-                           resp_name=resp_name, resp_email=resp_email)
+                           resp=storage.resp_list("fap"))
 
 
 @app.route("/fap/report/send", methods=["POST"])
 def fap_report_send():
-    name, email = mailer.fap_recipient()
-    if not email:
-        flash("Не задан e-mail ответственного — укажите в Настройках.", "warn")
+    resp = storage.resp_list("fap")
+    if not resp:
+        flash("Не заданы получатели отчёта по ФАП — добавьте на странице «ФАП».", "warn")
         return redirect(url_for("fap"))
     s = storage.fap_summary()
     if not s:
@@ -533,24 +531,23 @@ def fap_report_send():
         return redirect(url_for("fap"))
     rep = storage.report_period("fap")
     html = mailer.build_fap_report_html(s, storage.fap_list(), rep, appconfig.get("CUSTOM_FAP", ""))
-    subj = "Отчёт по работе ФАП в ЭМК (ответственному)" + (f" — период {rep}" if rep else "")
-    ok, msg = mailer.send(email, subj, html)
-    storage.log_send(f"[ФАП-отчёт] {name or email}", email, s.get("n", 0), msg)
+    subj = "Отчёт по работе ФАП в ЭМК" + (f" — период {rep}" if rep else "")
+    to = ", ".join(r["email"] for r in resp)
+    ok, msg = mailer.send(to, subj, html)
+    storage.log_send("[ФАП-отчёт]", to, s.get("n", 0), msg)
     dry = " (DRYRUN)" if mailer.is_dryrun() else ""
-    flash(f"Отчёт по ФАП ответственному ({email}): {msg}.{dry}", "ok" if ok else "warn")
+    flash(f"Отчёт по ФАП ({to}): {msg}.{dry}", "ok" if ok else "warn")
     return redirect(url_for("fap"))
 
 
 @app.route("/koiki")
 def koiki():
-    kname, kemail = mailer.koiki_recipient()
     return render_template("koiki.html",
                            wards=storage.koiki_list(),
                            totals=storage.koiki_totals(),
                            groups=storage.koiki_groups(),
-                           resp_name=kname, resp_email=kemail,
-                           period=storage.report_period("koiki"),
-                           log=storage.send_log(30))
+                           resp=storage.resp_list("koiki"),
+                           period=storage.report_period("koiki"))
 
 
 @app.route("/koiki/save_map", methods=["POST"])
@@ -578,7 +575,7 @@ def koiki_send():
         if g["email"].lower() not in selected:
             continue
         subj = "Занятость коек по отделениям" + (f" (период {rep})" if rep else "")
-        items.append({"to": g["email"], "log_vrach": f"[койки] {g['resp'] or g['email']}",
+        items.append({"to": g["email"], "log_vrach": f"[стационары] {g['resp'] or g['email']}",
                       "cnt": len(g["wards"]), "subject": subj,
                       "html": mailer.build_koiki_resp_html(g["resp"], g["wards"], days, rep, cust)})
     if items:
@@ -591,9 +588,9 @@ def koiki_send():
 
 @app.route("/koiki/report/send", methods=["POST"])
 def koiki_report_send():
-    name, email = mailer.koiki_recipient()
-    if not email:
-        flash("Не задан e-mail ответственного за коечный фонд — укажите в Настройках.", "warn")
+    resp = storage.resp_list("koiki")
+    if not resp:
+        flash("Не заданы получатели сводного отчёта — добавьте на странице «Стационары».", "warn")
         return redirect(url_for("koiki"))
     wards = storage.koiki_list()
     if not wards:
@@ -603,11 +600,40 @@ def koiki_report_send():
     html = mailer.build_koiki_overall_html(wards, storage.koiki_totals(), rep,
                                            appconfig.get("CUSTOM_KOIKI", ""))
     subj = "Сводный отчёт: занятость коечного фонда" + (f" — период {rep}" if rep else "")
-    ok, msg = mailer.send(email, subj, html)
-    storage.log_send(f"[койки-свод] {name or email}", email, len(wards), msg)
+    to = ", ".join(r["email"] for r in resp)
+    ok, msg = mailer.send(to, subj, html)
+    storage.log_send("[стационары-свод]", to, len(wards), msg)
     dry = " (DRYRUN)" if mailer.is_dryrun() else ""
-    flash(f"Сводный отчёт по койкам ({email}): {msg}.{dry}", "ok" if ok else "warn")
+    flash(f"Сводный отчёт по стационарам ({to}): {msg}.{dry}", "ok" if ok else "warn")
     return redirect(url_for("koiki"))
+
+
+@app.route("/resp/add", methods=["POST"])
+def resp_add():
+    report = (request.form.get("report") or "").strip()
+    name = (request.form.get("name") or "").strip()
+    added = 0
+    for email in _split_emails(request.form.get("email")):
+        storage.resp_add(report, email, name)
+        added += 1
+    flash(f"Добавлено получателей: {added}." if added else "Укажите e-mail получателя.",
+          "ok" if added else "warn")
+    return redirect(request.referrer or url_for("index"))
+
+
+@app.route("/resp/remove", methods=["POST"])
+def resp_remove():
+    report = (request.form.get("report") or "").strip()
+    email = (request.form.get("email") or "").strip()
+    if report and email:
+        storage.resp_remove(report, email)
+        flash("Получатель удалён.", "ok")
+    return redirect(request.referrer or url_for("index"))
+
+
+@app.route("/log")
+def send_log_page():
+    return render_template("log.html", log=storage.send_log(200))
 
 
 @app.route("/settings", methods=["GET", "POST"])
@@ -649,11 +675,6 @@ def settings():
             if pw:  # пустое поле — не перезаписываем сохранённый пароль
                 appconfig.set("SMTP_PASS", pw)
             flash("Настройки почты сохранены.", "ok")
-        elif action == "save_resp":
-            for k in ("RESP_NAME", "RESP_EMAIL", "RESP_FAP_NAME", "RESP_FAP_EMAIL",
-                      "RESP_KOIKI_NAME", "RESP_KOIKI_EMAIL"):
-                appconfig.set(k, (request.form.get(k) or "").strip())
-            flash("Ответственные сохранены.", "ok")
         elif action == "save_custom":
             for k in ("CUSTOM_DEBT", "CUSTOM_DEPT", "CUSTOM_ERR", "CUSTOM_FAP", "CUSTOM_KOIKI"):
                 appconfig.set(k, (request.form.get(k) or "").strip())
@@ -677,9 +698,6 @@ def settings():
     smtp["SMTP_BATCH_DELAY"] = appconfig.get("SMTP_BATCH_DELAY", "2")
     smtp["SMTP_BATCH_SIZE"] = appconfig.get("SMTP_BATCH_SIZE", "25")
     smtp["SMTP_BATCH_PAUSE"] = appconfig.get("SMTP_BATCH_PAUSE", "30")
-    resp = {k: appconfig.get(k, "") for k in
-            ("RESP_NAME", "RESP_EMAIL", "RESP_FAP_NAME", "RESP_FAP_EMAIL",
-             "RESP_KOIKI_NAME", "RESP_KOIKI_EMAIL")}
     custom = {k: appconfig.get(k, "") for k in
               ("CUSTOM_DEBT", "CUSTOM_DEPT", "CUSTOM_ERR", "CUSTOM_FAP", "CUSTOM_KOIKI")}
     ipacfg = {k: appconfig.get(k, "") for k in ("IPA_LDAP_URI", "IPA_BASE_DN", "IPA_BIND_DN")}
@@ -687,7 +705,7 @@ def settings():
     ipacfg["IPA_SYNC_HOURS"] = appconfig.get("IPA_SYNC_HOURS", "24")
     ipacfg["pass_set"] = appconfig.is_set("IPA_BIND_PW")
     last_ts, last_res = ipa.last_sync_info()
-    return render_template("settings.html", smtp=smtp, ipacfg=ipacfg, resp=resp, custom=custom,
+    return render_template("settings.html", smtp=smtp, ipacfg=ipacfg, custom=custom,
                            ipa_last=(last_ts, last_res),
                            docs=storage.doctors(), depts=storage.dept_summary())
 
@@ -701,6 +719,26 @@ def healthz():
 def favicon():
     # Браузеры неявно запрашивают /favicon.ico — отдаём наш SVG-значок.
     return redirect(url_for("static", filename="favicon.svg"))
+
+
+def _migrate_resp():
+    """Разовый перенос одиночных ответственных (RESP_*) в таблицу получателей report_resp."""
+    try:
+        storage.init()
+        if appconfig.get("resp_migrated", ""):
+            return
+        for rep, ek, nk in (("err", "RESP_EMAIL", "RESP_NAME"),
+                            ("fap", "RESP_FAP_EMAIL", "RESP_FAP_NAME"),
+                            ("koiki", "RESP_KOIKI_EMAIL", "RESP_KOIKI_NAME")):
+            name = appconfig.get(nk, "")
+            for email in _split_emails(appconfig.get(ek, "")):
+                storage.resp_add(rep, email, name)
+        appconfig.set("resp_migrated", "1")
+    except Exception:
+        pass
+
+
+_migrate_resp()
 
 
 _scheduler_started = False

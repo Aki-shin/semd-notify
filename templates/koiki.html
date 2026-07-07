@@ -7,6 +7,11 @@
 {% if period %}<b>Период: {{ period }}</b> ({{ totals.days }} дн.){% endif %}
 {% if smtp_dry %} <b>DRYRUN: письма не отправляются.</b>{% endif %}</p>
 
+<!-- Сводный отчёт ответственным за коечный фонд (получателей можно задать всегда) -->
+{% set report = 'koiki' %}
+{% set send_action = url_for('koiki_report_send') %}
+{% include "_resp_box.html" %}
+
 {% if wards %}
 <section class="cards">
   <div class="card"><div class="num">{{ totals.all.zan if totals.all.zan is not none else '—' }}%</div>
@@ -21,15 +26,6 @@
 </section>
 <p class="muted small"><b style="color:#2563eb">Синим</b> — занятость выше 100% (план перевыполнен);
 <b style="color:#c0392b">красным</b> — ниже 80% (недозагрузка). Перевыполнили план: <b>{{ totals.over }}</b> отд.</p>
-
-<!-- Сводный отчёт ответственному за коечный фонд -->
-<div class="toolbar">
-  <div class="muted">Ответственный за коечный фонд:
-    {% if resp_email %}<b>{{ resp_name or resp_email }}</b> ({{ resp_email }}){% else %}<span class="pill warn">не задан</span> — укажите в <a href="{{ url_for('settings') }}">Настройках</a>{% endif %}</div>
-  <form method="post" action="{{ url_for('koiki_report_send') }}">
-    <button type="submit" {{ 'disabled' if not resp_email }}>✉ Отправить сводный отчёт</button>
-  </form>
-</div>
 
 <!-- Отделения: показатели + назначение ответственных -->
 <form method="post" action="{{ url_for('koiki_save_map') }}">
@@ -84,22 +80,6 @@
     {% else %}<tr><td colspan="6" class="empty">Назначьте отделениям ответственных с почтой и сохраните.</td></tr>{% endfor %}
   </table>
 </form>
-
-<div class="toolbar">
-  <h2 style="margin:0">Журнал рассылки <span id="sendline" class="small muted"></span></h2>
-  <form method="post" action="{{ url_for('send_cancel') }}" id="cancelform" style="margin:0;display:none">
-    <button type="submit" class="danger">⛔ Отменить рассылку</button>
-  </form>
-</div>
-<table>
-  <thead><tr><th>Время</th><th>Адресат</th><th>Почта</th><th>Отд.</th><th>Статус</th></tr></thead>
-  <tbody id="sendlog">
-  {% for l in log %}
-  <tr><td>{{ l.ts }}</td><td>{{ l.vrach }}</td><td>{{ l.email }}</td>
-      <td class="r">{{ l.cnt }}</td><td>{{ l.status }}</td></tr>
-  {% else %}<tr><td colspan="5" class="empty">пока пусто</td></tr>{% endfor %}
-  </tbody>
-</table>
 
 <script>
 document.getElementById('all').addEventListener('change', function(e){

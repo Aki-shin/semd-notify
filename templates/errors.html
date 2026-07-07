@@ -5,13 +5,9 @@
 Массовый <code>OBJECT_NOT_FOUND</code> / «подразделение не найдено» = проблема маппинга подразделений
 (часто после реорганизации) — чинится сверкой OID в ФРМО, а не врачами.</p>
 
-<div class="toolbar">
-  <div class="muted">Ответственный за исправление:
-    {% if resp_email %}<b>{{ resp_name or resp_email }}</b> ({{ resp_email }}){% else %}<span class="pill warn">не задан</span> — укажите в <a href="{{ url_for('settings') }}">Настройках</a>{% endif %}</div>
-  <form method="post" action="{{ url_for('report_send') }}">
-    <button type="submit" {{ 'disabled' if not resp_email }}>✉ Отправить отчёт ответственному</button>
-  </form>
-</div>
+{% set report = 'err' %}
+{% set send_action = url_for('report_send') %}
+{% include "_resp_box.html" %}
 
 <div class="cols">
   <div>

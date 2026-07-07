@@ -22,22 +22,6 @@
   <div><button type="submit">Сохранить почту</button></div>
 </form>
 
-<h2>Ответственные (получатели сводных отчётов)</h2>
-<p class="muted">Это <b>разные люди</b>: за исправление ошибок РЭМД и за ФАП. Каждому уходит свой отчёт по кнопке на соответствующей странице.</p>
-<form method="post" class="cfg">
-  <input type="hidden" name="action" value="save_resp">
-  <p class="muted small" style="margin:8px 0 2px"><b>За исправление ошибок РЭМД</b> {% if resp.RESP_EMAIL %}<span class="pill ok">задан</span>{% else %}<span class="pill warn">не задан</span>{% endif %} — отчёт со страницы <a href="{{ url_for('errors') }}">Ошибки</a> (ошибки ФЛК, документы «Не указан», затор на подписи МО):</p>
-  <label>ФИО / должность <input name="RESP_NAME" value="{{ resp.RESP_NAME }}" placeholder="напр. оператор ЭВМ статистики"></label>
-  <label>E-mail <input type="email" name="RESP_EMAIL" value="{{ resp.RESP_EMAIL }}" placeholder="resp@med.permkrai.ru"></label>
-  <p class="muted small" style="margin:12px 0 2px"><b>За ФАП</b> {% if resp.RESP_FAP_EMAIL %}<span class="pill ok">задан</span>{% else %}<span class="pill warn">не задан</span>{% endif %} — отчёт со страницы <a href="{{ url_for('fap') }}">ФАП</a> (ФАП без интернета, неполное заполнение ЭМК):</p>
-  <label>ФИО / должность <input name="RESP_FAP_NAME" value="{{ resp.RESP_FAP_NAME }}" placeholder="напр. ответственный за ФАП"></label>
-  <label>E-mail <input type="email" name="RESP_FAP_EMAIL" value="{{ resp.RESP_FAP_EMAIL }}" placeholder="fap-resp@med.permkrai.ru"></label>
-  <p class="muted small" style="margin:12px 0 2px"><b>За коечный фонд</b> {% if resp.RESP_KOIKI_EMAIL %}<span class="pill ok">задан</span>{% else %}<span class="pill warn">не задан</span>{% endif %} — сводный отчёт по занятости коек со страницы <a href="{{ url_for('koiki') }}">Койки</a> (ответственный за всё):</p>
-  <label>ФИО / должность <input name="RESP_KOIKI_NAME" value="{{ resp.RESP_KOIKI_NAME }}" placeholder="напр. зам. главврача по мед. части"></label>
-  <label>E-mail <input type="email" name="RESP_KOIKI_EMAIL" value="{{ resp.RESP_KOIKI_EMAIL }}" placeholder="koiki-resp@med.permkrai.ru"></label>
-  <div><button type="submit">Сохранить ответственных</button></div>
-</form>
-
 <h2>Дополнительный текст в письмах</h2>
 <p class="muted">Произвольный текст добавляется <b>в конце</b> соответствующего письма (перед служебной подписью), в виде выделенного блока.
 Переводы строк сохраняются; HTML экранируется (вставляется как обычный текст). Пустое поле — ничего не добавляется.</p>

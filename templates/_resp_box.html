@@ -1,0 +1,25 @@
+{# Управление получателями сводного отчёта. Ждёт: resp (список {email,name}), report (ключ), send_action (url) #}
+<div class="toolbar" style="align-items:flex-start;flex-wrap:wrap;gap:12px">
+  <div style="flex:1;min-width:280px">
+    <div class="small muted" style="margin-bottom:4px">Получатели сводного отчёта (можно несколько){% if not resp %} — <span class="pill warn">не заданы</span>{% endif %}:</div>
+    <div class="resp-chips">
+      {% for r in resp %}
+      <span class="chip">{{ r.name or r.email }}{% if r.name %} <span class="muted">&lt;{{ r.email }}&gt;</span>{% endif %}
+        <form method="post" action="{{ url_for('resp_remove') }}" style="display:inline;margin:0">
+          <input type="hidden" name="report" value="{{ report }}">
+          <input type="hidden" name="email" value="{{ r.email }}">
+          <button type="submit" class="chip-x" title="Убрать получателя">×</button>
+        </form></span>
+      {% endfor %}
+    </div>
+    <form method="post" action="{{ url_for('resp_add') }}" class="inline" style="margin-top:8px">
+      <input type="hidden" name="report" value="{{ report }}">
+      <input type="text" name="name" placeholder="ФИО / должность" class="email">
+      <input type="email" name="email" placeholder="resp@med.permkrai.ru" class="email" required>
+      <button type="submit">+ Добавить</button>
+    </form>
+  </div>
+  <form method="post" action="{{ send_action }}" style="margin:0">
+    <button type="submit" {{ 'disabled' if not resp }}>✉ Отправить сводный отчёт</button>
+  </form>
+</div>
