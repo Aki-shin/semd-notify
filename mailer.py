@@ -78,27 +78,20 @@ def build_debt_html(vrach, debts, rep_period="", custom=""):
 </body></html>"""
 
 
-def build_dept_html(podr, vrachi, total_nepodp, total_debts=0, from_debts=False, rep_period="", custom=""):
+def build_dept_html(podr, vrachi, total_nepodp, rep_period="", custom=""):
     rows = "".join(
-        f"<tr><td>{i}</td><td>{v['vrach']}</td><td style='text-align:right'>{v['nepodp']}</td>"
-        f"<td style='text-align:right'>{v['debts']}</td></tr>"
+        f"<tr><td>{i}</td><td>{v['vrach']}</td><td style='text-align:right'>{v['nepodp']}</td></tr>"
         for i, v in enumerate(vrachi, 1)
     )
     per = f" за период <b>{rep_period}</b>" if rep_period else ""
-    if from_debts:
-        intro = (f"По отделению «{podr}»{per} в ЕИСЗ ПК <b>{total_debts}</b> медицинских документов, "
-                 "подлежащих регистрации в РЭМД и не подписанных (по списку неподписанных документов). "
-                 "Просьба организовать подписание силами врачей отделения — "
-                 "неподписанные документы не передаются в федеральный реестр и снижают показатели учреждения.")
-    else:
-        intro = (f"По вашему подразделению{per} в ЕИСЗ ПК <b>{total_nepodp}</b> неподписанных медицинских документов, "
-                 "подлежащих регистрации в РЭМД. Просьба организовать подписание силами врачей подразделения — "
-                 "неподписанные документы не передаются в федеральный реестр и снижают показатели учреждения.")
+    intro = (f"По вашему подразделению{per} в ЕИСЗ ПК <b>{total_nepodp}</b> неподписанных медицинских документов, "
+             "подлежащих регистрации в РЭМД. Просьба организовать подписание силами врачей подразделения — "
+             "неподписанные документы не передаются в федеральный реестр и снижают показатели учреждения.")
     return f"""<html><body style="font-family:Arial,sans-serif;font-size:14px;color:#222">
 <p>Уважаемый(ая) заведующий(ая) подразделением «{podr}»!</p>
 <p>{intro}</p>
 <table border="1" cellspacing="0" cellpadding="5" style="border-collapse:collapse;font-size:13px">
-<tr style="background:#eef"><th>№</th><th>Врач</th><th>Не подписано</th><th>Долгов (документов)</th></tr>
+<tr style="background:#eef"><th>№</th><th>Врач</th><th>Не подписано</th></tr>
 {rows}
 </table>
 {_custom_block(custom)}

@@ -463,7 +463,7 @@ def departments_send():
         d = storage.dept_vrachi(podr)
         if not d or not d["vrachi"]:
             continue
-        cnt = d["nepodp"] or d["debts"]
+        cnt = d["nepodp"]
         emails = _split_emails(request.form.get(f"email__{podr}"))
         if not emails:
             noaddr += 1
@@ -471,8 +471,7 @@ def departments_send():
             continue
         subj = f"Неподписанные документы по подразделению: {cnt} шт." + (f" (период {rep})" if rep else "")
         items.append({"to": ", ".join(emails), "log_vrach": f"[отд.] {podr}", "cnt": cnt, "subject": subj,
-                      "html": mailer.build_dept_html(podr, d["vrachi"], d["nepodp"], d["debts"],
-                                                     d.get("from_debts"), rep_period=rep, custom=cust)})
+                      "html": mailer.build_dept_html(podr, d["vrachi"], d["nepodp"], rep_period=rep, custom=cust)})
     if items:
         _dispatch_batch(items, "depts")
     dry = " (DRYRUN)" if mailer.is_dryrun() else ""

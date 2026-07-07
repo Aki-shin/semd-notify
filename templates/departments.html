@@ -1,32 +1,32 @@
 {% extends "base.html" %}
 {% block body %}
 <h1>Подразделения — эскалация зав. отделениям</h1>
-<p class="muted">Сводка неподписанных по подразделениям. Отметьте — каждому зав. отделением уйдёт письмо
-со списком его врачей и их долгов. Почту зав. отделения можно задать в строке или в
-<a href="{{ url_for('settings') }}">Настройках</a>.
+<p class="muted">Сводка неподписанных по подразделениям (из отчёта «в разрезе врачей»). Отметьте — каждому зав.
+отделением уйдёт письмо со списком его врачей и их неподписанных документов. Почту зав. отделения можно
+задать в строке или в <a href="{{ url_for('settings') }}">Настройках</a>.
 {% if smtp_dry %}<b>DRYRUN: письма не отправляются.</b>{% endif %}</p>
 
 <form method="post" action="{{ url_for('departments_send') }}">
   <div class="toolbar">
-    <label><input type="checkbox" id="all"> выбрать все с долгами и почтой</label>
+    <label><input type="checkbox" id="all"> выбрать все с неподписанными и почтой</label>
     <button type="submit">✉ Отправить сводки зав. отделениям</button>
   </div>
   <table>
     <tr><th></th><th>Подразделение</th><th>Сформ.</th><th>% подп.</th><th>Не подп.</th>
-        <th>Долгов</th><th>Врачей в долгах</th><th>Почта зав. отделением</th></tr>
+        <th>Врачей</th><th>Почта зав. отделением</th></tr>
     {% for d in depts %}
-    <tr class="{{ 'lowpct' if d.pct < 50 and not d.from_debts }}">
+    <tr class="{{ 'lowpct' if d.pct < 50 }}">
       <td><input type="checkbox" name="podr" value="{{ d.podr }}" class="pick"
-                 {{ 'disabled' if not ((d.nepodp or d.debts) and d.email) }}></td>
-      <td>{{ d.podr }}{% if d.from_debts %} <span class="pill warn" title="Врачи не из отчёта «в разрезе врачей»; отделение — из списка неподписанных">по списку долгов</span>{% endif %}</td>
-      <td class="r">{% if d.from_debts %}—{% else %}{{ d.sform }}{% endif %}</td>
-      <td class="r">{% if d.from_debts %}—{% else %}{{ d.pct }}%{% endif %}</td>
-      <td class="r bad">{{ d.nepodp }}</td><td class="r">{{ d.debts }}</td>
+                 {{ 'disabled' if not (d.nepodp and d.email) }}></td>
+      <td>{{ d.podr }}</td>
+      <td class="r">{{ d.sform }}</td>
+      <td class="r">{{ d.pct }}%</td>
+      <td class="r bad">{{ d.nepodp }}</td>
       <td class="r">{{ d.vrachi|length }}</td>
       <td><input type="email" name="email__{{ d.podr }}" value="{{ d.email }}"
                  class="email {{ 'noemail' if not d.email }}" placeholder="zav@med.permkrai.ru"></td>
     </tr>
-    {% else %}<tr><td colspan="8" class="empty">Загрузите отчёт «в разрезе врачей».</td></tr>{% endfor %}
+    {% else %}<tr><td colspan="7" class="empty">Загрузите отчёт «в разрезе врачей».</td></tr>{% endfor %}
   </table>
 </form>
 

@@ -564,52 +564,31 @@ def resp_remove(report, email):
 
 
 def dept_summary():
-    """Сводка по подразделениям: агрегаты подписания + долги + врачи + почта зав. отделением.
-    Врачи, которых нет в отчёте «в разрезе врачей», группируются по отделению из
-    отчёта долгов (c9) отдельными записями с пометкой from_debts (иначе их долги
-    не видны заведующим — номенклатура отделений в двух отчётах не совпадает)."""
+    """Сводка по подразделениям из отчёта «в разрезе врачей»: агрегаты подписания,
+    список врачей с неподписанными документами и почта зав. отделением."""
     with _conn() as c:
         rows = c.execute("""
             SELECT podrazdelenie podr, vrach,
                    SUM(sform) s, SUM(podp) p, SUM(nepodp) n
             FROM vrachi WHERE podrazdelenie<>'' AND vrach<>''
             GROUP BY podrazdelenie, vrach""").fetchall()
-        debts = {r["vrach"]: r["c"] for r in c.execute(
-            "SELECT vrach, COUNT(*) c FROM debts GROUP BY vrach")}
-        debt_od = c.execute(
-            "SELECT COALESCE(NULLIF(otdelenie,''),'(отделение не указано)') od, "
-            "vrach, COUNT(*) c FROM debts WHERE vrach<>'' GROUP BY od, vrach").fetchall()
         dmap = {r["podr"]: r["email"] for r in c.execute("SELECT * FROM dept_map")}
-    depts, covered = {}, set()
+    depts = {}
     for r in rows:
-        covered.add(r["vrach"])
         d = depts.setdefault(r["podr"], {"podr": r["podr"], "sform": 0, "podp": 0,
-                                         "nepodp": 0, "debts": 0, "vrachi": [], "from_debts": False})
+                                         "nepodp": 0, "vrachi": []})
         d["sform"] += r["s"] or 0
         d["podp"] += r["p"] or 0
         d["nepodp"] += r["n"] or 0
-        dbt = debts.get(r["vrach"], 0)
-        d["debts"] += dbt
-        if (r["n"] or 0) or dbt:
-            d["vrachi"].append({"vrach": r["vrach"], "nepodp": r["n"] or 0,
-                                "debts": dbt, "from_debts": False})
-    # врачи только из отчёта долгов → отдельные записи по отделению (c9)
-    for r in debt_od:
-        if r["vrach"] in covered:
-            continue
-        d = depts.setdefault(r["od"], {"podr": r["od"], "sform": 0, "podp": 0,
-                                       "nepodp": 0, "debts": 0, "vrachi": [], "from_debts": True})
-        d["from_debts"] = True
-        d["debts"] += r["c"]
-        d["vrachi"].append({"vrach": r["vrach"], "nepodp": 0,
-                            "debts": r["c"], "from_debts": True})
+        if r["n"] or 0:
+            d["vrachi"].append({"vrach": r["vrach"], "nepodp": r["n"] or 0})
     out = []
     for d in depts.values():
         d["pct"] = round(100 * d["podp"] / d["sform"], 1) if d["sform"] else 0.0
         d["email"] = dmap.get(d["podr"], "")
-        d["vrachi"].sort(key=lambda x: (-x["nepodp"], -x["debts"]))
+        d["vrachi"].sort(key=lambda x: -x["nepodp"])
         out.append(d)
-    out.sort(key=lambda x: (-x["nepodp"], -x["debts"]))
+    out.sort(key=lambda x: -x["nepodp"])
     return out
 
 
