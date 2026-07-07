@@ -43,7 +43,7 @@ RTYPE_RU = {
     "docerr": "Ошибки по видам документов",
     "fedkpi": "Выполнение фед. показателей",
     "status": "Статусы документов",
-    "koiki": "Койки — занятость (стационар)",
+    "koiki": "Стационары (занятость коек)",
     "state": "Состояние по ЭМД",
     "unknown": "Не распознан",
 }
@@ -109,7 +109,7 @@ REPORTS_INFO = [
      "title": "Сводная ведомость движения пациентов и коечного фонда (стационар/дневной)",
      "gives": "Занятость коек по отделениям: койко-дни, занятость %, оборот, средняя длительность. "
               "Рассылка ответственным за отделения и сводный отчёт ответственному за коечный фонд.",
-     "section": "Страница «Койки»",
+     "section": "Страница «Стационары»",
      "note": "В ЕИСЗ ПК (Промед) отчёт называется «Форма № 016/у Изменённая»."},
 ]
 
@@ -123,6 +123,15 @@ REPORT_GROUP = {
 # Необходимые — на них строятся еженедельные рассылки; остальные дополнительные (визуализация/общая картина).
 REPORT_REQUIRED = {"vrachi", "debts", "flk", "fap", "koiki"}
 REPORT_GROUP_ORDER = {"ЭМД": 0, "Стационары": 1, "ФАП": 2}
+# Кому уходит рассылка по отчёту (если уходит). Отчётов здесь нет → рассылки нет, только визуализация.
+REPORT_MAILING = {
+    "debts": "Врачам — их неподписанные документы",
+    "vrachi": "Зав. отделениями — сводка по отделению",
+    "flk": "Ответственному за ошибки РЭМД",
+    "docerr": "Ответственному за ошибки РЭМД",
+    "fap": "Ответственному за ФАП",
+    "koiki": "Ответственным за отделения + за коечный фонд",
+}
 
 
 def current_user():
@@ -214,7 +223,8 @@ def upload():
     meta = [m for m in storage.meta_all() if m["rtype"] in exports]
     loaded = set(exports)
     meta_by_rtype = {m["rtype"]: m for m in meta}
-    allr = [dict(r, group=REPORT_GROUP.get(r["key"], ""), req=r["key"] in REPORT_REQUIRED)
+    allr = [dict(r, group=REPORT_GROUP.get(r["key"], ""), req=r["key"] in REPORT_REQUIRED,
+                 mailing=REPORT_MAILING.get(r["key"], ""))
             for r in REPORTS_INFO]
     _gk = lambda r: REPORT_GROUP_ORDER.get(r["group"], 9)
     reports_req = sorted([r for r in allr if r["req"]], key=_gk)

@@ -28,6 +28,7 @@
 
 <p class="muted small">История выгрузок и переключение между ними — в шапке справа (📅, с поиском). Доступно на любой странице; переключение перезагружает рабочие данные (почты и настройки сохраняются).</p>
 
+<div class="fullbleed">
 <div class="toolbar">
   <h2 style="margin:0">Отчёты — поддерживаемые и загруженные{% if periods.period %} <span class="small muted">— период {{ periods.period }}</span>{% endif %}</h2>
   {% if meta %}
@@ -47,7 +48,7 @@
 {% set gcls = {'ЭМД': '#e6effb', 'Стационары': '#e6f6f1', 'ФАП': '#eaf3e6'} %}
 <table>
   <tr><th>Направление</th><th>Наименование отчёта (как в ЕИСЗ ПК)</th><th>Что даёт в системе</th><th>Где используется</th>
-      <th>Статус</th><th>Период</th><th>Загружен</th><th>Действия</th></tr>
+      <th>Рассылка</th><th>Статус</th><th>Период</th><th>Загружен</th><th>Действия</th></tr>
   {% for r in rows %}
   {% set m = meta_by_rtype.get(r.key) %}
   <tr>
@@ -55,6 +56,7 @@
     <td><b>{{ r.title }}</b>{% if r.note %}<br><span class="small muted">{{ r.note }}</span>{% endif %}</td>
     <td>{{ r.gives }}</td>
     <td class="muted">{{ r.section }}</td>
+    <td class="small">{% if r.mailing %}✉ {{ r.mailing }}{% else %}<span class="muted">—</span>{% endif %}</td>
     <td>{% if m %}<span class="pill ok">загружен</span>{% else %}<span class="pill warn">нет</span>{% endif %}</td>
     <td>{{ m.period if m else '—' }}</td>
     <td class="small">{{ m.uploaded_at if m else '—' }}</td>
@@ -77,4 +79,5 @@
 {{ reports_table(reports_req, meta_by_rtype, exports) }}
 <h3 style="margin-top:18px">Дополнительные <span class="small muted">— по желанию, для визуализации и общей картины</span></h3>
 {{ reports_table(reports_opt, meta_by_rtype, exports) }}
+</div>
 {% endblock %}
