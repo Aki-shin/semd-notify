@@ -200,7 +200,9 @@ def upload():
     exports = {x["rtype"]: x["filename"] for x in storage.period_rtypes(active)} if active else {}
     meta = [m for m in storage.meta_all() if m["rtype"] in exports]
     loaded = set(exports)
+    meta_by_rtype = {m["rtype"]: m for m in meta}
     return render_template("upload.html", meta=meta, reports=REPORTS_INFO, loaded=loaded,
+                           meta_by_rtype=meta_by_rtype,
                            history=storage.periods_history(), active_period=active, exports=exports)
 
 

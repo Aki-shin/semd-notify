@@ -43,23 +43,8 @@
 <p class="muted small">Переключение перезагружает рабочие данные на выбранный период (почты и настройки сохраняются).</p>
 {% endif %}
 
-<h2>Поддерживаемые отчёты и что они дают</h2>
-<table>
-  <tr><th>Наименование отчёта (как в ЕИСЗ ПК)</th><th>Что даёт в системе</th><th>Где используется</th><th>Статус</th></tr>
-  {% for r in reports %}
-  <tr>
-    <td><b>{{ r.title }}</b>{% if r.note %}<br><span class="small muted">{{ r.note }}</span>{% endif %}</td>
-    <td>{{ r.gives }}</td>
-    <td class="muted">{{ r.section }}</td>
-    <td>{% if r.key in loaded %}<span class="pill ok">загружен</span>{% else %}<span class="pill warn">нет</span>{% endif %}</td>
-  </tr>
-  {% endfor %}
-</table>
-<p class="muted small">Минимально для базовой картины: «в разрезе врачей» + «неподписанные» + «ошибки ФЛК».
-Для полной воронки с шагом «подпись МО» добавьте «в разрезе МО»; для разбивки по точкам — «по ТВСП» и «не переданные в РЭМД».</p>
-
 <div class="toolbar">
-  <h2 style="margin:0">Что уже загружено{% if periods.period %} <span class="small muted">— период {{ periods.period }}</span>{% endif %}</h2>
+  <h2 style="margin:0">Отчёты — поддерживаемые и загруженные{% if periods.period %} <span class="small muted">— период {{ periods.period }}</span>{% endif %}</h2>
   {% if meta %}
   <div style="display:flex;gap:8px">
     <form method="post" action="{{ url_for('reprocess') }}" style="margin:0"
@@ -74,16 +59,30 @@
   {% endif %}
 </div>
 <table>
-  <tr><th>Тип</th><th>Файл</th><th>Период</th><th>Строк</th><th>Загружен</th><th>Выгрузка</th></tr>
-  {% for m in meta %}
-  <tr><td>{{ rtype_ru.get(m.rtype, m.rtype) }}</td><td>{{ m.filename }}</td>
-      <td>{{ m.period }}</td><td class="r">{{ m.rows }}</td><td>{{ m.uploaded_at }}</td>
-      <td style="white-space:nowrap">{% if m.rtype in exports %}<a class="small" href="{{ url_for('export', rtype=m.rtype) }}">⬇ скачать</a>{% endif %}
+  <tr><th>Наименование отчёта (как в ЕИСЗ ПК)</th><th>Что даёт в системе</th><th>Где используется</th>
+      <th>Статус</th><th>Период</th><th>Загружен</th><th>Действия</th></tr>
+  {% for r in reports %}
+  {% set m = meta_by_rtype.get(r.key) %}
+  <tr>
+    <td><b>{{ r.title }}</b>{% if r.note %}<br><span class="small muted">{{ r.note }}</span>{% endif %}</td>
+    <td>{{ r.gives }}</td>
+    <td class="muted">{{ r.section }}</td>
+    <td>{% if m %}<span class="pill ok">загружен</span>{% else %}<span class="pill warn">нет</span>{% endif %}</td>
+    <td>{{ m.period if m else '—' }}</td>
+    <td class="small">{{ m.uploaded_at if m else '—' }}</td>
+    <td style="white-space:nowrap">
+      {%- if m %}
+        {% if r.key in exports %}<a class="small" href="{{ url_for('export', rtype=r.key) }}">⬇ скачать</a>{% endif %}
         <form method="post" action="{{ url_for('period_delete_report') }}" style="display:inline;margin:0"
-              onsubmit="return confirm('Удалить отчёт «{{ rtype_ru.get(m.rtype, m.rtype) }}» из периода?')">
-          <input type="hidden" name="rtype" value="{{ m.rtype }}">
+              onsubmit="return confirm('Удалить отчёт «{{ rtype_ru.get(r.key, r.key) }}» из периода?')">
+          <input type="hidden" name="rtype" value="{{ r.key }}">
           <button type="submit" class="danger" style="padding:2px 8px;font-size:12px">🗑 удалить</button>
-        </form></td></tr>
-  {% else %}<tr><td colspan="6" class="empty">пока ничего</td></tr>{% endfor %}
+        </form>
+      {%- else %}—{% endif %}
+    </td>
+  </tr>
+  {% endfor %}
 </table>
+<p class="muted small">Минимально для базовой картины: «в разрезе врачей» + «неподписанные» + «ошибки ФЛК».
+Для полной воронки с шагом «подпись МО» добавьте «в разрезе МО»; для разбивки по точкам — «по ТВСП» и «не переданные в РЭМД».</p>
 {% endblock %}
