@@ -100,6 +100,43 @@ def build_dept_html(podr, vrachi, total_nepodp, rep_period="", custom=""):
 </body></html>"""
 
 
+def build_dept_report_html(depts, rep_period="", custom=""):
+    """Сводный отчёт по подписанию СЭМД в разрезе подразделений — ответственному."""
+    tot = {"sform": 0, "podp": 0, "nepodp": 0}
+    body = []
+    for i, d in enumerate(depts, 1):
+        tot["sform"] += d["sform"]; tot["podp"] += d["podp"]; tot["nepodp"] += d["nepodp"]
+        body.append(
+            f"<tr><td>{i}</td><td>{d['podr']}</td>"
+            f"<td style='text-align:right'>{d['sform']}</td>"
+            f"<td style='text-align:right'>{d['podp']}</td>"
+            f"<td style='text-align:right'>{d['pct']}%</td>"
+            f"<td style='text-align:right'>{d['nepodp']}</td>"
+            f"<td style='text-align:right'>{len(d['vrachi'])}</td></tr>")
+    rows = "".join(body) or "<tr><td colspan='7'>нет данных</td></tr>"
+    pct = round(100 * tot["podp"] / tot["sform"], 1) if tot["sform"] else 0
+    total = ("<tr style='font-weight:bold;background:#eef'><td colspan='2'>ИТОГО</td>"
+             f"<td style='text-align:right'>{tot['sform']}</td>"
+             f"<td style='text-align:right'>{tot['podp']}</td>"
+             f"<td style='text-align:right'>{pct}%</td>"
+             f"<td style='text-align:right'>{tot['nepodp']}</td><td></td></tr>")
+    per = f" за период <b>{rep_period}</b>" if rep_period else ""
+    return f"""<html><body style="font-family:Arial,sans-serif;font-size:14px;color:#222">
+<p>Сводка по подписанию медицинских документов (СЭМД) в разрезе подразделений{per}.</p>
+<p>Сформировано: <b>{tot['sform']}</b> · подписано: {tot['podp']} ({pct}%) ·
+не подписано: <b>{tot['nepodp']}</b>.</p>
+<table border="1" cellspacing="0" cellpadding="5" style="border-collapse:collapse;font-size:13px">
+<tr style="background:#1e3a5f;color:#fff"><th>№</th><th>Подразделение</th><th>Сформировано</th>
+<th>Подписано</th><th>%</th><th>Не подписано</th><th>Врачей с неподп.</th></tr>
+{rows}
+{total}
+</table>
+{_custom_block(custom)}
+<p style="color:#666;font-size:12px">Сформировано автоматически системой мониторинга СЭМД.
+Отдел информационных технологий.</p>
+</body></html>"""
+
+
 def build_report_html(data, custom=""):
     """Отчёт ответственному за исправление: проблемы, не привязанные к конкретному врачу."""
     f = data.get("funnel", {})

@@ -126,7 +126,7 @@ REPORT_GROUP_ORDER = {"ЭМД": 0, "Стационары": 1, "ФАП": 2}
 # Кому уходит рассылка по отчёту (если уходит). Отчётов здесь нет → рассылки нет, только визуализация.
 REPORT_MAILING = {
     "debts": "Врачам — их неподписанные документы",
-    "vrachi": "Зав. отделениями — сводка по отделению",
+    "vrachi": "Зав. отделениями (сводки) + ответственному (сводный по подразделениям)",
     "flk": "Ответственному за ошибки РЭМД",
     "docerr": "Ответственному за ошибки РЭМД",
     "fap": "Ответственному за ФАП",
@@ -447,7 +447,8 @@ def doctor_detail(vrach):
 @app.route("/departments")
 def departments():
     return render_template("departments.html",
-                           depts=storage.dept_summary())
+                           depts=storage.dept_summary(),
+                           resp=storage.resp_list("dept"))
 
 
 @app.route("/departments/send", methods=["POST"])
@@ -478,6 +479,27 @@ def departments_send():
     flash(f"Запущена пакетная рассылка: {len(items)} писем в фоне."
           + (f" Без адреса: {noaddr}." if noaddr else "") + " Результат — в журнале." + dry,
           "ok" if items else "warn")
+    return redirect(url_for("departments"))
+
+
+@app.route("/departments/report/send", methods=["POST"])
+def departments_report_send():
+    resp = storage.resp_list("dept")
+    if not resp:
+        flash("Не заданы получатели сводного отчёта — добавьте на странице «Отделения».", "warn")
+        return redirect(url_for("departments"))
+    depts = storage.dept_summary()
+    if not depts:
+        flash("Отчёт «в разрезе врачей» не загружен.", "warn")
+        return redirect(url_for("departments"))
+    rep = storage.report_period("vrachi")
+    html = mailer.build_dept_report_html(depts, rep, appconfig.get("CUSTOM_DEPT", ""))
+    subj = "Сводный отчёт по подписанию СЭМД в разрезе подразделений" + (f" — период {rep}" if rep else "")
+    to = ", ".join(r["email"] for r in resp)
+    ok, msg = mailer.send(to, subj, html)
+    storage.log_send("[отделения-свод]", to, len(depts), msg)
+    dry = " (DRYRUN)" if mailer.is_dryrun() else ""
+    flash(f"Сводный отчёт по подразделениям ({to}): {msg}.{dry}", "ok" if ok else "warn")
     return redirect(url_for("departments"))
 
 

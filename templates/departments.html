@@ -6,6 +6,12 @@
 задать в строке или в <a href="{{ url_for('settings') }}">Настройках</a>.
 {% if smtp_dry %}<b>DRYRUN: письма не отправляются.</b>{% endif %}</p>
 
+<!-- Сводный отчёт по всем подразделениям — ответственному -->
+{% set report = 'dept' %}
+{% set send_action = url_for('departments_report_send') %}
+{% include "_resp_box.html" %}
+
+<h2>Эскалация по подразделениям <span class="small muted">— письмо каждому зав. отделением</span></h2>
 <form method="post" action="{{ url_for('departments_send') }}">
   <div class="toolbar">
     <label><input type="checkbox" id="all"> выбрать все с неподписанными и почтой</label>
