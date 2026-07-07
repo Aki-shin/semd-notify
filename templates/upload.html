@@ -26,22 +26,7 @@
   Удалите лишний отчёт либо начните «🔄 Новую выгрузку» и загрузите один период.</div>
 {% endif %}
 
-{% if history %}
-<h2>История периодов <span class="small muted">— можно вернуться на ранее загруженный</span></h2>
-<table>
-  <tr><th>Период</th><th>Отчётов</th><th>Загружен</th><th></th></tr>
-  {% for h in history %}
-  <tr>
-    <td>{{ h.period }}{% if h.active %} <span class="pill ok">активный</span>{% endif %}</td>
-    <td class="r">{{ h.n }}</td><td>{{ h.ts }}</td>
-    <td>{% if not h.active %}<form method="post" action="{{ url_for('period_switch') }}" style="margin:0">
-        <input type="hidden" name="period" value="{{ h.period }}">
-        <button type="submit">↪ Переключиться</button></form>{% endif %}</td>
-  </tr>
-  {% endfor %}
-</table>
-<p class="muted small">Переключение перезагружает рабочие данные на выбранный период (почты и настройки сохраняются).</p>
-{% endif %}
+<p class="muted small">История выгрузок и переключение между ними — в шапке справа (📅, с поиском). Доступно на любой странице; переключение перезагружает рабочие данные (почты и настройки сохраняются).</p>
 
 <div class="toolbar">
   <h2 style="margin:0">Отчёты — поддерживаемые и загруженные{% if periods.period %} <span class="small muted">— период {{ periods.period }}</span>{% endif %}</h2>

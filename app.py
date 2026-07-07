@@ -129,7 +129,9 @@ def current_user():
 def inject():
     return {"user": current_user(), "rtype_ru": RTYPE_RU,
             "smtp_ok": mailer.configured(), "smtp_dry": mailer.is_dryrun(),
-            "ipa_ok": ipa.available(), "periods": storage.periods_info()}
+            "ipa_ok": ipa.available(), "periods": storage.periods_info(),
+            "period_history": storage.periods_history(),
+            "active_period": appconfig.get("active_period", "")}
 
 
 @app.route("/")
@@ -202,8 +204,7 @@ def upload():
     loaded = set(exports)
     meta_by_rtype = {m["rtype"]: m for m in meta}
     return render_template("upload.html", meta=meta, reports=REPORTS_INFO, loaded=loaded,
-                           meta_by_rtype=meta_by_rtype,
-                           history=storage.periods_history(), active_period=active, exports=exports)
+                           meta_by_rtype=meta_by_rtype, exports=exports)
 
 
 @app.route("/reset", methods=["POST"])
@@ -244,7 +245,16 @@ def period_switch():
         flash(f"Переключено на период «{period}» (загружено отчётов: {n}).", "ok")
     else:
         flash(f"Для периода «{period}» нет сохранённых отчётов.", "warn")
-    return redirect(url_for("upload"))
+    return redirect(request.referrer or url_for("upload"))
+
+
+@app.route("/period/delete", methods=["POST"])
+def period_delete():
+    period = (request.form.get("period") or "").strip()
+    if period:
+        storage.delete_period(period)
+        flash(f"Выгрузка «{period}» удалена из истории.", "ok")
+    return redirect(request.referrer or url_for("upload"))
 
 
 @app.route("/reprocess", methods=["POST"])
