@@ -113,6 +113,17 @@ REPORTS_INFO = [
      "note": "В ЕИСЗ ПК (Промед) отчёт называется «Форма № 016/у Изменённая»."},
 ]
 
+# Классификация отчётов на странице загрузки.
+# Направление: ЭМД / Стационары / ФАП.
+REPORT_GROUP = {
+    "vrachi": "ЭМД", "debts": "ЭМД", "flk": "ЭМД", "mo": "ЭМД", "tvsp": "ЭМД",
+    "notrans": "ЭМД", "vidy": "ЭМД", "docerr": "ЭМД", "fedkpi": "ЭМД", "status": "ЭМД",
+    "fap": "ФАП", "koiki": "Стационары",
+}
+# Необходимые — на них строятся еженедельные рассылки; остальные дополнительные (визуализация/общая картина).
+REPORT_REQUIRED = {"vrachi", "debts", "flk", "fap", "koiki"}
+REPORT_GROUP_ORDER = {"ЭМД": 0, "Стационары": 1, "ФАП": 2}
+
 
 def current_user():
     """Читает заголовки Host Manager с корректной перекодировкой кириллицы."""
@@ -203,8 +214,13 @@ def upload():
     meta = [m for m in storage.meta_all() if m["rtype"] in exports]
     loaded = set(exports)
     meta_by_rtype = {m["rtype"]: m for m in meta}
-    return render_template("upload.html", meta=meta, reports=REPORTS_INFO, loaded=loaded,
-                           meta_by_rtype=meta_by_rtype, exports=exports)
+    allr = [dict(r, group=REPORT_GROUP.get(r["key"], ""), req=r["key"] in REPORT_REQUIRED)
+            for r in REPORTS_INFO]
+    _gk = lambda r: REPORT_GROUP_ORDER.get(r["group"], 9)
+    reports_req = sorted([r for r in allr if r["req"]], key=_gk)
+    reports_opt = sorted([r for r in allr if not r["req"]], key=_gk)
+    return render_template("upload.html", meta=meta, meta_by_rtype=meta_by_rtype, exports=exports,
+                           reports_req=reports_req, reports_opt=reports_opt)
 
 
 @app.route("/reset", methods=["POST"])
