@@ -47,9 +47,11 @@
   </div>
   <p class="muted small">Отметьте отделения и нажмите «Отправить» — каждому ответственному уйдёт одно письмо
   с занятостью только его отделений (группировка по почте). «Сохранить» запоминает ответственных на следующие недели.</p>
+  <div style="overflow-x:auto">
   <table>
-    <tr><th></th><th>Отделение</th><th>Коек</th><th>Койко-дни</th><th>Занятость</th><th>Оборот</th>
-        <th>Ср.&nbsp;длит.</th><th>Примечание</th><th>Ответственный</th><th>Почта</th></tr>
+    <tr><th></th><th>Отделение</th><th>Коек</th><th>Койко-дни</th><th>Занятость</th>
+        <th title="Поступило">Поступ.</th><th title="Выписано">Выпис.</th><th title="Переведено в другие отделения">Перев.</th><th title="Умерло">Умер.</th>
+        <th>Оборот</th><th>Ср.&nbsp;длит.</th><th>Примечание</th><th>Ответственный</th><th>Почта</th></tr>
     {% for w in wards %}
     <tr>
       <td><input type="checkbox" name="pick" value="{{ w.otdelenie }}" class="pick"></td>
@@ -58,6 +60,10 @@
       <td class="r">{{ w.kd }}</td>
       <td class="r" style="{% if w.zan is not none and w.zan > 100 %}color:#2563eb;font-weight:bold{% elif w.zan is not none and w.zan < 80 %}color:#c0392b;font-weight:bold{% endif %}">
         {{ (w.zan ~ '%') if w.zan is not none else '—' }}</td>
+      <td class="r">{{ w.postup }}</td>
+      <td class="r">{{ w.vyp }}</td>
+      <td class="r">{{ w.pered }}</td>
+      <td class="r {{ 'bad' if w.umer }}">{{ w.umer }}</td>
       <td class="r">{{ w.oborot if w.oborot is not none else '—' }}</td>
       <td class="r">{{ w.dlit if w.dlit is not none else '—' }}</td>
       <td class="small muted">
@@ -70,6 +76,7 @@
     </tr>
     {% endfor %}
   </table>
+  </div>
 </form>
 
 <script>

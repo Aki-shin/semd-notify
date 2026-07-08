@@ -248,10 +248,14 @@ def _koiki_rows_html(wards, show_resp=False):
             f"<td style='text-align:right'>{w['koek']}</td>"
             f"<td style='text-align:right'>{w['kd']}</td>"
             f"<td style='text-align:right;color:{color}'><b>{zt}</b></td>"
+            f"<td style='text-align:right'>{w.get('postup',0)}</td>"
+            f"<td style='text-align:right'>{w.get('vyp',0)}</td>"
+            f"<td style='text-align:right'>{w.get('pered',0)}</td>"
+            f"<td style='text-align:right'>{w.get('umer',0)}</td>"
             f"<td style='text-align:right'>{c(w.get('oborot'))}</td>"
             f"<td style='text-align:right'>{c(w.get('dlit'))}</td>"
             f"<td style='font-size:12px;color:#777'>{note}</td></tr>")
-    return "".join(out) or "<tr><td colspan='8'>нет данных</td></tr>"
+    return "".join(out) or "<tr><td colspan='12'>нет данных</td></tr>"
 
 
 _KOIKI_NOTE = ("Занятость = койко-дни ÷ (число коек × дни периода). "
@@ -271,7 +275,7 @@ def build_koiki_resp_html(resp, wards, days, rep_period="", custom=""):
 <p>Показатели <b>занятости коек</b> по закреплённым за вами отделениям{per} (в периоде {days} дн.).</p>
 <table border="1" cellspacing="0" cellpadding="5" style="border-collapse:collapse;font-size:13px">
 <tr style="background:#1e3a5f;color:#fff"><th>Отделение</th><th>Коек</th><th>Койко-дни</th>
-<th>Занятость</th><th>Оборот</th><th>Ср. длит.</th><th>Примечание</th></tr>
+<th>Занятость</th><th>Поступ.</th><th>Выпис.</th><th>Перев.</th><th>Умер.</th><th>Оборот</th><th>Ср. длит.</th><th>Примечание</th></tr>
 {_koiki_rows_html(wards)}
 </table>
 <p style="color:#555;font-size:12px">{_KOIKI_NOTE}</p>
@@ -300,7 +304,7 @@ def build_koiki_overall_html(wards, totals, rep_period="", custom=""):
 переведено в другие отделения <b>{m.get('pered',0)}</b> · умерло <b>{m.get('umer',0)}</b>.</p>
 <table border="1" cellspacing="0" cellpadding="5" style="border-collapse:collapse;font-size:13px">
 <tr style="background:#1e3a5f;color:#fff"><th>Отделение</th><th>Ответственный</th><th>Коек</th><th>Койко-дни</th>
-<th>Занятость</th><th>Оборот</th><th>Ср. длит.</th><th>Примечание</th></tr>
+<th>Занятость</th><th>Поступ.</th><th>Выпис.</th><th>Перев.</th><th>Умер.</th><th>Оборот</th><th>Ср. длит.</th><th>Примечание</th></tr>
 {_koiki_rows_html(wards, show_resp=True)}
 </table>
 <p style="color:#555;font-size:12px">{_KOIKI_NOTE}</p>
