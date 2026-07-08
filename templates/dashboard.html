@@ -41,10 +41,10 @@
 {% endif %}
 
 {% if vidy %}
-<h2>По видам документов <span class="small muted">— что регистрируется и что падает</span></h2>
+<h2>По видам документов <span class="small muted">— что регистрируется и что падает ({{ vidy|length }})</span></h2>
 <table>
   <tr><th>Вид документа</th><th>Зарегистр.</th><th>Отправлено</th><th>Ошибка синхр.</th><th>Ошибка рег.</th><th>Всего</th></tr>
-  {% for v in vidy[:20] %}
+  {% for v in vidy %}
   <tr class="{{ 'lowpct' if (v.err_sync + v.err_reg) > 0 }}">
     <td>{{ v.doc_type }}</td><td class="r">{{ v.zareg }}</td><td class="r">{{ v.sent }}</td>
     <td class="r {{ 'bad' if v.err_sync }}">{{ v.err_sync }}</td>
