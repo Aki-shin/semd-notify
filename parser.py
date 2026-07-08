@@ -7,7 +7,8 @@
   - vrachi   : «Отчет по отправке документов в РЭМД в разрезе врачей»
   - debts    : «Список пациентов с неподписанными документами ...»
   - flk      : «РЭМД. Детализация по ошибкам ФЛК»
-  - mo       : «Отчет по отправке документов в РЭМД в разрезе МО» (воронка, опционально)
+  - status   : «Статистика по статусам документов в РЭМД» (воронка дашборда)
+  - koiki    : «Сводная ведомость движения пациентов и коечного фонда»
 """
 import re
 import datetime
@@ -85,18 +86,12 @@ def detect_type(rows):
         return "vidy"
     if "по статусам документ" in head:
         return "status"
-    if "выполнение" in head and "показател" in head:
-        return "fedkpi"
     if "ошибк" in head and "флк" in head:
         return "flk"
     if "по ошибкам документ" in head:
         return "docerr"
     if "не передан" in head and "рэмд" in head:
         return "notrans"
-    if "в разрезе твсп" in head:
-        return "tvsp"
-    if "отправке документов" in head and "в разрезе мо" in head:
-        return "mo"
     if "состояние по эмд" in head:
         return "state"
     return "unknown"
@@ -177,10 +172,6 @@ def parse(path):
         res["records"] = _parse_debts(rows)
     elif rtype == "flk":
         res["records"] = _parse_flk(rows)
-    elif rtype == "mo":
-        res["records"] = _parse_mo(rows)
-    elif rtype == "tvsp":
-        res["records"] = _parse_tvsp(rows)
     elif rtype == "notrans":
         res["records"] = _parse_notrans(rows)
     elif rtype == "fap":
@@ -189,8 +180,6 @@ def parse(path):
         res["records"] = _parse_vidy(rows)
     elif rtype == "docerr":
         res["records"] = _parse_docerr(rows)
-    elif rtype == "fedkpi":
-        res["records"] = _parse_fedkpi(rows)
     elif rtype == "status":
         res["records"] = _parse_status(rows)
     return res
@@ -263,22 +252,6 @@ def _parse_docerr(rows):
         out.append({"doc_type": vid, "not_found": nf, "validation": val,
                     "position": pos, "total": nf + val + pos})
     return out
-
-
-def _parse_fedkpi(rows):
-    """Выполнение фед. показателей ЕЦКЗ (агрегат по Осинской): c3 план ТВСП,
-    c4 факт ТВСП, c5 доля ТВСП %, c6 индивид. план %, c7 доля достижения %, c9 нужно ещё."""
-    for r in rows:
-        if "ОСИНСК" in (r.get(1, "") or "").upper():
-            return [{
-                "plan_tvsp": int(_num(r.get(3, "")) or 0),
-                "fact_tvsp": int(_num(r.get(4, "")) or 0),
-                "pct_tvsp": _num(r.get(5, "")) or 0,
-                "plan_indiv": _num(r.get(6, "")) or 0,
-                "pct_dostizh": _num(r.get(7, "")) or 0,
-                "need": int(_num(r.get(9, "")) or 0),
-            }]
-    return []
 
 
 def _parse_status(rows):
@@ -385,26 +358,6 @@ def _parse_flk(rows):
     return [x for x in out if x["code"]]
 
 
-def _parse_mo(rows):
-    """Воронка по МО. Колонки данных:
-    c10 сформировано, c12 подп.врачом, c13 подп.руководителем, c14 подп.МО,
-    c15 с ошибками регистрации, c16 успешно зарегистрировано, c17 в очереди,
-    c18 не подписано, c21 без подписи МО. Суммируем детальные строки по Осинской."""
-    cols = {"sform": 10, "podp_vrach": 12, "podp_ruk": 13, "podp_mo": 14,
-            "err_reg": 15, "zareg": 16, "queue": 17, "nepodp": 18, "bez_podp_mo": 21}
-    agg = {k: 0 for k in cols}
-    for r in rows[13:]:
-        if not r.get(9):  # нужен «Вид документа» — это детальная строка
-            continue
-        if "ОСИНСК" not in (r.get(2, "") or "").upper():
-            continue
-        for k, col in cols.items():
-            v = _num(r.get(col, ""))
-            if v is not None:
-                agg[k] += int(v)
-    return [agg] if agg["sform"] else []
-
-
 def _parse_notrans(rows):
     """Документы, не переданные в РЭМД (агрегат по МО):
     c3 всего, c4 не сформированы, c11 сформированы, но не переданы."""
@@ -419,25 +372,6 @@ def _parse_notrans(rows):
                     "formed_not_trans": int(_num(r.get(11, "")) or 0),
                 }]
     return []
-
-
-def _parse_tvsp(rows):
-    """Статистика по ТВСП: c2 ТВСП, c4 всего, c5 успешно загружено."""
-    out = []
-    for r in rows[9:]:
-        name = (r.get(2, "") or "").strip()
-        total = _num(r.get(4, ""))
-        if not name or total is None:
-            continue
-        low = name.lower()
-        if low.startswith("итого") or low.startswith("гбуз"):
-            continue
-        out.append({
-            "tvsp": name.split("\n")[0].strip(),
-            "total": int(total),
-            "loaded": int(_num(r.get(5, "")) or 0),
-        })
-    return out
 
 
 def _parse_koiki(rows):

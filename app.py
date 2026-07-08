@@ -35,20 +35,17 @@ RTYPE_RU = {
     "vrachi": "По врачам (подписание)",
     "debts": "Неподписанные (долги)",
     "flk": "Ошибки ФЛК / регистрации",
-    "mo": "Воронка по МО (с подписью МО)",
-    "tvsp": "По ТВСП",
     "notrans": "Не переданы в РЭМД",
     "fap": "ФАП — работа в ЭМК",
     "vidy": "По видам документов",
     "docerr": "Ошибки по видам документов",
-    "fedkpi": "Выполнение фед. показателей",
     "status": "Статусы документов",
     "koiki": "Стационары (занятость коек)",
     "state": "Состояние по ЭМД",
     "unknown": "Не распознан",
 }
-LOADABLE = ("vrachi", "debts", "flk", "mo", "tvsp", "notrans",
-            "fap", "vidy", "docerr", "fedkpi", "status", "koiki")
+LOADABLE = ("vrachi", "debts", "flk", "notrans",
+            "fap", "vidy", "docerr", "status", "koiki")
 
 # Справочник поддерживаемых отчётов: точное наименование (как в ЕИСЗ ПК) и что даёт в системе.
 REPORTS_INFO = [
@@ -67,16 +64,6 @@ REPORTS_INFO = [
      "gives": "Коды и описания ошибок регистрации по сотрудникам (OBJECT_NOT_FOUND и др.) — "
               "диагностика, почему документы не доходят до РЭМД.",
      "section": "Ошибки"},
-    {"key": "mo",
-     "title": "Отчёт по отправке документов в РЭМД в разрезе МО",
-     "gives": "Полная воронка с шагом «подпись МО»: сформировано → подписано врачом → подписано МО → в РЭМД. "
-              "Показывает, сколько документов застряло на подписи МО.",
-     "section": "Дашборд (воронка)"},
-    {"key": "tvsp",
-     "title": "РЭМД. Статистика ЭМД в разрезе ТВСП",
-     "gives": "Загрузка в РЭМД по подразделениям/ТВСП — видно точки, которые не передают "
-              "(например, подразделения Еловского филиала на 0%).",
-     "section": "Дашборд (ТВСП)"},
     {"key": "notrans",
      "title": "Отчёт по документам, не переданным в РЭМД",
      "gives": "Разбор «не в РЭМД»: не сформированы (клиническая сторона) vs сформированы, "
@@ -92,10 +79,6 @@ REPORTS_INFO = [
      "gives": "Ошибки по видам документов и типам (не найдена запись справочника, валидация, должность). "
               "Дополняет ФЛК; идёт в отчёт ответственному.",
      "section": "Ошибки"},
-    {"key": "fedkpi",
-     "title": "РЭМД. Выполнение Фед. Показателей ЕЦКЗ по МО",
-     "gives": "План/факт ТВСП и % достижения индивидуального плана — KPI, по которым судят МО.",
-     "section": "Дашборд (показатели)"},
     {"key": "status",
      "title": "Статистика по статусам документов в РЭМД",
      "gives": "Распределение по статусам: зарегистрировано / отправлено / готов / ошибка.",
@@ -116,13 +99,13 @@ REPORTS_INFO = [
 # Классификация отчётов на странице загрузки.
 # Направление: ЭМД / Стационары / ФАП.
 REPORT_GROUP = {
-    "vrachi": "ЭМД", "debts": "ЭМД", "flk": "ЭМД", "mo": "ЭМД", "tvsp": "ЭМД",
-    "notrans": "ЭМД", "vidy": "ЭМД", "docerr": "ЭМД", "fedkpi": "ЭМД", "status": "ЭМД",
+    "vrachi": "ЭМД", "debts": "ЭМД", "notrans": "ЭМД", "vidy": "ЭМД", "status": "ЭМД",
+    "flk": "Ошибки", "docerr": "Ошибки",
     "fap": "ФАП", "koiki": "Стационары",
 }
 # Необходимые — на них строятся еженедельные рассылки; остальные дополнительные (визуализация/общая картина).
 REPORT_REQUIRED = {"vrachi", "debts", "flk", "fap", "koiki"}
-REPORT_GROUP_ORDER = {"ЭМД": 0, "Стационары": 1, "ФАП": 2}
+REPORT_GROUP_ORDER = {"ЭМД": 0, "Ошибки": 1, "Стационары": 2, "ФАП": 3}
 # Кому уходит рассылка по отчёту (если уходит). Отчётов здесь нет → рассылки нет, только визуализация.
 REPORT_MAILING = {
     "debts": "Врачам — их неподписанные документы",
@@ -159,16 +142,12 @@ def index():
     storage.init()
     return render_template("dashboard.html",
                            funnel=storage.funnel(),
-                           full=storage.full_funnel(),
-                           mo=storage.mo_funnel(),
+                           sf=storage.status_funnel(),
                            notrans=storage.notrans_get(),
-                           tvsp=storage.tvsp_list(),
                            vidy=storage.vidy_list(),
-                           status=storage.status_list(),
-                           fedkpi=storage.fedkpi_get(),
-                           meta=storage.meta_all(),
                            top=storage.doctors("nepodp")[:15],
-                           errors=storage.errors_summary())
+                           errors=storage.errors_summary(),
+                           has_data=bool(storage.meta_all()))
 
 
 @app.route("/upload", methods=["GET", "POST"])
@@ -514,7 +493,6 @@ def report_send():
             "errors": storage.errors_summary()["by_code"],
             "unassigned": storage.unassigned_summary(),
             "docerr": storage.docerr_list(),
-            "mo_gap": (storage.mo_funnel() or {}).get("gap_vrach_mo"),
             "period": rep}
     html = mailer.build_report_html(data, appconfig.get("CUSTOM_ERR", ""))
     subj = "Отчёт по проблемам РЭМД (ответственному за исправление)" + (f" — период {rep}" if rep else "")

@@ -2,44 +2,30 @@
 {% block body %}
 <h1>Картина по СЭМД</h1>
 
-{% if funnel.sform == 0 %}
+{% if not has_data %}
   <div class="empty">Данных пока нет. <a href="{{ url_for('upload') }}">Загрузите отчёты РЭМД</a>
   (минимум: «в разрезе врачей», «неподписанные», «ошибки ФЛК»).</div>
 {% else %}
 
+{% if funnel.sform %}
 <section class="cards">
   <div class="card"><div class="num">{{ funnel.sform }}</div><div class="lbl">Сформировано ЭМД</div></div>
   <div class="card"><div class="num">{{ funnel.pct_podp }}%</div><div class="lbl">Подписано ({{ funnel.podp }})</div></div>
   <div class="card bad"><div class="num">{{ funnel.nepodp }}</div><div class="lbl">Не подписано</div></div>
   <div class="card {{ 'bad' if funnel.pct_zareg < 50 else '' }}"><div class="num">{{ funnel.pct_zareg }}%</div><div class="lbl">Зарегистрировано в РЭМД ({{ funnel.zareg }})</div></div>
 </section>
-
-<h2>Воронка{% if full.has_mo %} (сквозная: врач → МО → РЭМД){% endif %}</h2>
-<div class="funnel">
-  {% set mx = full.sform or 1 %}
-  <div class="frow"><span class="fl">Сформировано</span><div class="fbar"><i style="width:100%">{{ full.sform }}</i></div></div>
-  <div class="frow"><span class="fl">Подписано врачом</span><div class="fbar"><i class="g" style="width:{{ (100*full.podp_vrach/mx)|round(0) }}%">{{ full.podp_vrach }} ({{ full.pct_podp_vrach }}%)</i></div></div>
-  {% if full.has_mo %}
-  <div class="frow"><span class="fl">Подписано МО</span><div class="fbar"><i class="g2" style="width:{{ (100*full.podp_mo/mx)|round(0) }}%">{{ full.podp_mo }} ({{ full.pct_podp_mo }}%)</i></div></div>
-  {% endif %}
-  <div class="frow"><span class="fl">В РЭМД</span><div class="fbar"><i class="b" style="width:{{ (100*full.zareg/mx)|round(0) }}%">{{ full.zareg }} ({{ full.pct_zareg }}%)</i></div></div>
-  {% if not full.has_mo %}<div class="muted small">Загрузите отчёт «в разрезе МО» — добавится шаг «подпись МО».</div>{% endif %}
-  <div class="muted small" style="margin-top:8px">Объём и подпись врача — из отчёта «в разрезе врачей» (полный объём ЭМД).
-  В отчёте «в разрезе МО» «подписано врачом» ≈100%, т.к. туда попадают только уже подписанные врачом документы — это не доля подписания, а условие входа.</div>
-</div>
-
-{% if full.has_mo %}
-<section class="cards" style="grid-template-columns:repeat(3,1fr);margin-top:10px">
-  <div class="card {{ 'bad' if full.nepodp_vrach > 0 }}"><div class="num">{{ full.nepodp_vrach }}</div><div class="lbl">Не подписаны <b>врачом</b> (этап 1 — врачи)</div></div>
-  <div class="card {{ 'bad' if full.gap_vrach_mo > 0 }}"><div class="num">{{ full.gap_vrach_mo }}</div><div class="lbl">Подписаны врачом, но не подписаны <b>МО</b> (этап 2 — автоподписание МО)</div></div>
-  <div class="card {{ 'bad' if full.err_reg > 0 }}"><div class="num">{{ full.err_reg }}</div><div class="lbl">С ошибками регистрации</div></div>
-</section>
 {% endif %}
 
-{% if full.pct_zareg < 50 %}
-  <div class="alert">⚠️ В РЭМД доходит лишь {{ full.pct_zareg }}% от сформированного. Два узких места:
-  <b>(1)</b> врачи подписали только {{ full.pct_podp_vrach }}% — не подписано <b>{{ full.nepodp_vrach }}</b> (рассылка долгов врачам);
-  {% if full.has_mo %}<b>(2)</b> из подписанного врачами на подписи <b>МО</b> застряло <b>{{ full.gap_vrach_mo }}</b> — это автоподписание МО, не вина врачей (см. <a href="{{ url_for('errors') }}">Ошибки</a>).{% endif %}</div>
+{% if sf.rows %}
+<h2>Воронка по статусам документов в РЭМД</h2>
+<div class="funnel">
+  {% set mx = sf.total or 1 %}
+  {% for r in sf.rows %}
+  <div class="frow"><span class="fl">{{ r.status }}</span>
+    <div class="fbar"><i class="{{ 'b' if 'ошибк' in r.status|lower else 'g' }}" style="width:{{ (100*r.count/mx)|round(0) }}%">{{ r.count }} ({{ r.pct }}%)</i></div></div>
+  {% endfor %}
+  <div class="muted small" style="margin-top:8px">Всего документов: <b>{{ sf.total }}</b>. Источник — отчёт «Статистика по статусам документов в РЭМД».</div>
+</div>
 {% endif %}
 
 {% if notrans %}
@@ -50,40 +36,8 @@
   <div class="card bad"><div class="num">{{ notrans.formed_not_trans }}</div><div class="lbl">Сформированы, но не переданы (подпись МО / передача)</div></div>
 </section>
 {% if notrans.formed_not_trans > notrans.not_formed %}
-<div class="alert">Большая часть ({{ notrans.formed_not_trans }}) — это документы, которые <b>сформированы, но застряли на передаче/подписи МО</b>, а не «врачи не создали» ({{ notrans.not_formed }}). Корень — автоподписание МО, а не клиника.</div>
+<div class="alert">Большая часть ({{ notrans.formed_not_trans }}) — документы, которые <b>сформированы, но застряли на передаче/подписи МО</b>, а не «врачи не создали» ({{ notrans.not_formed }}).</div>
 {% endif %}
-{% endif %}
-
-{% if tvsp %}
-<h2>По ТВСП (загрузка в РЭМД) <a class="small" href="{{ url_for('departments') }}">отделения →</a></h2>
-<table>
-  <tr><th>ТВСП</th><th>Всего</th><th>Загружено</th><th>% загрузки</th></tr>
-  {% for t in tvsp[:14] %}
-  <tr class="{{ 'lowpct' if t.pct < 50 and t.total > 0 }}">
-    <td>{{ t.tvsp }}</td><td class="r">{{ t.total }}</td><td class="r">{{ t.loaded }}</td>
-    <td class="r {{ 'bad' if t.pct < 50 and t.total > 0 }}">{{ t.pct }}%</td></tr>
-  {% endfor %}
-</table>
-{% endif %}
-
-{% if fedkpi %}
-<h2>Федеральные показатели ЕЦКЗ</h2>
-<section class="cards" style="grid-template-columns:repeat(4,1fr)">
-  <div class="card"><div class="num">{{ fedkpi.fact_tvsp|int }}</div><div class="lbl">Факт ТВСП передают</div></div>
-  <div class="card {{ 'bad' if fedkpi.pct_tvsp < 50 }}"><div class="num">{{ fedkpi.pct_tvsp }}%</div><div class="lbl">Доля ТВСП, передающих в РЭМД</div></div>
-  <div class="card {{ 'bad' if fedkpi.pct_dostizh < 50 }}"><div class="num">{{ fedkpi.pct_dostizh }}%</div><div class="lbl">Достижение индивид. плана</div></div>
-  <div class="card {{ 'bad' if fedkpi.need and fedkpi.need > 0 }}"><div class="num">{{ fedkpi.need|int }}</div><div class="lbl">Нужно ещё для плана</div></div>
-</section>
-{% endif %}
-
-{% if status %}
-<h2>Статусы документов в РЭМД</h2>
-<table>
-  <tr><th>Статус</th><th>Кол-во</th></tr>
-  {% for s in status %}
-  <tr><td>{{ s.status }}</td><td class="r {{ 'bad' if 'шибк' in s.status }}">{{ s.count }}</td></tr>
-  {% endfor %}
-</table>
 {% endif %}
 
 {% if vidy %}
@@ -123,13 +77,4 @@
   </div>
 </div>
 {% endif %}
-
-<h2>Загруженные отчёты</h2>
-<table>
-  <tr><th>Тип</th><th>Файл</th><th>Период</th><th>Строк</th><th>Загружен</th></tr>
-  {% for m in meta %}
-  <tr><td>{{ rtype_ru.get(m.rtype, m.rtype) }}</td><td>{{ m.filename }}</td>
-      <td>{{ m.period }}</td><td class="r">{{ m.rows }}</td><td>{{ m.uploaded_at }}</td></tr>
-  {% else %}<tr><td colspan="5" class="empty">пока ничего не загружено</td></tr>{% endfor %}
-</table>
 {% endblock %}

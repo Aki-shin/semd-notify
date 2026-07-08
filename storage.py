@@ -32,8 +32,6 @@ def init():
         CREATE TABLE IF NOT EXISTS email_map(key TEXT PRIMARY KEY, email TEXT);
         CREATE TABLE IF NOT EXISTS send_log(
             ts TEXT, vrach TEXT, email TEXT, cnt INTEGER, status TEXT);
-        CREATE TABLE IF NOT EXISTS mo_funnel(k TEXT PRIMARY KEY, v INTEGER);
-        CREATE TABLE IF NOT EXISTS tvsp(tvsp TEXT, total INTEGER, loaded INTEGER);
         CREATE TABLE IF NOT EXISTS dept_map(podr TEXT PRIMARY KEY, email TEXT);
         CREATE TABLE IF NOT EXISTS notrans(k TEXT PRIMARY KEY, v INTEGER);
         CREATE TABLE IF NOT EXISTS config(k TEXT PRIMARY KEY, v TEXT);
@@ -45,7 +43,6 @@ def init():
             doc_type TEXT, zareg INTEGER, sent INTEGER, err_sync INTEGER, err_reg INTEGER, total INTEGER);
         CREATE TABLE IF NOT EXISTS docerr(
             doc_type TEXT, not_found INTEGER, validation INTEGER, position INTEGER, total INTEGER);
-        CREATE TABLE IF NOT EXISTS fedkpi(k TEXT PRIMARY KEY, v REAL);
         CREATE TABLE IF NOT EXISTS status(status TEXT, count INTEGER);
         CREATE TABLE IF NOT EXISTS koiki(
             otdelenie TEXT PRIMARY KEY, koek INTEGER, kd INTEGER, nach INTEGER,
@@ -101,14 +98,6 @@ def replace_report(rtype, filename, period, nrows, records):
             c.executemany(
                 "INSERT INTO errors VALUES(:fio,:snils,:req_type,:code,:descr,:extra)",
                 records)
-        elif rtype == "mo":
-            c.execute("DELETE FROM mo_funnel")
-            if records:
-                c.executemany("INSERT INTO mo_funnel VALUES(?,?)",
-                              list(records[0].items()))
-        elif rtype == "tvsp":
-            c.execute("DELETE FROM tvsp")
-            c.executemany("INSERT INTO tvsp VALUES(:tvsp,:total,:loaded)", records)
         elif rtype == "notrans":
             c.execute("DELETE FROM notrans")
             if records:
@@ -125,10 +114,6 @@ def replace_report(rtype, filename, period, nrows, records):
         elif rtype == "docerr":
             c.execute("DELETE FROM docerr")
             c.executemany("INSERT INTO docerr VALUES(:doc_type,:not_found,:validation,:position,:total)", records)
-        elif rtype == "fedkpi":
-            c.execute("DELETE FROM fedkpi")
-            if records:
-                c.executemany("INSERT INTO fedkpi VALUES(?,?)", list(records[0].items()))
         elif rtype == "status":
             c.execute("DELETE FROM status")
             c.executemany("INSERT INTO status VALUES(:status,:count)", records)
@@ -163,8 +148,8 @@ def reset_reports():
     настройки SMTP/FreeIPA."""
     init()
     with _conn() as c:
-        for t in ("meta", "vrachi", "debts", "errors", "mo_funnel", "tvsp", "notrans",
-                  "fap", "vidy", "docerr", "fedkpi", "status", "koiki"):
+        for t in ("meta", "vrachi", "debts", "errors", "notrans",
+                  "fap", "vidy", "docerr", "status", "koiki"):
             c.execute(f"DELETE FROM {t}")
 
 
@@ -240,10 +225,9 @@ def switch_period(period):
 
 # rtype → рабочая таблица данных (для точечного удаления одного отчёта)
 RTYPE_TABLE = {
-    "vrachi": "vrachi", "debts": "debts", "flk": "errors", "mo": "mo_funnel",
-    "tvsp": "tvsp", "notrans": "notrans", "fap": "fap", "vidy": "vidy",
-    "docerr": "docerr", "fedkpi": "fedkpi", "status": "status",
-    "koiki": "koiki",
+    "vrachi": "vrachi", "debts": "debts", "flk": "errors",
+    "notrans": "notrans", "fap": "fap", "vidy": "vidy",
+    "docerr": "docerr", "status": "status", "koiki": "koiki",
 }
 
 
@@ -375,46 +359,6 @@ def doctors(order="nepodp"):
     return out
 
 
-def mo_funnel():
-    """Полная воронка из отчёта «в разрезе МО» (если загружен): включает шаг «подпись МО»."""
-    with _conn() as c:
-        d = {r["k"]: r["v"] for r in c.execute("SELECT * FROM mo_funnel")}
-    if not d.get("sform"):
-        return None
-    s = d["sform"]
-    pct = lambda a: round(100 * a / s, 1) if s else 0.0
-    d["pct_podp_vrach"] = pct(d.get("podp_vrach", 0))
-    d["pct_podp_mo"] = pct(d.get("podp_mo", 0))
-    d["pct_zareg"] = pct(d.get("zareg", 0))
-    # «застряли»: подписаны врачом, но не подписаны МО
-    d["gap_vrach_mo"] = max(0, d.get("podp_vrach", 0) - d.get("podp_mo", 0))
-    return d
-
-
-def full_funnel():
-    """Единая сквозная воронка из наиболее полного источника.
-    ВАЖНО: в отчёте «в разрезе МО» «сформировано» — это уже подписанные врачом
-    документы (подпись врача — условие попадания в реестровый конвейер), поэтому
-    там «подписано врачом» ~100%. Полный объём ЭМД и реальная доля подписи врача —
-    только в отчёте «в разрезе врачей». Здесь склеиваем: объём и подпись врача —
-    из отчёта по врачам, подпись МО — из отчёта по МО, регистрация — из обоих (сходятся)."""
-    f = funnel()
-    m = mo_funnel()
-    s = f["sform"] or 0
-    pct = lambda a: round(100 * a / s, 1) if s else 0.0
-    out = {
-        "sform": s, "podp_vrach": f["podp"], "nepodp_vrach": f["nepodp"],
-        "zareg": f["zareg"], "pct_podp_vrach": pct(f["podp"]), "pct_zareg": pct(f["zareg"]),
-        "has_mo": bool(m),
-    }
-    if m:
-        out["podp_mo"] = m.get("podp_mo", 0)
-        out["pct_podp_mo"] = pct(m.get("podp_mo", 0))
-        out["gap_vrach_mo"] = max(0, f["podp"] - m.get("podp_mo", 0))  # подписаны врачом, но не МО
-        out["err_reg"] = m.get("err_reg", 0)
-    return out
-
-
 def notrans_get():
     with _conn() as c:
         d = {r["k"]: r["v"] for r in c.execute("SELECT * FROM notrans")}
@@ -438,10 +382,14 @@ def status_list():
         return [dict(r) for r in c.execute("SELECT * FROM status ORDER BY count DESC")]
 
 
-def fedkpi_get():
-    with _conn() as c:
-        d = {r["k"]: r["v"] for r in c.execute("SELECT * FROM fedkpi")}
-    return d or None
+def status_funnel():
+    """Воронка дашборда по отчёту «Статистика по статусам документов в РЭМД»:
+    распределение документов по статусам (доля от общего числа)."""
+    rows = status_list()
+    total = sum(r["count"] for r in rows)
+    for r in rows:
+        r["pct"] = round(100 * r["count"] / total, 1) if total else 0.0
+    return {"total": total, "rows": rows}
 
 
 def fap_list():
@@ -466,15 +414,6 @@ def fap_summary():
             "naprav": tot("naprav"), "recipes": tot("recipes"), "naznach": tot("naznach"),
             "eln": tot("eln"), "telemed": tot("telemed"), "er": tot("er"),
             "low": [r for r in rows if (r["pct"] or 0) < 100]}
-
-
-def tvsp_list():
-    with _conn() as c:
-        rows = [dict(r) for r in c.execute("SELECT * FROM tvsp")]
-    for r in rows:
-        r["pct"] = round(100 * (r["loaded"] or 0) / r["total"], 1) if r["total"] else 0.0
-    rows.sort(key=lambda x: (x["pct"], -x["total"]))
-    return rows
 
 
 # --- Коечный фонд (занятость коек в стационарах) ---
