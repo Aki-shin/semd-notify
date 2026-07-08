@@ -47,7 +47,7 @@
   </div>
   <p class="muted small">Отметьте отделения и нажмите «Отправить» — каждому ответственному уйдёт одно письмо
   с занятостью только его отделений (группировка по почте). «Сохранить» запоминает ответственных на следующие недели.</p>
-  <div style="overflow-x:auto">
+  <div class="fullbleed" style="overflow-x:auto">
   <table>
     <tr><th></th><th>Отделение</th><th>Коек</th><th>Койко-дни</th><th>Занятость</th>
         <th title="Поступило">Поступ.</th><th title="Выписано">Выпис.</th><th title="Переведено в другие отделения">Перев.</th><th title="Умерло">Умер.</th>
@@ -70,9 +70,9 @@
         {%- if w.no_beds %}коек нет в справочнике
         {%- elif w.overload and not w.day %}проверить коечный фонд{% endif %}</td>
       <td><input type="text" name="resp__{{ w.otdelenie }}" value="{{ w.resp }}"
-                 class="email" placeholder="Зав. отделением"></td>
+                 class="email" style="width:150px" placeholder="Зав. отделением"></td>
       <td><input type="email" name="email__{{ w.otdelenie }}" value="{{ w.email }}"
-                 class="email {{ 'noemail' if not w.email }}" placeholder="zav@med.permkrai.ru"></td>
+                 class="email {{ 'noemail' if not w.email }}" style="width:150px" placeholder="zav@med.permkrai.ru"></td>
     </tr>
     {% endfor %}
   </table>
