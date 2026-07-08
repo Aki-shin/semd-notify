@@ -46,7 +46,7 @@ def init():
         CREATE TABLE IF NOT EXISTS status(status TEXT, count INTEGER);
         CREATE TABLE IF NOT EXISTS koiki(
             otdelenie TEXT PRIMARY KEY, koek INTEGER, kd INTEGER, nach INTEGER,
-            postup INTEGER, vyp INTEGER, umer INTEGER, kon INTEGER, day INTEGER);
+            postup INTEGER, vyp INTEGER, pered INTEGER, umer INTEGER, kon INTEGER, day INTEGER);
         CREATE TABLE IF NOT EXISTS koiki_map(otdelenie TEXT PRIMARY KEY, resp TEXT, email TEXT);
         CREATE TABLE IF NOT EXISTS report_resp(report TEXT, email TEXT, name TEXT DEFAULT '', PRIMARY KEY(report, email));
         CREATE TABLE IF NOT EXISTS period_files(
@@ -61,6 +61,9 @@ def init():
         for col in ("telemed", "er"):
             if col not in fcols:
                 c.execute(f"ALTER TABLE fap ADD COLUMN {col} INTEGER DEFAULT 0")
+        kcols = {r["name"] for r in c.execute("PRAGMA table_info(koiki)")}
+        if "pered" not in kcols:
+            c.execute("ALTER TABLE koiki ADD COLUMN pered INTEGER DEFAULT 0")
 
 
 def cfg_get(key):
@@ -120,8 +123,8 @@ def replace_report(rtype, filename, period, nrows, records):
         elif rtype == "koiki":
             c.execute("DELETE FROM koiki")
             c.executemany(
-                "INSERT OR REPLACE INTO koiki(otdelenie,koek,kd,nach,postup,vyp,umer,kon,day) "
-                "VALUES(:otdelenie,:koek,:kd,:nach,:postup,:vyp,:umer,:kon,:day)", records)
+                "INSERT OR REPLACE INTO koiki(otdelenie,koek,kd,nach,postup,vyp,pered,umer,kon,day) "
+                "VALUES(:otdelenie,:koek,:kd,:nach,:postup,:vyp,:pered,:umer,:kon,:day)", records)
 
 
 def meta_all():
@@ -453,7 +456,8 @@ def koiki_totals():
     плюс счётчики отделений с перевыполнением (>100%) и недозагрузкой (<80%)."""
     days = _koiki_days()
     with _conn() as c:
-        rows = [dict(r) for r in c.execute("SELECT koek, kd, day FROM koiki")]
+        rows = [dict(r) for r in c.execute(
+            "SELECT koek, kd, day, postup, vyp, pered, umer FROM koiki")]
 
     def agg(sel):
         k = sum(r["koek"] for r in rows if sel(r))
@@ -468,7 +472,9 @@ def koiki_totals():
             over += 1
         elif z < 80:
             low += 1
-    return {"days": days, "n": len(rows), "over": over, "low": low,
+    # итоги движения пациентов по учреждению
+    mov = {k: sum(r[k] or 0 for r in rows) for k in ("postup", "vyp", "pered", "umer")}
+    return {"days": days, "n": len(rows), "over": over, "low": low, "mov": mov,
             "all": agg(lambda r: True),
             "kruglo": agg(lambda r: not r["day"]),
             "day": agg(lambda r: r["day"])}

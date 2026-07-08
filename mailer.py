@@ -284,6 +284,7 @@ def build_koiki_overall_html(wards, totals, rep_period="", custom=""):
     """Общий сводный отчёт по занятости коек — ответственному за коечный фонд."""
     per = f" за период <b>{rep_period}</b>" if rep_period else ""
     t = totals
+    m = t.get("mov", {})
     def line(lbl, a):
         z = "—" if a["zan"] is None else f"{a['zan']}%"
         return f"<tr><td>{lbl}</td><td style='text-align:right'>{a['koek']}</td><td style='text-align:right'>{a['kd']}</td><td style='text-align:right'><b>{z}</b></td></tr>"
@@ -295,6 +296,8 @@ def build_koiki_overall_html(wards, totals, rep_period="", custom=""):
 {line('Круглосуточные койки', t['kruglo'])}
 {line('Дневные стационары (места)', t['day'])}
 </table>
+<p>Движение пациентов за период: поступило <b>{m.get('postup',0)}</b> · выписано <b>{m.get('vyp',0)}</b> ·
+переведено в другие отделения <b>{m.get('pered',0)}</b> · умерло <b>{m.get('umer',0)}</b>.</p>
 <table border="1" cellspacing="0" cellpadding="5" style="border-collapse:collapse;font-size:13px">
 <tr style="background:#1e3a5f;color:#fff"><th>Отделение</th><th>Ответственный</th><th>Коек</th><th>Койко-дни</th>
 <th>Занятость</th><th>Оборот</th><th>Ср. длит.</th><th>Примечание</th></tr>

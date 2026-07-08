@@ -27,6 +27,14 @@
 <p class="muted small"><b style="color:#2563eb">Синим</b> — занятость выше 100% (план перевыполнен);
 <b style="color:#c0392b">красным</b> — ниже 80% (недозагрузка). Перевыполнили план: <b>{{ totals.over }}</b> отд.</p>
 
+<h2>Движение пациентов за период</h2>
+<section class="cards">
+  <div class="card"><div class="num">{{ totals.mov.postup }}</div><div class="lbl">Поступило</div></div>
+  <div class="card"><div class="num">{{ totals.mov.vyp }}</div><div class="lbl">Выписано</div></div>
+  <div class="card"><div class="num">{{ totals.mov.pered }}</div><div class="lbl">Переведено в другие отделения</div></div>
+  <div class="card {{ 'bad' if totals.mov.umer }}"><div class="num">{{ totals.mov.umer }}</div><div class="lbl">Умерло</div></div>
+</section>
+
 <!-- Отделения: занятость, ответственные и рассылка (одной таблицей, как «Отделения») -->
 <form method="post" action="{{ url_for('koiki_save_map') }}">
   <div class="toolbar">
