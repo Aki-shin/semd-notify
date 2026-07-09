@@ -142,7 +142,7 @@ def index():
     storage.init()
     return render_template("dashboard.html",
                            funnel=storage.funnel(),
-                           sf=storage.status_funnel(),
+                           status=storage.status_list(),
                            notrans=storage.notrans_get(),
                            vidy=storage.vidy_list(),
                            top=storage.doctors("nepodp")[:15],

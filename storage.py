@@ -385,16 +385,6 @@ def status_list():
         return [dict(r) for r in c.execute("SELECT * FROM status ORDER BY count DESC")]
 
 
-def status_funnel():
-    """Воронка дашборда по отчёту «Статистика по статусам документов в РЭМД»:
-    распределение документов по статусам (доля от общего числа)."""
-    rows = status_list()
-    total = sum(r["count"] for r in rows)
-    for r in rows:
-        r["pct"] = round(100 * r["count"] / total, 1) if total else 0.0
-    return {"total": total, "rows": rows}
-
-
 def fap_list():
     with _conn() as c:
         return [dict(r) for r in c.execute(

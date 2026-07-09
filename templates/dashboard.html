@@ -8,24 +8,30 @@
 {% else %}
 
 {% if funnel.sform %}
-<section class="cards">
-  <div class="card"><div class="num">{{ funnel.sform }}</div><div class="lbl">Сформировано ЭМД</div></div>
-  <div class="card"><div class="num">{{ funnel.pct_podp }}%</div><div class="lbl">Подписано ({{ funnel.podp }})</div></div>
-  <div class="card bad"><div class="num">{{ funnel.nepodp }}</div><div class="lbl">Не подписано</div></div>
-  <div class="card {{ 'bad' if funnel.pct_zareg < 50 else '' }}"><div class="num">{{ funnel.pct_zareg }}%</div><div class="lbl">Зарегистрировано в РЭМД ({{ funnel.zareg }})</div></div>
+<h2>Воронка: путь ЭМД до РЭМД <span class="small muted">— один источник, отчёт «в разрезе врачей»</span></h2>
+<div class="funnel">
+  {% set mx = funnel.sform or 1 %}
+  <div class="frow"><span class="fl">Сформировано</span><div class="fbar"><i style="width:100%">{{ funnel.sform }}</i></div></div>
+  <div class="frow"><span class="fl">Подписано врачом</span><div class="fbar"><i class="g" style="width:{{ (100*funnel.podp/mx)|round(0) }}%">{{ funnel.podp }} ({{ funnel.pct_podp }}%)</i></div></div>
+  <div class="frow"><span class="fl">Зарегистрировано в РЭМД</span><div class="fbar"><i class="b" style="width:{{ (100*funnel.zareg/mx)|round(0) }}%">{{ funnel.zareg }} ({{ funnel.pct_zareg }}%)</i></div></div>
+  <div class="muted small" style="margin-top:8px">Все три цифры — из одного отчёта «в разрезе врачей», поэтому сходятся между собой.</div>
+</div>
+<section class="cards" style="grid-template-columns:repeat(2,1fr);margin-top:10px">
+  <div class="card {{ 'bad' if funnel.nepodp }}"><div class="num">{{ funnel.nepodp }}</div>
+    <div class="lbl">Не подписано врачами → <a class="small" href="{{ url_for('doctors') }}">рассылка врачам/зав.</a></div></div>
+  <div class="card {{ 'bad' if (funnel.podp - funnel.zareg) > 0 }}"><div class="num">{{ funnel.podp - funnel.zareg }}</div>
+    <div class="lbl">Подписано, но не дошло до РЭМД → <a class="small" href="{{ url_for('errors') }}">разбор ошибок (ФЛК)</a></div></div>
 </section>
 {% endif %}
 
-{% if sf.rows %}
-<h2>Воронка по статусам документов в РЭМД</h2>
-<div class="funnel">
-  {% set mx = sf.total or 1 %}
-  {% for r in sf.rows %}
-  <div class="frow"><span class="fl">{{ r.status }}</span>
-    <div class="fbar"><i class="{{ 'b' if 'ошибк' in r.status|lower else 'g' }}" style="width:{{ (100*r.count/mx)|round(0) }}%">{{ r.count }} ({{ r.pct }}%)</i></div></div>
+{% if status %}
+<h2>Состояние документов на стороне РЭМД <span class="small muted">— отдельный отчёт «по статусам»</span></h2>
+<table>
+  <tr><th>Статус</th><th>Кол-во</th></tr>
+  {% for s in status %}
+  <tr><td>{{ s.status }}</td><td class="r {{ 'bad' if 'шибк' in s.status }}">{{ s.count }}</td></tr>
   {% endfor %}
-  <div class="muted small" style="margin-top:8px">Всего документов: <b>{{ sf.total }}</b>. Источник — отчёт «Статистика по статусам документов в РЭМД».</div>
-</div>
+</table>
 {% endif %}
 
 {% if notrans %}
