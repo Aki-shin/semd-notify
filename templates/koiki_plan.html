@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block body %}
+<div style="margin:0 0 8px;font-size:14px"><a href="{{ url_for('koiki') }}">Занятость</a> · <b>План</b></div>
+<h1>Стационары — план госпитализаций и выполнение</h1>
+
+<h2>План госпитализаций по отделениям</h2>
+<p class="muted small">Впишите любой из трёх столбцов (год / месяц / неделя) — остальные пересчитаются автоматически.
+Хранится <b>годовой</b> план; месяц = год ÷ 12, неделя = год ÷ 52. За произвольный период план считается пропорционально числу дней.</p>
+<form method="post" action="{{ url_for('koiki_plan_save') }}">
+  <div class="toolbar"><span class="muted small">Годовой план — канонический</span>
+    <button type="submit">💾 Сохранить план</button></div>
+  <table>
+    <tr><th>Отделение</th><th>Год</th><th>Месяц</th><th>Неделя</th></tr>
+    {% for p in plans %}
+    <tr data-plan>
+      <td>{{ p.otdelenie }}</td>
+      <td><input type="number" class="py" name="year__{{ p.otdelenie }}" value="{{ p.year or '' }}" min="0" style="width:90px" placeholder="—"></td>
+      <td><input type="number" class="pm" value="{{ p.month or '' }}" min="0" style="width:90px" placeholder="—"></td>
+      <td><input type="number" class="pw" value="{{ p.week or '' }}" min="0" style="width:90px" placeholder="—"></td>
+    </tr>
+    {% else %}<tr><td colspan="4" class="empty">Загрузите отчёт по койкам, чтобы появились отделения.</td></tr>{% endfor %}
+  </table>
+</form>
+
+<h2 style="margin-top:24px">Сводное выполнение за все загруженные периоды</h2>
+{% if cum.span %}
+<p class="muted small">Охват: <b>{{ cum.span.start }} — {{ cum.span.end }}</b>, покрыто <b>{{ cum.covered }}</b> дней
+(использовано периодов: {{ cum.selected|length }}). План берётся годовой пропорционально покрытым дням.</p>
+
+<div class="funnel" style="margin-bottom:10px">
+  {% for s in cum.selected %}<span class="pill ok" style="margin:2px">✓ {{ s.label }} ({{ s.days }} дн.)</span>{% endfor %}
+  {% for s in cum.skipped %}<span class="pill warn" style="margin:2px" title="Исключён как пересекающийся с уже выбранным периодом">⤫ {{ s.label }} (пересечение)</span>{% endfor %}
+</div>
+{% if cum.gaps %}
+<div class="alert">⚠️ <b>Пробелы в покрытии</b> (нет загруженных данных за эти дни):
+  {% for g in cum.gaps %}<br>• между {{ g.after }} и {{ g.before }} — <b>{{ g.days }}</b> дн.{% endfor %}
+  <br>Выполнение считается только за покрытые {{ cum.covered }} дней (пробелы не учитываются).</div>
+{% endif %}
+
+<table>
+  <tr><th>Отделение</th><th>Годовой план</th><th>План за {{ cum.covered }} дн.</th><th>Факт (поступило)</th><th>Выполнение</th></tr>
+  {% for r in cum.rows %}
+  <tr>
+    <td>{{ r.otdelenie }}</td>
+    <td class="r">{{ r.plan_year or '—' }}</td>
+    <td class="r">{{ r.plan_cov or '—' }}</td>
+    <td class="r">{{ r.fact }}</td>
+    <td class="r" style="{% if r.vypoln is not none and r.vypoln < 100 %}color:#c0392b;font-weight:bold{% elif r.vypoln is not none %}color:#2563eb;font-weight:bold{% endif %}">{{ (r.vypoln ~ '%') if r.vypoln is not none else '—' }}</td>
+  </tr>
+  {% endfor %}
+  {% if cum.tot_plan %}
+  <tr style="font-weight:bold;background:#eef">
+    <td>ИТОГО (по отделениям с планом)</td><td></td>
+    <td class="r">{{ cum.tot_plan }}</td><td class="r">{{ cum.tot_fact }}</td>
+    <td class="r" style="color:{% if cum.total_vypoln and cum.total_vypoln >= 100 %}#2563eb{% else %}#c0392b{% endif %}">{{ cum.total_vypoln }}%</td>
+  </tr>
+  {% endif %}
+</table>
+{% else %}
+<div class="empty">Нет загруженных периодов по койкам. Загрузите отчёты (можно несколько недель) на <a href="{{ url_for('upload') }}">Загрузке</a>.</div>
+{% endif %}
+
+<script>
+document.querySelectorAll('tr[data-plan]').forEach(function(tr){
+  var y=tr.querySelector('.py'), m=tr.querySelector('.pm'), w=tr.querySelector('.pw');
+  function setMW(){var v=parseFloat(y.value); if(!isNaN(v)&&v>0){m.value=Math.round(v/12); w.value=Math.round(v/52);}else{m.value='';w.value='';}}
+  y.addEventListener('input', setMW);
+  m.addEventListener('input', function(){var v=parseFloat(m.value); if(!isNaN(v)&&v>0){y.value=Math.round(v*12); w.value=Math.round(v*12/52);}else{y.value='';w.value='';}});
+  w.addEventListener('input', function(){var v=parseFloat(w.value); if(!isNaN(v)&&v>0){y.value=Math.round(v*52); m.value=Math.round(v*52/12);}else{y.value='';m.value='';}});
+});
+</script>
+{% endblock %}

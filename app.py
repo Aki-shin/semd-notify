@@ -567,6 +567,24 @@ def koiki():
                            period=storage.report_period("koiki"))
 
 
+@app.route("/koiki/plan")
+def koiki_plan():
+    return render_template("koiki_plan.html",
+                           plans=storage.koiki_plan_list(),
+                           cum=storage.koiki_cumulative())
+
+
+@app.route("/koiki/plan/save", methods=["POST"])
+def koiki_plan_save():
+    saved = 0
+    for k, v in request.form.items():
+        if k.startswith("year__"):
+            storage.set_koiki_plan(k[len("year__"):], v or 0)
+            saved += 1
+    flash(f"Годовой план госпитализаций сохранён ({saved} отд.).", "ok")
+    return redirect(url_for("koiki_plan"))
+
+
 @app.route("/koiki/save_map", methods=["POST"])
 def koiki_save_map():
     resp_items = {k[len("resp__"):]: v for k, v in request.form.items() if k.startswith("resp__")}

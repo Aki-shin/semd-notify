@@ -440,7 +440,8 @@ def koiki_list():
         r["no_beds"] = koek == 0
         m = rmap.get(r["otdelenie"], {})
         r["resp"], r["email"] = m.get("resp", ""), m.get("email", "")
-        r["plan"] = pmap.get(r["otdelenie"], 0) or 0
+        r["plan_year"] = pmap.get(r["otdelenie"], 0) or 0
+        r["plan"] = round(r["plan_year"] / 365 * days) if r["plan_year"] else 0  # план за текущий период
         r["vypoln"] = round(r["postup"] / r["plan"] * 100, 1) if r["plan"] else None
     rows.sort(key=lambda x: (x["zan"] is None, -(x["zan"] or 0)))
     return rows
@@ -470,12 +471,13 @@ def koiki_totals():
             low += 1
     # итоги движения пациентов по учреждению
     mov = {k: sum(r[k] or 0 for r in rows) for k in ("postup", "vyp", "pered", "umer")}
-    # выполнение плана — факт (поступило) считаем только по отделениям, где задан план
-    total_plan = sum(pmap.values())
+    # выполнение плана за текущий период: годовой план пропорционально дням; факт — только по отд. с планом
+    plan_period = sum(round((pmap.get(r["otdelenie"], 0) or 0) / 365 * days)
+                      for r in rows if pmap.get(r["otdelenie"], 0))
     plan_fact = sum(r["postup"] or 0 for r in rows if pmap.get(r["otdelenie"], 0))
-    plan_vypoln = round(plan_fact / total_plan * 100, 1) if total_plan else None
+    plan_vypoln = round(plan_fact / plan_period * 100, 1) if plan_period else None
     return {"days": days, "n": len(rows), "over": over, "low": low, "mov": mov,
-            "plan": total_plan, "plan_fact": plan_fact, "plan_vypoln": plan_vypoln,
+            "plan": plan_period, "plan_fact": plan_fact, "plan_vypoln": plan_vypoln,
             "all": agg(lambda r: True),
             "kruglo": agg(lambda r: not r["day"]),
             "day": agg(lambda r: r["day"])}
@@ -532,6 +534,90 @@ def set_koiki_plan(otdelenie, plan):
         p = 0
     with _conn() as c:
         c.execute("INSERT OR REPLACE INTO koiki_plan(otdelenie,plan) VALUES(?,?)", (otdelenie, p))
+
+
+def koiki_plan_list():
+    """Отделения с годовым планом госпитализаций и производными (месяц = год/12, неделя = год/52).
+    Отделения берём из текущей загрузки коек + из справочника планов."""
+    with _conn() as c:
+        ods = [r["otdelenie"] for r in c.execute("SELECT otdelenie FROM koiki ORDER BY otdelenie")]
+        pmap = {r["otdelenie"]: (r["plan"] or 0) for r in c.execute("SELECT * FROM koiki_plan")}
+    for od in pmap:
+        if od not in ods:
+            ods.append(od)
+    return [{"otdelenie": od, "year": pmap.get(od, 0),
+             "month": round(pmap.get(od, 0) / 12) if pmap.get(od) else 0,
+             "week": round(pmap.get(od, 0) / 52) if pmap.get(od) else 0} for od in ods]
+
+
+def koiki_cumulative():
+    """Сводное выполнение плана за ВСЕ загруженные периоды коек.
+    Пересекающиеся периоды де-дублируются (жадно: приоритет раньше начавшимся и более длинным),
+    пробелы между периодами показываются явно. План годовой, пропорционально числу покрытых дней."""
+    import parser, tempfile, os as _os
+    with _conn() as c:
+        blobs = [(r["period"], bytes(r["data"])) for r in
+                 c.execute("SELECT period, data FROM period_files WHERE rtype='koiki'")]
+        pmap = {r["otdelenie"]: (r["plan"] or 0) for r in c.execute("SELECT * FROM koiki_plan")}
+    periods = []
+    for per, data in blobs:
+        fd, tmp = tempfile.mkstemp(suffix=".xls"); _os.close(fd)
+        try:
+            with open(tmp, "wb") as f:
+                f.write(data)
+            res = parser.parse(tmp)
+        except Exception:
+            res = None
+        finally:
+            try:
+                _os.remove(tmp)
+            except OSError:
+                pass
+        if not res:
+            continue
+        np = parser.norm_period(res.get("period") or per)
+        parts = np.split(" — ")
+        start = parser._date(parts[0])
+        end = parser._date(parts[-1]) if len(parts) > 1 else start
+        if not start:
+            continue
+        end = end or start
+        periods.append({"start": start, "end": end, "days": (end - start).days + 1, "label": np or per,
+                        "postup": {rec["otdelenie"]: rec["postup"] for rec in res["records"]}})
+    periods.sort(key=lambda p: (p["start"], -p["days"]))
+    selected, skipped, last_end = [], [], None
+    for p in periods:
+        if last_end and p["start"] <= last_end:
+            skipped.append(p)
+        else:
+            selected.append(p); last_end = p["end"]
+    gaps = []
+    for a, b in zip(selected, selected[1:]):
+        g = (b["start"] - a["end"]).days - 1
+        if g > 0:
+            gaps.append({"after": a["end"].strftime("%d.%m.%Y"),
+                         "before": b["start"].strftime("%d.%m.%Y"), "days": g})
+    covered = sum(p["days"] for p in selected)
+    cum = {}
+    for p in selected:
+        for od, ps in p["postup"].items():
+            cum[od] = cum.get(od, 0) + (ps or 0)
+    rows, tf, tp = [], 0, 0
+    for od in sorted(set(cum) | {k for k, v in pmap.items() if v}):
+        fact = cum.get(od, 0); py = pmap.get(od, 0)
+        plan_cov = round(py / 365 * covered) if (py and covered) else 0
+        vyp = round(fact / plan_cov * 100, 1) if plan_cov else None
+        rows.append({"otdelenie": od, "fact": fact, "plan_year": py, "plan_cov": plan_cov, "vypoln": vyp})
+        if py:
+            tf += fact; tp += plan_cov
+    return {"selected": [{"label": p["label"], "days": p["days"]} for p in selected],
+            "skipped": [{"label": p["label"], "days": p["days"]} for p in skipped],
+            "gaps": gaps, "covered": covered,
+            "span": {"start": selected[0]["start"].strftime("%d.%m.%Y"),
+                     "end": selected[-1]["end"].strftime("%d.%m.%Y")} if selected else None,
+            "rows": sorted(rows, key=lambda x: (x["vypoln"] is None, x["vypoln"] or 0)),
+            "tot_fact": tf, "tot_plan": tp,
+            "total_vypoln": round(tf / tp * 100, 1) if tp else None}
 
 
 def dept_summary():

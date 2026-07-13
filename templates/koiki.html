@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block body %}
+<div style="margin:0 0 8px;font-size:14px"><b>Занятость</b> · <a href="{{ url_for('koiki_plan') }}">План</a></div>
 <h1>Стационары — занятость коек</h1>
 <p class="muted">Занятость = койко-дни ÷ (число коек × дни периода). Значение &gt;100% по круглосуточным койкам —
 сигнал, что фактически развёрнуто больше коек, чем в справочнике Промед (проверить коечный фонд).
@@ -35,8 +36,11 @@
   <div class="card {{ 'bad' if totals.mov.umer }}"><div class="num">{{ totals.mov.umer }}</div><div class="lbl">Умерло</div></div>
 </section>
 {% if totals.plan %}
-<p class="muted small">План госпитализаций: <b>{{ totals.plan }}</b> · факт (поступило по отделениям с планом): <b>{{ totals.plan_fact }}</b> ·
-выполнение плана: <b style="color:{% if totals.plan_vypoln and totals.plan_vypoln >= 100 %}#2563eb{% else %}#c0392b{% endif %}">{{ totals.plan_vypoln }}%</b></p>
+<p class="muted small">План на период (из годового): <b>{{ totals.plan }}</b> · факт: <b>{{ totals.plan_fact }}</b> ·
+выполнение: <b style="color:{% if totals.plan_vypoln and totals.plan_vypoln >= 100 %}#2563eb{% else %}#c0392b{% endif %}">{{ totals.plan_vypoln }}%</b>
+· <a href="{{ url_for('koiki_plan') }}">План и сводка за все периоды →</a></p>
+{% else %}
+<p class="muted small">Планы госпитализаций задаются на вкладке <a href="{{ url_for('koiki_plan') }}">«План»</a> (год/месяц/неделя) — там же сводное выполнение за все периоды.</p>
 {% endif %}
 
 <!-- Отделения: занятость, ответственные и рассылка (одной таблицей, как «Отделения») -->
@@ -54,7 +58,7 @@
   <div class="fullbleed" style="overflow-x:auto">
   <table>
     <tr><th></th><th>Отделение</th><th>Коек</th><th>Койко-дни</th><th>Занятость</th>
-        <th title="Поступило">Поступ.</th><th title="План госпитализаций (вписать)">План</th><th title="Выполнение плана = поступило ÷ план">Вып. плана</th><th title="Выписано">Выпис.</th><th title="Переведено в другие отделения">Перев.</th><th title="Умерло">Умер.</th>
+        <th title="Поступило">Поступ.</th><th title="План на период (из годового; задаётся на вкладке «План»)">План</th><th title="Выполнение плана = поступило ÷ план за период">Вып. плана</th><th title="Выписано">Выпис.</th><th title="Переведено в другие отделения">Перев.</th><th title="Умерло">Умер.</th>
         <th>Оборот</th><th>Ср.&nbsp;длит.</th><th>Примечание</th><th>Ответственный</th><th>Почта</th></tr>
     {% for w in wards %}
     <tr>
@@ -65,7 +69,7 @@
       <td class="r" style="{% if w.zan is not none and w.zan > 100 %}color:#2563eb;font-weight:bold{% elif w.zan is not none and w.zan < 80 %}color:#c0392b;font-weight:bold{% endif %}">
         {{ (w.zan ~ '%') if w.zan is not none else '—' }}</td>
       <td class="r">{{ w.postup }}</td>
-      <td><input type="number" name="plan__{{ w.otdelenie }}" value="{{ w.plan or '' }}" min="0" style="width:64px" placeholder="—"></td>
+      <td class="r">{{ w.plan or '—' }}</td>
       <td class="r" style="{% if w.vypoln is not none and w.vypoln < 100 %}color:#c0392b{% elif w.vypoln is not none %}color:#2563eb;font-weight:bold{% endif %}">{{ (w.vypoln ~ '%') if w.vypoln is not none else '—' }}</td>
       <td class="r">{{ w.vyp }}</td>
       <td class="r">{{ w.pered }}</td>
