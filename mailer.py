@@ -220,6 +220,63 @@ def build_fap_report_html(s, rows, rep_period="", custom=""):
 </body></html>"""
 
 
+def build_max_report_html(totals, by_doctor, by_purpose, rep_period="", custom=""):
+    """Сводный отчёт по ТМК через чат-бот MAX — ответственному за цифровизацию/ТМК.
+    Доля через MAX — показатель цифровизации; цвет: синий ≥80 %, красный <50 %."""
+    t = totals or {}
+    def pct_td(v):
+        if v is None:
+            return "<td style='text-align:right;color:#999'>—</td>"
+        col = "#2563eb" if v >= 80 else ("#c0392b" if v < 50 else "#222")
+        return f"<td style='text-align:right;color:{col}'>{v}%</td>"
+    def td(v):
+        return f"<td style='text-align:right'>{v}</td>"
+    drows = "".join(
+        f"<tr><td>{d['doctor']}</td><td style='font-size:11px;color:#555'>{d.get('position','')}</td>"
+        + td(d['zap']) + td(d['zap_max']) + pct_td(d['zap_pct'])
+        + td(d['prov']) + td(d['prov_max']) + pct_td(d['prov_pct'])
+        + td(d['otm']) + td(d['bl_max']) + "</tr>"
+        for d in by_doctor
+    ) or "<tr><td colspan='10'>нет данных</td></tr>"
+    dtot = ("<tr style='font-weight:bold;background:#eef'><td colspan='2'>ИТОГО</td>"
+            + td(t.get('zap', 0)) + td(t.get('zap_max', 0)) + pct_td(t.get('zap_pct'))
+            + td(t.get('prov', 0)) + td(t.get('prov_max', 0)) + pct_td(t.get('prov_pct'))
+            + td(t.get('otm', 0)) + td(t.get('bl_max', 0)) + "</tr>")
+    prows = "".join(
+        f"<tr><td>{c['purpose']}</td>"
+        + td(c['zap']) + td(c['zap_max']) + pct_td(c['zap_pct'])
+        + td(c['prov']) + pct_td(c['prov_pct']) + td(c['bl_max']) + "</tr>"
+        for c in by_purpose
+    ) or "<tr><td colspan='7'>нет данных</td></tr>"
+    per = f" за период <b>{rep_period}</b>" if rep_period else ""
+    return f"""<html><body style="font-family:Arial,sans-serif;font-size:13px;color:#222">
+<p>Сводный отчёт по <b>телемедицинским консультациям (ТМК)</b> и использованию <b>чат-бота MAX</b>{per}.</p>
+<p>Записи на ТМК: всего <b>{t.get('zap',0)}</b>, через MAX <b>{t.get('zap_max',0)}</b> ({t.get('zap_pct')}%) ·
+проведено ТМК: <b>{t.get('prov',0)}</b>, через MAX <b>{t.get('prov_max',0)}</b> ({t.get('prov_pct')}%) ·
+отменено: <b>{t.get('otm',0)}</b> · больничных закрыто через MAX: <b>{t.get('bl_max',0)}</b> ·
+врачей ведут ТМК: <b>{t.get('n_doctors',0)}</b>.</p>
+<p style="color:#555">Доля через MAX — показатель цифровизации (проникновение чат-бота):
+<b style="color:#2563eb">синим</b> ≥ 80 %, <b style="color:#c0392b">красным</b> — ниже 50 %.</p>
+
+<h3 style="margin:14px 0 4px">По врачам</h3>
+<table border="1" cellspacing="0" cellpadding="4" style="border-collapse:collapse;font-size:12px">
+<tr style="background:#1e3a5f;color:#fff"><th>Врач</th><th>Должность</th>
+<th>Зап.</th><th>&rarr;MAX</th><th>%</th><th>Пров.</th><th>&rarr;MAX</th><th>%</th><th>Отмен.</th><th>Больн.MAX</th></tr>
+{drows}
+{dtot}
+</table>
+
+<h3 style="margin:16px 0 4px">По целям консультации</h3>
+<table border="1" cellspacing="0" cellpadding="4" style="border-collapse:collapse;font-size:12px">
+<tr style="background:#1e3a5f;color:#fff"><th>Цель консультации</th>
+<th>Зап.</th><th>&rarr;MAX</th><th>%</th><th>Пров.</th><th>%</th><th>Больн.MAX</th></tr>
+{prows}
+</table>
+{_custom_block(custom)}
+<p style="color:#666;font-size:12px">Сформировано автоматически системой мониторинга СЭМД.</p>
+</body></html>"""
+
+
 def _koiki_rows_html(wards, show_resp=False, cum_vyp=None):
     def c(v):
         return "—" if v is None else v

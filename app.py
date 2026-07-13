@@ -121,6 +121,7 @@ REPORT_MAILING = {
     "docerr": "Ответственному за ошибки РЭМД",
     "fap": "Ответственному за ФАП",
     "koiki": "Ответственным за отделения + за коечный фонд",
+    "max": "Ответственному за цифровизацию / ТМК",
 }
 
 
@@ -572,7 +573,31 @@ def max_page():
                            by_doctor=storage.max_by_doctor(),
                            by_position=storage.max_by_position(),
                            by_purpose=storage.max_by_purpose(),
+                           resp=storage.resp_list("max"),
                            period=storage.report_period("max"))
+
+
+@app.route("/max/report/send", methods=["POST"])
+def max_report_send():
+    resp = storage.resp_list("max")
+    if not resp:
+        flash("Не заданы получатели отчёта MAX — добавьте на странице «MAX».", "warn")
+        return redirect(url_for("max_page"))
+    totals = storage.max_totals()
+    if not totals:
+        flash("Отчёт MAX не загружен.", "warn")
+        return redirect(url_for("max_page"))
+    rep = storage.report_period("max")
+    html = mailer.build_max_report_html(totals, storage.max_by_doctor(),
+                                        storage.max_by_purpose(), rep,
+                                        appconfig.get("CUSTOM_MAX", ""))
+    subj = "Сводный отчёт: ТМК через чат-бот MAX" + (f" — период {rep}" if rep else "")
+    to = ", ".join(r["email"] for r in resp)
+    ok, msg = mailer.send(to, subj, html)
+    storage.log_send("[MAX-отчёт]", to, totals.get("n_doctors", 0), msg)
+    dry = " (DRYRUN)" if mailer.is_dryrun() else ""
+    flash(f"Отчёт MAX ({to}): {msg}.{dry}", "ok" if ok else "warn")
+    return redirect(url_for("max_page"))
 
 
 @app.route("/koiki")
@@ -751,7 +776,7 @@ def settings():
                 appconfig.set("SMTP_PASS", pw)
             flash("Настройки почты сохранены.", "ok")
         elif action == "save_custom":
-            for k in ("CUSTOM_DEBT", "CUSTOM_DEPT", "CUSTOM_ERR", "CUSTOM_FAP", "CUSTOM_KOIKI"):
+            for k in ("CUSTOM_DEBT", "CUSTOM_DEPT", "CUSTOM_ERR", "CUSTOM_FAP", "CUSTOM_KOIKI", "CUSTOM_MAX"):
                 appconfig.set(k, (request.form.get(k) or "").strip())
             flash("Дополнительный текст писем сохранён.", "ok")
         elif action == "save_ipa":
@@ -774,7 +799,7 @@ def settings():
     smtp["SMTP_BATCH_SIZE"] = appconfig.get("SMTP_BATCH_SIZE", "25")
     smtp["SMTP_BATCH_PAUSE"] = appconfig.get("SMTP_BATCH_PAUSE", "30")
     custom = {k: appconfig.get(k, "") for k in
-              ("CUSTOM_DEBT", "CUSTOM_DEPT", "CUSTOM_ERR", "CUSTOM_FAP", "CUSTOM_KOIKI")}
+              ("CUSTOM_DEBT", "CUSTOM_DEPT", "CUSTOM_ERR", "CUSTOM_FAP", "CUSTOM_KOIKI", "CUSTOM_MAX")}
     ipacfg = {k: appconfig.get(k, "") for k in ("IPA_LDAP_URI", "IPA_BASE_DN", "IPA_BIND_DN")}
     ipacfg["IPA_AUTOSYNC"] = appconfig.get_bool("IPA_AUTOSYNC", False)
     ipacfg["IPA_SYNC_HOURS"] = appconfig.get("IPA_SYNC_HOURS", "24")
