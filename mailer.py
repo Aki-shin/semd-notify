@@ -243,19 +243,23 @@ def _koiki_rows_html(wards, show_resp=False):
         else:
             color = "#222"
         resp_td = f"<td style='font-size:12px'>{w.get('resp','') or '—'}</td>" if show_resp else ""
+        pv = w.get("vypoln")
+        vcol = "#c0392b" if (pv is not None and pv < 100) else ("#2563eb" if pv is not None else "#222")
         out.append(
             f"<tr><td>{w['otdelenie']}</td>{resp_td}"
             f"<td style='text-align:right'>{w['koek']}</td>"
             f"<td style='text-align:right'>{w['kd']}</td>"
             f"<td style='text-align:right;color:{color}'><b>{zt}</b></td>"
             f"<td style='text-align:right'>{w.get('postup',0)}</td>"
+            f"<td style='text-align:right'>{w.get('plan') or '—'}</td>"
+            f"<td style='text-align:right;color:{vcol}'>{(str(pv)+'%') if pv is not None else '—'}</td>"
             f"<td style='text-align:right'>{w.get('vyp',0)}</td>"
             f"<td style='text-align:right'>{w.get('pered',0)}</td>"
             f"<td style='text-align:right'>{w.get('umer',0)}</td>"
             f"<td style='text-align:right'>{c(w.get('oborot'))}</td>"
             f"<td style='text-align:right'>{c(w.get('dlit'))}</td>"
             f"<td style='font-size:12px;color:#777'>{note}</td></tr>")
-    return "".join(out) or "<tr><td colspan='12'>нет данных</td></tr>"
+    return "".join(out) or "<tr><td colspan='14'>нет данных</td></tr>"
 
 
 _KOIKI_NOTE = ("Занятость = койко-дни ÷ (число коек × дни периода). "
@@ -275,7 +279,7 @@ def build_koiki_resp_html(resp, wards, days, rep_period="", custom=""):
 <p>Показатели <b>занятости коек</b> по закреплённым за вами отделениям{per} (в периоде {days} дн.).</p>
 <table border="1" cellspacing="0" cellpadding="5" style="border-collapse:collapse;font-size:13px">
 <tr style="background:#1e3a5f;color:#fff"><th>Отделение</th><th>Коек</th><th>Койко-дни</th>
-<th>Занятость</th><th>Поступ.</th><th>Выпис.</th><th>Перев.</th><th>Умер.</th><th>Оборот</th><th>Ср. длит.</th><th>Примечание</th></tr>
+<th>Занятость</th><th>Поступ.</th><th>План</th><th>Вып.</th><th>Выпис.</th><th>Перев.</th><th>Умер.</th><th>Оборот</th><th>Ср. длит.</th><th>Примечание</th></tr>
 {_koiki_rows_html(wards)}
 </table>
 <p style="color:#555;font-size:12px">{_KOIKI_NOTE}</p>
@@ -284,11 +288,23 @@ def build_koiki_resp_html(resp, wards, days, rep_period="", custom=""):
 </body></html>"""
 
 
-def build_koiki_overall_html(wards, totals, rep_period="", custom=""):
+def build_koiki_overall_html(wards, totals, rep_period="", custom="", cum=None):
     """Общий сводный отчёт по занятости коек — ответственному за коечный фонд."""
     per = f" за период <b>{rep_period}</b>" if rep_period else ""
     t = totals
     m = t.get("mov", {})
+    plan_line = ""
+    if t.get("plan"):
+        pv = t.get("plan_vypoln")
+        pcol = "#2563eb" if (pv is not None and pv >= 100) else "#c0392b"
+        plan_line = (f"<p>Выполнение плана госпитализаций — <b>за отчётный период</b>: план <b>{t['plan']}</b>, "
+                     f"факт <b>{t.get('plan_fact', 0)}</b>, выполнение <b style='color:{pcol}'>{pv}%</b>.")
+        if cum and cum.get("total_vypoln") is not None:
+            cv = cum["total_vypoln"]; ccol = "#2563eb" if cv >= 100 else "#c0392b"
+            plan_line += (f" <b>За весь обработанный период</b> ({cum.get('covered', 0)} дн.): "
+                          f"план <b>{cum.get('tot_plan', 0)}</b>, факт <b>{cum.get('tot_fact', 0)}</b>, "
+                          f"выполнение <b style='color:{ccol}'>{cv}%</b>.")
+        plan_line += "</p>"
     def line(lbl, a):
         z = "—" if a["zan"] is None else f"{a['zan']}%"
         return f"<tr><td>{lbl}</td><td style='text-align:right'>{a['koek']}</td><td style='text-align:right'>{a['kd']}</td><td style='text-align:right'><b>{z}</b></td></tr>"
@@ -302,9 +318,10 @@ def build_koiki_overall_html(wards, totals, rep_period="", custom=""):
 </table>
 <p>Движение пациентов за период: поступило <b>{m.get('postup',0)}</b> · выписано <b>{m.get('vyp',0)}</b> ·
 переведено в другие отделения <b>{m.get('pered',0)}</b> · умерло <b>{m.get('umer',0)}</b>.</p>
+{plan_line}
 <table border="1" cellspacing="0" cellpadding="5" style="border-collapse:collapse;font-size:13px">
 <tr style="background:#1e3a5f;color:#fff"><th>Отделение</th><th>Ответственный</th><th>Коек</th><th>Койко-дни</th>
-<th>Занятость</th><th>Поступ.</th><th>Выпис.</th><th>Перев.</th><th>Умер.</th><th>Оборот</th><th>Ср. длит.</th><th>Примечание</th></tr>
+<th>Занятость</th><th>Поступ.</th><th>План</th><th>Вып.</th><th>Выпис.</th><th>Перев.</th><th>Умер.</th><th>Оборот</th><th>Ср. длит.</th><th>Примечание</th></tr>
 {_koiki_rows_html(wards, show_resp=True)}
 </table>
 <p style="color:#555;font-size:12px">{_KOIKI_NOTE}</p>

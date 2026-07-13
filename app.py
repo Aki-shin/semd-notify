@@ -653,7 +653,7 @@ def koiki_report_send():
         return redirect(url_for("koiki"))
     rep = storage.report_period("koiki")
     html = mailer.build_koiki_overall_html(wards, storage.koiki_totals(), rep,
-                                           appconfig.get("CUSTOM_KOIKI", ""))
+                                           appconfig.get("CUSTOM_KOIKI", ""), storage.koiki_cumulative())
     subj = "Сводный отчёт: занятость коечного фонда" + (f" — период {rep}" if rep else "")
     to = ", ".join(r["email"] for r in resp)
     ok, msg = mailer.send(to, subj, html)
