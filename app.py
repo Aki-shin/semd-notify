@@ -41,11 +41,12 @@ RTYPE_RU = {
     "docerr": "Ошибки по видам документов",
     "status": "Статусы документов",
     "koiki": "Стационары (занятость коек)",
+    "max": "MAX — записи и ТМК через чат-бот",
     "state": "Состояние по ЭМД",
     "unknown": "Не распознан",
 }
 LOADABLE = ("vrachi", "debts", "flk", "notrans",
-            "fap", "vidy", "docerr", "status", "koiki")
+            "fap", "vidy", "docerr", "status", "koiki", "max")
 
 # Справочник поддерживаемых отчётов: точное наименование (как в ЕИСЗ ПК) и что даёт в системе.
 REPORTS_INFO = [
@@ -94,6 +95,12 @@ REPORTS_INFO = [
               "Рассылка ответственным за отделения и сводный отчёт ответственному за коечный фонд.",
      "section": "Страница «Стационары»",
      "note": "В ЕИСЗ ПК (Промед) отчёт называется «Форма № 016/у Изменённая»."},
+    {"key": "max",
+     "title": "Отчёт о количестве записей и оказания услуг ТМК через чат-бот MAX",
+     "gives": "Телемедицина через чат-бот MAX: записи на ТМК, проведённые консультации, отменённые "
+              "и больничные — всего и через MAX, с долей MAX по врачам, должностям и целям. "
+              "Показатель цифровизации (проникновение чат-бота MAX).",
+     "section": "Страница «MAX»"},
 ]
 
 # Классификация отчётов на странице загрузки.
@@ -101,11 +108,11 @@ REPORTS_INFO = [
 REPORT_GROUP = {
     "vrachi": "ЭМД", "debts": "ЭМД", "notrans": "ЭМД", "vidy": "ЭМД", "status": "ЭМД",
     "flk": "Ошибки", "docerr": "Ошибки",
-    "fap": "ФАП", "koiki": "Стационары",
+    "fap": "ФАП", "koiki": "Стационары", "max": "Телемед",
 }
 # Необходимые — на них строятся еженедельные рассылки; остальные дополнительные (визуализация/общая картина).
 REPORT_REQUIRED = {"vrachi", "debts", "flk", "fap", "koiki"}
-REPORT_GROUP_ORDER = {"ЭМД": 0, "Ошибки": 1, "Стационары": 2, "ФАП": 3}
+REPORT_GROUP_ORDER = {"ЭМД": 0, "Ошибки": 1, "Стационары": 2, "ФАП": 3, "Телемед": 4}
 # Кому уходит рассылка по отчёту (если уходит). Отчётов здесь нет → рассылки нет, только визуализация.
 REPORT_MAILING = {
     "debts": "Врачам — их неподписанные документы",
@@ -556,6 +563,16 @@ def fap_report_send():
     dry = " (DRYRUN)" if mailer.is_dryrun() else ""
     flash(f"Отчёт по ФАП ({to}): {msg}.{dry}", "ok" if ok else "warn")
     return redirect(url_for("fap"))
+
+
+@app.route("/max")
+def max_page():
+    return render_template("max.html",
+                           totals=storage.max_totals(),
+                           by_doctor=storage.max_by_doctor(),
+                           by_position=storage.max_by_position(),
+                           by_purpose=storage.max_by_purpose(),
+                           period=storage.report_period("max"))
 
 
 @app.route("/koiki")

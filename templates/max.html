@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% macro pct(v) %}
+<td class="r" style="{% if v is none %}color:#999{% elif v >= 80 %}color:#2563eb;font-weight:bold{% elif v < 50 %}color:#c0392b;font-weight:bold{% endif %}">{{ (v ~ '%') if v is not none else '—' }}</td>
+{%- endmacro %}
+{% block body %}
+<h1>MAX — записи и услуги ТМК через чат-бот</h1>
+<p class="muted">Телемедицинские консультации (ТМК) и доля, идущая через <b>чат-бот MAX</b> (мессенджер).
+Ключевой показатель цифровизации — <b>проникновение MAX</b>: какая часть записей, проведённых консультаций
+и закрытых больничных проходит через бота, а не через регистратуру/ЕИСЗ.
+{% if period %}<b>Период: {{ period }}</b>{% endif %}</p>
+
+{% if totals %}
+<section class="cards">
+  <div class="card"><div class="num" style="color:{% if totals.zap_pct is not none and totals.zap_pct >= 80 %}#2563eb{% elif totals.zap_pct is not none and totals.zap_pct < 50 %}#c0392b{% endif %}">{{ totals.zap_pct if totals.zap_pct is not none else '—' }}%</div>
+    <div class="lbl">Записей на ТМК через MAX<br>({{ totals.zap_max }} из {{ totals.zap }})</div></div>
+  <div class="card"><div class="num" style="color:{% if totals.prov_pct is not none and totals.prov_pct >= 80 %}#2563eb{% elif totals.prov_pct is not none and totals.prov_pct < 50 %}#c0392b{% endif %}">{{ totals.prov_pct if totals.prov_pct is not none else '—' }}%</div>
+    <div class="lbl">Проведено ТМК через MAX<br>({{ totals.prov_max }} из {{ totals.prov }})</div></div>
+  <div class="card"><div class="num">{{ totals.bl_max }}</div>
+    <div class="lbl">Больничных закрыто через MAX</div></div>
+  <div class="card"><div class="num">{{ totals.n_doctors }}</div>
+    <div class="lbl">Врачей ведут ТМК</div></div>
+</section>
+<p class="muted small"><b style="color:#2563eb">Синим</b> — доля MAX ≥ 80 % (высокое проникновение);
+<b style="color:#c0392b">красным</b> — ниже 50 % (низкое, есть куда расти).
+Записи на ТМК всего = <b>{{ totals.zap }}</b> · проведено = <b>{{ totals.prov }}</b> ·
+отменено = <b>{{ totals.otm }}</b> (из них через MAX {{ totals.otm_max }}).</p>
+
+<h2>По врачам</h2>
+<p class="muted small">Кто активнее использует чат-бот MAX. Сортировка по числу записей на ТМК.</p>
+<div class="fullbleed" style="overflow-x:auto">
+<table>
+  <tr><th>Врач</th><th>Должность</th>
+      <th title="Записей на ТМК всего">Зап.</th><th title="Из них через чат-бот MAX">→MAX</th><th title="Доля записей через MAX">%</th>
+      <th title="Проведено ТМК всего">Пров.</th><th title="Из них через MAX">→MAX</th><th title="Доля проведённых через MAX">%</th>
+      <th title="Отменённых записей всего">Отмен.</th><th title="Больничных листов, закрытых через MAX">Больн.MAX</th></tr>
+  {% for d in by_doctor %}
+  <tr>
+    <td>{{ d.doctor }}</td>
+    <td class="small muted">{{ d.position }}</td>
+    <td class="r">{{ d.zap }}</td><td class="r">{{ d.zap_max }}</td>{{ pct(d.zap_pct) }}
+    <td class="r">{{ d.prov }}</td><td class="r">{{ d.prov_max }}</td>{{ pct(d.prov_pct) }}
+    <td class="r">{{ d.otm }}</td><td class="r">{{ d.bl_max }}</td>
+  </tr>
+  {% endfor %}
+</table>
+</div>
+
+<h2>По должностям</h2>
+<div class="fullbleed" style="overflow-x:auto">
+<table>
+  <tr><th>Должность</th>
+      <th>Зап.</th><th>→MAX</th><th>%</th>
+      <th>Пров.</th><th>→MAX</th><th>%</th>
+      <th>Отмен.</th><th>Больн.MAX</th></tr>
+  {% for p in by_position %}
+  <tr>
+    <td>{{ p.position }}</td>
+    <td class="r">{{ p.zap }}</td><td class="r">{{ p.zap_max }}</td>{{ pct(p.zap_pct) }}
+    <td class="r">{{ p.prov }}</td><td class="r">{{ p.prov_max }}</td>{{ pct(p.prov_pct) }}
+    <td class="r">{{ p.otm }}</td><td class="r">{{ p.bl_max }}</td>
+  </tr>
+  {% endfor %}
+</table>
+</div>
+
+<h2>По целям консультации</h2>
+<div class="fullbleed" style="overflow-x:auto">
+<table>
+  <tr><th>Цель консультации</th>
+      <th>Зап.</th><th>→MAX</th><th>%</th>
+      <th>Пров.</th><th>→MAX</th><th>%</th>
+      <th>Отмен.</th><th>Больн.MAX</th></tr>
+  {% for c in by_purpose %}
+  <tr>
+    <td>{{ c.purpose }}</td>
+    <td class="r">{{ c.zap }}</td><td class="r">{{ c.zap_max }}</td>{{ pct(c.zap_pct) }}
+    <td class="r">{{ c.prov }}</td><td class="r">{{ c.prov_max }}</td>{{ pct(c.prov_pct) }}
+    <td class="r">{{ c.otm }}</td><td class="r">{{ c.bl_max }}</td>
+  </tr>
+  {% endfor %}
+</table>
+</div>
+{% else %}
+<div class="empty">Отчёт по MAX не загружен.
+  <a href="{{ url_for('upload') }}">Загрузите</a> «Отчёт о количестве записей и оказания услуг ТМК через чат-бот MAX».</div>
+{% endif %}
+{% endblock %}

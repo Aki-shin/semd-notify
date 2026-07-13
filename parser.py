@@ -9,6 +9,7 @@
   - flk      : «РЭМД. Детализация по ошибкам ФЛК»
   - status   : «Статистика по статусам документов в РЭМД» (воронка дашборда)
   - koiki    : «Сводная ведомость движения пациентов и коечного фонда»
+  - max      : «Отчёт о количестве записей и оказания услуг ТМК через чат-бот MAX»
 """
 import re
 import datetime
@@ -76,6 +77,8 @@ def detect_type(rows):
     head = " ".join(
         (r.get(1, "") or "") for r in rows[:6]
     ).lower()
+    if "чат-бот" in head and "тмк" in head:
+        return "max"
     if "фельдшерам фап" in head or "работе в эмк" in head:
         return "fap"
     if "в разрезе врачей" in head:
@@ -182,6 +185,8 @@ def parse(path):
         res["records"] = _parse_docerr(rows)
     elif rtype == "status":
         res["records"] = _parse_status(rows)
+    elif rtype == "max":
+        res["records"] = _parse_max(rows)
     return res
 
 
@@ -406,5 +411,40 @@ def _parse_koiki(rows):
             "umer": int(_num(r.get(23, "")) or 0),
             "kon": int(_num(r.get(27, "")) or 0),
             "day": 1 if ("дневн" in low or "пациенто" in low) else 0,
+        })
+    return out
+
+
+def _parse_max(rows):
+    """«Отчёт о количестве записей и оказания услуг ТМК через чат-бот MAX».
+    Сводная (pivot) раскладка: МО → Должность → Врач → строки по «Цели консультации»,
+    с промежуточными строками «Итого по …» и заголовками групп. Берём только
+    ЛИСТОВЫЕ строки (у них № п/п — число), агрегаты и заголовки пропускаем.
+    Колонки (с учётом ss:Index):
+      c1 № п/п, c3 должность, c4 врач, c5 цель консультации,
+      c6 записей на ТМК всего,  c7 из них через чат-бот MAX,
+      c9 отменённых записей всего, c10 из них через MAX,
+      c12 проведённых ТМК всего,   c13 из них через MAX,
+      c15 больничных листов, закрытых через MAX.
+    Проценты не храним — пересчитываем из сумм при агрегации (нельзя усреднять %)."""
+    out = []
+    for r in rows:
+        pp = (r.get(1, "") or "").strip()
+        doctor = (r.get(4, "") or "").strip()
+        # лист: № — целое, врач — ФИО (не число, не пусто); отсекает «Итого по», «ВСЕГО»,
+        # заголовки групп (одна ячейка) и строку нумерации колонок (там c4 = «4»).
+        if not pp.isdigit() or not doctor or doctor.isdigit():
+            continue
+        out.append({
+            "doctor": doctor,
+            "position": (r.get(3, "") or "").strip(),
+            "purpose": (r.get(5, "") or "").strip(),
+            "zap": int(_num(r.get(6, "")) or 0),
+            "zap_max": int(_num(r.get(7, "")) or 0),
+            "otm": int(_num(r.get(9, "")) or 0),
+            "otm_max": int(_num(r.get(10, "")) or 0),
+            "prov": int(_num(r.get(12, "")) or 0),
+            "prov_max": int(_num(r.get(13, "")) or 0),
+            "bl_max": int(_num(r.get(15, "")) or 0),
         })
     return out

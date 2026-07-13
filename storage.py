@@ -47,6 +47,10 @@ def init():
         CREATE TABLE IF NOT EXISTS koiki(
             otdelenie TEXT PRIMARY KEY, koek INTEGER, kd INTEGER, nach INTEGER,
             postup INTEGER, vyp INTEGER, pered INTEGER, umer INTEGER, kon INTEGER, day INTEGER);
+        CREATE TABLE IF NOT EXISTS max_tmk(
+            doctor TEXT, position TEXT, purpose TEXT,
+            zap INTEGER, zap_max INTEGER, otm INTEGER, otm_max INTEGER,
+            prov INTEGER, prov_max INTEGER, bl_max INTEGER);
         CREATE TABLE IF NOT EXISTS koiki_map(otdelenie TEXT PRIMARY KEY, resp TEXT, email TEXT);
         CREATE TABLE IF NOT EXISTS koiki_plan(otdelenie TEXT PRIMARY KEY, plan INTEGER DEFAULT 0);
         CREATE TABLE IF NOT EXISTS report_resp(report TEXT, email TEXT, name TEXT DEFAULT '', PRIMARY KEY(report, email));
@@ -127,6 +131,11 @@ def replace_report(rtype, filename, period, nrows, records):
             c.executemany(
                 "INSERT OR REPLACE INTO koiki(otdelenie,koek,kd,nach,postup,vyp,pered,umer,kon,day) "
                 "VALUES(:otdelenie,:koek,:kd,:nach,:postup,:vyp,:pered,:umer,:kon,:day)", records)
+        elif rtype == "max":
+            c.execute("DELETE FROM max_tmk")
+            c.executemany(
+                "INSERT INTO max_tmk(doctor,position,purpose,zap,zap_max,otm,otm_max,prov,prov_max,bl_max) "
+                "VALUES(:doctor,:position,:purpose,:zap,:zap_max,:otm,:otm_max,:prov,:prov_max,:bl_max)", records)
 
 
 def meta_all():
@@ -154,7 +163,7 @@ def reset_reports():
     init()
     with _conn() as c:
         for t in ("meta", "vrachi", "debts", "errors", "notrans",
-                  "fap", "vidy", "docerr", "status", "koiki"):
+                  "fap", "vidy", "docerr", "status", "koiki", "max_tmk"):
             c.execute(f"DELETE FROM {t}")
 
 
@@ -232,7 +241,7 @@ def switch_period(period):
 RTYPE_TABLE = {
     "vrachi": "vrachi", "debts": "debts", "flk": "errors",
     "notrans": "notrans", "fap": "fap", "vidy": "vidy",
-    "docerr": "docerr", "status": "status", "koiki": "koiki",
+    "docerr": "docerr", "status": "status", "koiki": "koiki", "max": "max_tmk",
 }
 
 
@@ -409,6 +418,69 @@ def fap_summary():
             "naprav": tot("naprav"), "recipes": tot("recipes"), "naznach": tot("naznach"),
             "eln": tot("eln"), "telemed": tot("telemed"), "er": tot("er"),
             "low": [r for r in rows if (r["pct"] or 0) < 100]}
+
+
+# --- MAX: записи и оказание услуг ТМК через чат-бот MAX (телемедицина/цифровизация) ---
+
+def _max_pct(part, whole):
+    return round(100 * part / whole, 1) if whole else None
+
+
+def _max_rows():
+    with _conn() as c:
+        return [dict(r) for r in c.execute("SELECT * FROM max_tmk")]
+
+
+def _max_agg(rows):
+    """Свёртка списка строк в суммы + пересчитанные доли через MAX (проценты нельзя усреднять)."""
+    g = {k: sum(r[k] or 0 for r in rows)
+         for k in ("zap", "zap_max", "otm", "otm_max", "prov", "prov_max", "bl_max")}
+    g["zap_pct"] = _max_pct(g["zap_max"], g["zap"])
+    g["otm_pct"] = _max_pct(g["otm_max"], g["otm"])
+    g["prov_pct"] = _max_pct(g["prov_max"], g["prov"])
+    return g
+
+
+def max_totals():
+    """Итоги по учреждению: записи/отменённые/проведённые ТМК — всего и через чат-бот MAX,
+    доли через MAX, больничные, закрытые через MAX. None — если отчёт не загружен."""
+    rows = _max_rows()
+    if not rows:
+        return None
+    g = _max_agg(rows)
+    g["n_doctors"] = len(set(r["doctor"] for r in rows))
+    g["n_rows"] = len(rows)
+    return g
+
+
+def _max_group(key):
+    """Агрегация по ключу (doctor/position/purpose) со свёрткой и пересчётом долей;
+    сортировка по числу записей на ТМК (убыв.)."""
+    rows = _max_rows()
+    groups = {}
+    for r in rows:
+        groups.setdefault((r[key] or "—"), []).append(r)
+    out = []
+    for name, rs in groups.items():
+        g = _max_agg(rs)
+        g[key] = name
+        if key == "doctor":
+            g["position"] = rs[0]["position"]  # у врача одна должность
+        out.append(g)
+    out.sort(key=lambda x: -x["zap"])
+    return out
+
+
+def max_by_doctor():
+    return _max_group("doctor")
+
+
+def max_by_position():
+    return _max_group("position")
+
+
+def max_by_purpose():
+    return _max_group("purpose")
 
 
 # --- Коечный фонд (занятость коек в стационарах) ---
