@@ -202,14 +202,33 @@ def upload():
     meta = [m for m in storage.meta_all() if m["rtype"] in exports]
     loaded = set(exports)
     meta_by_rtype = {m["rtype"]: m for m in meta}
-    allr = [dict(r, group=REPORT_GROUP.get(r["key"], ""), req=r["key"] in REPORT_REQUIRED,
-                 mailing=REPORT_MAILING.get(r["key"], ""))
-            for r in REPORTS_INFO]
+    rcfg = storage.report_cfg_all()  # пользовательские переопределения тип/комментарий
+    allr = []
+    for r in REPORTS_INFO:
+        rc = rcfg.get(r["key"], {})
+        req = bool(rc["required"]) if rc.get("required") is not None else (r["key"] in REPORT_REQUIRED)
+        allr.append(dict(r, group=REPORT_GROUP.get(r["key"], ""), req=req,
+                         mailing=REPORT_MAILING.get(r["key"], ""), comment=rc.get("comment", "")))
     _gk = lambda r: REPORT_GROUP_ORDER.get(r["group"], 9)
     reports_req = sorted([r for r in allr if r["req"]], key=_gk)
     reports_opt = sorted([r for r in allr if not r["req"]], key=_gk)
     return render_template("upload.html", meta=meta, meta_by_rtype=meta_by_rtype, exports=exports,
                            reports_req=reports_req, reports_opt=reports_opt)
+
+
+@app.route("/reports/config", methods=["POST"])
+def reports_config():
+    saved = 0
+    for r in REPORTS_INFO:
+        k = r["key"]
+        req = request.form.get(f"req__{k}")
+        comment = request.form.get(f"comment__{k}")
+        if req is None and comment is None:
+            continue
+        storage.set_report_cfg(k, req == "1", comment or "")
+        saved += 1
+    flash(f"Настройки отчётов сохранены ({saved}).", "ok")
+    return redirect(url_for("upload"))
 
 
 @app.route("/reset", methods=["POST"])
@@ -552,10 +571,13 @@ def koiki():
 def koiki_save_map():
     resp_items = {k[len("resp__"):]: v for k, v in request.form.items() if k.startswith("resp__")}
     email_items = {k[len("email__"):]: v for k, v in request.form.items() if k.startswith("email__")}
-    ods = set(resp_items) | set(email_items)
+    plan_items = {k[len("plan__"):]: v for k, v in request.form.items() if k.startswith("plan__")}
+    ods = set(resp_items) | set(email_items) | set(plan_items)
     for od in ods:
         storage.set_koiki_resp(od, resp_items.get(od, ""), email_items.get(od, ""))
-    flash(f"Сохранено сопоставление отделений ({len(ods)}).", "ok" if ods else "warn")
+        if od in plan_items:
+            storage.set_koiki_plan(od, plan_items.get(od, 0))
+    flash(f"Сохранено по отделениям: {len(ods)} (ответственные, почта, план).", "ok" if ods else "warn")
     return redirect(url_for("koiki"))
 
 

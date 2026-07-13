@@ -31,8 +31,9 @@
 <div class="fullbleed">
 <div class="toolbar">
   <h2 style="margin:0">Отчёты — поддерживаемые и загруженные{% if periods.period %} <span class="small muted">— период {{ periods.period }}</span>{% endif %}</h2>
-  {% if meta %}
   <div style="display:flex;gap:8px">
+    <button type="submit" form="rcfg" title="Сохранить тип (основной/доп.) и комментарии отчётов">💾 Сохранить настройки</button>
+    {% if meta %}
     <form method="post" action="{{ url_for('reprocess') }}" style="margin:0"
           title="Заново разобрать сохранённые файлы активного периода (после обновления приложения)">
       <button type="submit">♻ Переобработать</button>
@@ -41,22 +42,26 @@
           onsubmit="return confirm('Сбросить отчёты текущего периода{% if active_period %} «{{ active_period }}»{% endif %}? Они будут удалены (в т.ч. из истории). Почты и настройки сохранятся.')">
       <button type="submit" class="danger">🗑 Сбросить отчёты</button>
     </form>
+    {% endif %}
   </div>
-  {% endif %}
 </div>
+<form id="rcfg" method="post" action="{{ url_for('reports_config') }}"></form>
 {% macro reports_table(rows, meta_by_rtype, exports) %}
 {% set gcls = {'ЭМД': '#e6effb', 'Ошибки': '#fdecec', 'Стационары': '#e6f6f1', 'ФАП': '#eaf3e6'} %}
 <table>
-  <tr><th>Направление</th><th>Наименование отчёта (как в ЕИСЗ ПК)</th><th>Что даёт в системе</th><th>Где используется</th>
-      <th>Рассылка</th><th>Статус</th><th>Период</th><th>Загружен</th><th>Действия</th></tr>
+  <tr><th>Направление</th><th>Наименование отчёта (как в ЕИСЗ ПК)</th><th>Тип</th><th>Что даёт в системе</th>
+      <th>Рассылка</th><th>Комментарий</th><th>Статус</th><th>Период</th><th>Загружен</th><th>Действия</th></tr>
   {% for r in rows %}
   {% set m = meta_by_rtype.get(r.key) %}
   <tr>
     <td><span class="pill" style="background:{{ gcls.get(r.group, '#eef0f2') }};color:#374151">{{ r.group }}</span></td>
     <td><b>{{ r.title }}</b>{% if r.note %}<br><span class="small muted">{{ r.note }}</span>{% endif %}</td>
+    <td><select name="req__{{ r.key }}" form="rcfg" style="font-size:12px">
+      <option value="1"{{ ' selected' if r.req }}>основной</option>
+      <option value="0"{{ ' selected' if not r.req }}>дополнит.</option></select></td>
     <td>{{ r.gives }}</td>
-    <td class="muted">{{ r.section }}</td>
     <td class="small">{% if r.mailing %}✉ {{ r.mailing }}{% else %}<span class="muted">—</span>{% endif %}</td>
+    <td><input type="text" name="comment__{{ r.key }}" form="rcfg" value="{{ r.comment }}" placeholder="—" style="width:150px"></td>
     <td>{% if m %}<span class="pill ok">загружен</span>{% else %}<span class="pill warn">нет</span>{% endif %}</td>
     <td>{{ m.period if m else '—' }}</td>
     <td class="small">{{ m.uploaded_at if m else '—' }}</td>

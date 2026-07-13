@@ -48,7 +48,9 @@ def init():
             otdelenie TEXT PRIMARY KEY, koek INTEGER, kd INTEGER, nach INTEGER,
             postup INTEGER, vyp INTEGER, pered INTEGER, umer INTEGER, kon INTEGER, day INTEGER);
         CREATE TABLE IF NOT EXISTS koiki_map(otdelenie TEXT PRIMARY KEY, resp TEXT, email TEXT);
+        CREATE TABLE IF NOT EXISTS koiki_plan(otdelenie TEXT PRIMARY KEY, plan INTEGER DEFAULT 0);
         CREATE TABLE IF NOT EXISTS report_resp(report TEXT, email TEXT, name TEXT DEFAULT '', PRIMARY KEY(report, email));
+        CREATE TABLE IF NOT EXISTS report_cfg(rtype TEXT PRIMARY KEY, required INTEGER, comment TEXT DEFAULT '');
         CREATE TABLE IF NOT EXISTS period_files(
             period TEXT, rtype TEXT, filename TEXT, uploaded_at TEXT, data BLOB,
             PRIMARY KEY(period, rtype));
@@ -428,6 +430,7 @@ def koiki_list():
     with _conn() as c:
         rows = [dict(r) for r in c.execute("SELECT * FROM koiki")]
         rmap = {r["otdelenie"]: dict(r) for r in c.execute("SELECT * FROM koiki_map")}
+        pmap = {r["otdelenie"]: r["plan"] for r in c.execute("SELECT * FROM koiki_plan")}
     for r in rows:
         koek, kd, vyp = r["koek"], r["kd"], r["vyp"]
         r["zan"] = round(kd / (koek * days) * 100, 1) if koek else None
@@ -437,6 +440,8 @@ def koiki_list():
         r["no_beds"] = koek == 0
         m = rmap.get(r["otdelenie"], {})
         r["resp"], r["email"] = m.get("resp", ""), m.get("email", "")
+        r["plan"] = pmap.get(r["otdelenie"], 0) or 0
+        r["vypoln"] = round(r["postup"] / r["plan"] * 100, 1) if r["plan"] else None
     rows.sort(key=lambda x: (x["zan"] is None, -(x["zan"] or 0)))
     return rows
 
@@ -447,7 +452,8 @@ def koiki_totals():
     days = _koiki_days()
     with _conn() as c:
         rows = [dict(r) for r in c.execute(
-            "SELECT koek, kd, day, postup, vyp, pered, umer FROM koiki")]
+            "SELECT otdelenie, koek, kd, day, postup, vyp, pered, umer FROM koiki")]
+        pmap = {r["otdelenie"]: (r["plan"] or 0) for r in c.execute("SELECT * FROM koiki_plan")}
 
     def agg(sel):
         k = sum(r["koek"] for r in rows if sel(r))
@@ -464,7 +470,12 @@ def koiki_totals():
             low += 1
     # итоги движения пациентов по учреждению
     mov = {k: sum(r[k] or 0 for r in rows) for k in ("postup", "vyp", "pered", "umer")}
+    # выполнение плана — факт (поступило) считаем только по отделениям, где задан план
+    total_plan = sum(pmap.values())
+    plan_fact = sum(r["postup"] or 0 for r in rows if pmap.get(r["otdelenie"], 0))
+    plan_vypoln = round(plan_fact / total_plan * 100, 1) if total_plan else None
     return {"days": days, "n": len(rows), "over": over, "low": low, "mov": mov,
+            "plan": total_plan, "plan_fact": plan_fact, "plan_vypoln": plan_vypoln,
             "all": agg(lambda r: True),
             "kruglo": agg(lambda r: not r["day"]),
             "day": agg(lambda r: r["day"])}
@@ -496,6 +507,31 @@ def resp_add(report, email, name=""):
 def resp_remove(report, email):
     with _conn() as c:
         c.execute("DELETE FROM report_resp WHERE report=? AND email=?", (report, (email or "").strip()))
+
+
+# --- Пользовательские настройки отчётов на «Загрузке»: тип (основной/доп.) + комментарий ---
+
+def report_cfg_all():
+    with _conn() as c:
+        return {r["rtype"]: {"required": r["required"], "comment": r["comment"] or ""}
+                for r in c.execute("SELECT * FROM report_cfg")}
+
+
+def set_report_cfg(rtype, required, comment):
+    with _conn() as c:
+        c.execute("INSERT OR REPLACE INTO report_cfg(rtype,required,comment) VALUES(?,?,?)",
+                  (rtype, 1 if required else 0, (comment or "").strip()))
+
+
+# --- План госпитализаций по отделениям (стационары) ---
+
+def set_koiki_plan(otdelenie, plan):
+    try:
+        p = int(float(str(plan).replace(",", ".")))
+    except (ValueError, TypeError):
+        p = 0
+    with _conn() as c:
+        c.execute("INSERT OR REPLACE INTO koiki_plan(otdelenie,plan) VALUES(?,?)", (otdelenie, p))
 
 
 def dept_summary():
