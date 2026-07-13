@@ -560,18 +560,22 @@ def fap_report_send():
 
 @app.route("/koiki")
 def koiki():
+    cum = storage.koiki_cumulative()
     return render_template("koiki.html",
                            wards=storage.koiki_list(),
                            totals=storage.koiki_totals(),
                            resp=storage.resp_list("koiki"),
-                           period=storage.report_period("koiki"))
+                           period=storage.report_period("koiki"),
+                           cum=cum,
+                           cum_vyp={r["otdelenie"]: r["vypoln"] for r in cum["rows"]})
 
 
 @app.route("/koiki/plan")
 def koiki_plan():
+    cum = storage.koiki_cumulative()
     return render_template("koiki_plan.html",
-                           plans=storage.koiki_plan_list(),
-                           cum=storage.koiki_cumulative())
+                           plans=storage.koiki_plan_list([r["otdelenie"] for r in cum["rows"]]),
+                           cum=cum)
 
 
 @app.route("/koiki/plan/save", methods=["POST"])

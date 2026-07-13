@@ -536,18 +536,18 @@ def set_koiki_plan(otdelenie, plan):
         c.execute("INSERT OR REPLACE INTO koiki_plan(otdelenie,plan) VALUES(?,?)", (otdelenie, p))
 
 
-def koiki_plan_list():
+def koiki_plan_list(extra_ods=None):
     """Отделения с годовым планом госпитализаций и производными (месяц = год/12, неделя = год/52).
-    Отделения берём из текущей загрузки коек + из справочника планов."""
+    Отделения — объединение: текущая загрузка коек + все загруженные периоды (extra_ods,
+    напр. из koiki_cumulative) + справочник планов. Так план и сводка используют один набор."""
     with _conn() as c:
-        ods = [r["otdelenie"] for r in c.execute("SELECT otdelenie FROM koiki ORDER BY otdelenie")]
+        ods = {r["otdelenie"] for r in c.execute("SELECT otdelenie FROM koiki")}
         pmap = {r["otdelenie"]: (r["plan"] or 0) for r in c.execute("SELECT * FROM koiki_plan")}
-    for od in pmap:
-        if od not in ods:
-            ods.append(od)
+    ods |= set(pmap) | set(extra_ods or [])
+    ods.discard("")
     return [{"otdelenie": od, "year": pmap.get(od, 0),
              "month": round(pmap.get(od, 0) / 12) if pmap.get(od) else 0,
-             "week": round(pmap.get(od, 0) / 52) if pmap.get(od) else 0} for od in ods]
+             "week": round(pmap.get(od, 0) / 52) if pmap.get(od) else 0} for od in sorted(ods)]
 
 
 def koiki_cumulative():
