@@ -612,6 +612,9 @@ def koiki_send():
     rep = storage.report_period("koiki")
     days = storage.koiki_totals()["days"]
     cust = appconfig.get("CUSTOM_KOIKI", "")
+    _cum = storage.koiki_cumulative()
+    cum_vyp = ({r["otdelenie"]: r.get("vypoln") for r in _cum["rows"]}
+               if _cum.get("rows") else None)
     wmap = {w["otdelenie"]: w for w in storage.koiki_list()}
     # группируем выбранные отделения по e-mail (инлайн из формы) — одному ответственному одно письмо
     groups, noaddr = {}, 0
@@ -631,7 +634,7 @@ def koiki_send():
         subj = "Занятость коек по отделениям" + (f" (период {rep})" if rep else "")
         items.append({"to": g["email"], "log_vrach": f"[стационары] {g['resp'] or g['email']}",
                       "cnt": len(g["wards"]), "subject": subj,
-                      "html": mailer.build_koiki_resp_html(g["resp"], g["wards"], days, rep, cust)})
+                      "html": mailer.build_koiki_resp_html(g["resp"], g["wards"], days, rep, cust, cum_vyp)})
     if items:
         _dispatch_batch(items, "koiki")
     dry = " (DRYRUN)" if mailer.is_dryrun() else ""
