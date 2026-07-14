@@ -65,15 +65,15 @@
     {% for w in wards %}
     <tr>
       <td><input type="checkbox" name="pick" value="{{ w.otdelenie }}" class="pick"></td>
-      <td>{{ w.otdelenie }}{% if w.day %} <span class="pill" title="Дневной стационар — места работают в 2 смены">дн.</span>{% endif %}{% if w.grp %} <span class="pill" style="background:#dbeafe;color:#1e40af" title="План и выполнение — общие по группе «{{ w.grp }}» (задаётся на вкладке «План»)">◆ {{ w.grp }}</span>{% endif %}</td>
+      <td>{{ w.otdelenie }}{% if w.is_group %} <span class="pill" style="background:#dbeafe;color:#1e40af" title="Группа отделений — совмещённые койки и движение: {{ w.members|join(', ') }}">◆ группа</span>{% endif %}{% if w.day %} <span class="pill" title="Дневной стационар — места работают в 2 смены">дн.</span>{% endif %}</td>
       <td class="r">{{ w.koek }}</td>
       <td class="r">{{ w.kd }}</td>
       <td class="r" style="{% if w.zan is not none and w.zan > 100 %}color:#2563eb;font-weight:bold{% elif w.zan is not none and w.zan < 80 %}color:#c0392b;font-weight:bold{% endif %}">
         {{ (w.zan ~ '%') if w.zan is not none else '—' }}</td>
       <td class="r">{{ w.postup }}</td>
-      <td class="r"{% if w.grp %} title="Общий план группы «{{ w.grp }}»"{% endif %}>{{ w.plan or '—' }}</td>
-      <td class="r"{% if w.grp %} title="Выполнение по группе «{{ w.grp }}»"{% endif %} style="{% if w.vypoln is not none and w.vypoln < 100 %}color:#c0392b{% elif w.vypoln is not none %}color:#2563eb;font-weight:bold{% endif %}">{{ (w.vypoln ~ '%') if w.vypoln is not none else '—' }}</td>
-      {% set cv = cum_vyp.get(w.grp) if w.grp else cum_vyp.get(w.otdelenie) %}
+      <td class="r">{{ w.plan or '—' }}</td>
+      <td class="r" style="{% if w.vypoln is not none and w.vypoln < 100 %}color:#c0392b{% elif w.vypoln is not none %}color:#2563eb;font-weight:bold{% endif %}">{{ (w.vypoln ~ '%') if w.vypoln is not none else '—' }}</td>
+      {% set cv = cum_vyp.get(w.otdelenie) %}
       <td class="r" style="{% if cv is not none and cv < 100 %}color:#c0392b{% elif cv is not none %}color:#2563eb;font-weight:bold{% endif %}">{{ (cv ~ '%') if cv is not none else '—' }}</td>
       <td class="r">{{ w.vyp }}</td>
       <td class="r">{{ w.pered }}</td>

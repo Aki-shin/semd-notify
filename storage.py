@@ -541,28 +541,45 @@ def _koiki_days():
 
 
 def koiki_list():
-    """Отделения стационара с рассчитанными показателями:
+    """Строки вкладки «Занятость»: одиночные отделения + ГРУППЫ одной объединённой
+    строкой (совмещение коек и движения — суммы по участникам). Показатели:
       zan     — занятость, % = койко-дни / (коек × дни периода) × 100;
       oborot  — оборот койки = выписано / коек;
       dlit    — средняя длительность = койко-дни / выписано;
-      overload— койко-дни или пациенты превышают коечный фонд (коек в справочнике занижено);
-      no_beds — коек в отчёте 0, а движение есть (койки не заведены в справочнике).
-    Плюс ответственный (resp/email) из koiki_map. Сортировка по убыванию занятости."""
+      overload— койко-дни или пациенты превышают коечный фонд;
+      no_beds — коек 0, а движение есть.
+    Для групп план/выполнение — общие (годовой план группы). Сортировка по занятости."""
     days = _koiki_days()
     with _conn() as c:
-        rows = [dict(r) for r in c.execute("SELECT * FROM koiki")]
+        raw = [dict(r) for r in c.execute("SELECT * FROM koiki")]
         rmap = {r["otdelenie"]: dict(r) for r in c.execute("SELECT * FROM koiki_map")}
         pmap = {r["otdelenie"]: r["plan"] for r in c.execute("SELECT * FROM koiki_plan")}
         gm = {r["otdelenie"]: r["grp"] for r in c.execute("SELECT otdelenie, grp FROM koiki_group_member")}
-    # план и выполнение по группам (общий план на группу; факт — сумма поступивших участников)
-    postup_by_od = {r["otdelenie"]: (r["postup"] or 0) for r in rows}
-    grp_plan = {}
-    for u in _plan_units():
-        if u["is_group"] and u["plan_year"]:
-            pp = round(u["plan_year"] / 365 * days)
-            fact = sum(postup_by_od.get(m, 0) for m in u["members"])
-            grp_plan[u["name"]] = {"plan": pp, "vypoln": round(fact / pp * 100, 1) if pp else None}
-    for r in rows:
+        gplan = {r["grp"]: (r["plan"] or 0) for r in c.execute("SELECT grp, plan FROM koiki_group")}
+    by_od = {r["otdelenie"]: r for r in raw}
+    SUMK = ("koek", "kd", "nach", "postup", "vyp", "pered", "umer", "kon")
+    # группы — одна объединённая строка (суммируем коечный фонд и движение по участникам)
+    groups = {}
+    for od, grp in gm.items():
+        if od in by_od:
+            groups.setdefault(grp, []).append(od)
+    units = []
+    for grp, members in groups.items():
+        agg = {k: sum(by_od[m][k] or 0 for m in members) for k in SUMK}
+        agg["otdelenie"] = grp
+        agg["day"] = 1 if all(by_od[m]["day"] for m in members) else 0
+        agg["is_group"] = True
+        agg["members"] = sorted(members)
+        agg["plan_year"] = gplan.get(grp, 0)
+        units.append(agg)
+    for r in raw:                      # одиночные отделения (не входящие в группы)
+        if r["otdelenie"] in gm:
+            continue
+        r["is_group"] = False
+        r["members"] = []
+        r["plan_year"] = pmap.get(r["otdelenie"], 0) or 0
+        units.append(r)
+    for r in units:
         koek, kd, vyp = r["koek"], r["kd"], r["vyp"]
         r["zan"] = round(kd / (koek * days) * 100, 1) if koek else None
         r["oborot"] = round(vyp / koek, 1) if koek else None
@@ -571,19 +588,11 @@ def koiki_list():
         r["no_beds"] = koek == 0
         m = rmap.get(r["otdelenie"], {})
         r["resp"], r["email"] = m.get("resp", ""), m.get("email", "")
-        r["grp"] = gm.get(r["otdelenie"], "")
-        if r["grp"]:
-            # сгруппированное отделение: показываем ОБЩИЙ план и выполнение группы
-            gp = grp_plan.get(r["grp"], {})
-            r["plan_year"] = 0
-            r["plan"] = gp.get("plan", 0)
-            r["vypoln"] = gp.get("vypoln")
-        else:
-            r["plan_year"] = pmap.get(r["otdelenie"], 0) or 0
-            r["plan"] = round(r["plan_year"] / 365 * days) if r["plan_year"] else 0
-            r["vypoln"] = round(r["postup"] / r["plan"] * 100, 1) if r["plan"] else None
-    rows.sort(key=lambda x: (x["zan"] is None, -(x["zan"] or 0)))
-    return rows
+        py = r["plan_year"]
+        r["plan"] = round(py / 365 * days) if py else 0        # план за период (для группы — общий)
+        r["vypoln"] = round(r["postup"] / r["plan"] * 100, 1) if r["plan"] else None
+    units.sort(key=lambda x: (x["zan"] is None, -(x["zan"] or 0)))
+    return units
 
 
 def koiki_totals():
