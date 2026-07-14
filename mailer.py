@@ -277,6 +277,59 @@ def build_max_report_html(totals, by_doctor, by_purpose, rep_period="", custom="
 </body></html>"""
 
 
+def build_xray_report_html(totals, rows, rep_period="", custom=""):
+    """Сводный отчёт по обработке лучевых исследований сервисом ИИ — ответственному
+    за цифровизацию/лучевую диагностику. Успешность: синий ≥90 %, красный <70 %."""
+    t = totals or {}
+    def td(v):
+        return f"<td style='text-align:right'>{v}</td>"
+    def bad_td(v):
+        col = ";color:#c0392b;font-weight:bold" if v else ""
+        return f"<td style='text-align:right{col}'>{v}</td>"
+    def succ_td(v):
+        if v is None:
+            return "<td style='text-align:right;color:#999'>—</td>"
+        col = "#2563eb" if v >= 90 else ("#c0392b" if v < 70 else "#222")
+        return f"<td style='text-align:right;color:{col};font-weight:bold'>{v}%</td>"
+    def err_td(v):
+        if v is None:
+            return "<td style='text-align:right;color:#999'>—</td>"
+        col = ";color:#c0392b" if v >= 10 else ""
+        return f"<td style='text-align:right{col}'>{v}%</td>"
+    body = "".join(
+        f"<tr><td><b>{r['modality']}</b></td>" + td(r['total']) + td(r['success'])
+        + succ_td(r['pct_success']) + bad_td(r['err']) + err_td(r['pct_err'])
+        + bad_td(r['err_mi']) + bad_td(r['err_mo']) + bad_td(r['err_conn'])
+        + td(r['avg_time']) + "</tr>"
+        for r in rows
+    ) or "<tr><td colspan='10'>нет данных</td></tr>"
+    tot = ("<tr style='font-weight:bold;background:#eef'><td>ИТОГО</td>"
+           + td(t.get('total', 0)) + td(t.get('success', 0))
+           + td((str(t.get('pct_success')) + '%') if t.get('pct_success') is not None else '—')
+           + td(t.get('err', 0))
+           + td((str(t.get('pct_err')) + '%') if t.get('pct_err') is not None else '—')
+           + td(t.get('err_mi', 0)) + td(t.get('err_mo', 0)) + td(t.get('err_conn', 0))
+           + td(t.get('avg_time') if t.get('avg_time') is not None else '—') + "</tr>")
+    per = f" за период <b>{rep_period}</b>" if rep_period else ""
+    return f"""<html><body style="font-family:Arial,sans-serif;font-size:13px;color:#222">
+<p>Сводный отчёт по <b>обработке лучевых исследований сервисом ИИ</b>{per}.</p>
+<p>Всего исследований: <b>{t.get('total',0)}</b> · успешно обработано:
+<b>{t.get('success',0)}</b> ({t.get('pct_success')}%) · с ошибкой: <b>{t.get('err',0)}</b>
+({t.get('pct_err')}%) · среднее время обработки: <b>{t.get('avg_time')}</b> сек.</p>
+<p style="color:#555">Ошибки по стороне: медизделие/ИИ-сервис (МИ) — <b>{t.get('err_mi',0)}</b> ·
+медорганизация (МО) — <b>{t.get('err_mo',0)}</b> · соединение — <b>{t.get('err_conn',0)}</b>.
+Успешность: <b style="color:#2563eb">синим</b> ≥ 90 %, <b style="color:#c0392b">красным</b> — ниже 70 %.</p>
+<table border="1" cellspacing="0" cellpadding="4" style="border-collapse:collapse;font-size:12px">
+<tr style="background:#1e3a5f;color:#fff"><th>Модальность</th><th>Всего</th><th>Успешно</th><th>%</th>
+<th>Ошибки</th><th>%</th><th>МИ</th><th>МО</th><th>Соед.</th><th>Ср. время, с</th></tr>
+{body}
+{tot}
+</table>
+{_custom_block(custom)}
+<p style="color:#666;font-size:12px">Сформировано автоматически системой мониторинга СЭМД.</p>
+</body></html>"""
+
+
 def _koiki_rows_html(wards, show_resp=False, cum_vyp=None):
     def c(v):
         return "—" if v is None else v

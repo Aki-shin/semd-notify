@@ -130,6 +130,7 @@ REPORT_MAILING = {
     "fap": "Ответственному за ФАП",
     "koiki": "Ответственным за отделения + за коечный фонд",
     "max": "Ответственному за цифровизацию / ТМК",
+    "xray": "Ответственному за цифровизацию / лучевую диагностику",
 }
 
 
@@ -613,7 +614,30 @@ def xray():
     return render_template("xray.html",
                            totals=storage.xray_totals(),
                            rows=storage.xray_list(),
+                           resp=storage.resp_list("xray"),
                            period=storage.report_period("xray"))
+
+
+@app.route("/xray/report/send", methods=["POST"])
+def xray_report_send():
+    resp = storage.resp_list("xray")
+    if not resp:
+        flash("Не заданы получатели отчёта по рентгену — добавьте на странице «Рентген».", "warn")
+        return redirect(url_for("xray"))
+    totals = storage.xray_totals()
+    if not totals:
+        flash("Отчёт по обработке лучевых исследований ИИ не загружен.", "warn")
+        return redirect(url_for("xray"))
+    rep = storage.report_period("xray")
+    html = mailer.build_xray_report_html(totals, storage.xray_list(), rep,
+                                         appconfig.get("CUSTOM_XRAY", ""))
+    subj = "Сводный отчёт: обработка лучевых исследований ИИ" + (f" — период {rep}" if rep else "")
+    to = ", ".join(r["email"] for r in resp)
+    ok, msg = mailer.send(to, subj, html)
+    storage.log_send("[Рентген-отчёт]", to, totals.get("total", 0), msg)
+    dry = " (DRYRUN)" if mailer.is_dryrun() else ""
+    flash(f"Отчёт по рентгену ({to}): {msg}.{dry}", "ok" if ok else "warn")
+    return redirect(url_for("xray"))
 
 
 @app.route("/koiki")
@@ -792,7 +816,8 @@ def settings():
                 appconfig.set("SMTP_PASS", pw)
             flash("Настройки почты сохранены.", "ok")
         elif action == "save_custom":
-            for k in ("CUSTOM_DEBT", "CUSTOM_DEPT", "CUSTOM_ERR", "CUSTOM_FAP", "CUSTOM_KOIKI", "CUSTOM_MAX"):
+            for k in ("CUSTOM_DEBT", "CUSTOM_DEPT", "CUSTOM_ERR", "CUSTOM_FAP", "CUSTOM_KOIKI",
+                      "CUSTOM_MAX", "CUSTOM_XRAY"):
                 appconfig.set(k, (request.form.get(k) or "").strip())
             flash("Дополнительный текст писем сохранён.", "ok")
         elif action == "save_ipa":
@@ -815,7 +840,8 @@ def settings():
     smtp["SMTP_BATCH_SIZE"] = appconfig.get("SMTP_BATCH_SIZE", "25")
     smtp["SMTP_BATCH_PAUSE"] = appconfig.get("SMTP_BATCH_PAUSE", "30")
     custom = {k: appconfig.get(k, "") for k in
-              ("CUSTOM_DEBT", "CUSTOM_DEPT", "CUSTOM_ERR", "CUSTOM_FAP", "CUSTOM_KOIKI", "CUSTOM_MAX")}
+              ("CUSTOM_DEBT", "CUSTOM_DEPT", "CUSTOM_ERR", "CUSTOM_FAP", "CUSTOM_KOIKI",
+               "CUSTOM_MAX", "CUSTOM_XRAY")}
     ipacfg = {k: appconfig.get(k, "") for k in ("IPA_LDAP_URI", "IPA_BASE_DN", "IPA_BIND_DN")}
     ipacfg["IPA_AUTOSYNC"] = appconfig.get_bool("IPA_AUTOSYNC", False)
     ipacfg["IPA_SYNC_HOURS"] = appconfig.get("IPA_SYNC_HOURS", "24")
