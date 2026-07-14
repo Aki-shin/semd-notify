@@ -3,13 +3,13 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>СЭМД-уведомления</title>
+  <title>Центр Цифровизации</title>
   <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
 <header>
-  <div class="brand">📊 СЭМД-уведомления</div>
+  <div class="brand">📊 Центр Цифровизации</div>
   <nav>
     <a href="{{ url_for('index') }}">Дашборд</a>
     <a href="{{ url_for('upload') }}">Загрузка</a>
@@ -18,6 +18,7 @@
     <a href="{{ url_for('fap') }}">ФАП</a>
     <a href="{{ url_for('koiki') }}">Стационары</a>
     <a href="{{ url_for('max_page') }}">MAX</a>
+    <a href="{{ url_for('xray') }}">Рентген</a>
     <a href="{{ url_for('errors') }}">Ошибки</a>
     <a href="{{ url_for('send_log_page') }}">Журнал</a>
     <a href="{{ url_for('settings') }}">Настройки</a>

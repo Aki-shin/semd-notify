@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>Рентген — обработка исследований сервисом ИИ</h1>
+<p class="muted">Лучевые исследования (ФЛГ, ММГ, РГ, КТ, …), обработанные сервисом искусственного интеллекта:
+успешность обработки, разбор ошибок по стороне (<b>МИ</b> — медизделие/ИИ-сервис, <b>МО</b> — медорганизация,
+<b>соединение</b>) и среднее время. Показатель цифровизации — внедрение ИИ в лучевую диагностику.<br>
+{% if period %}<b>Период: {{ period }}</b> <span class="small">(в самом отчёте периода нет — берётся период выгрузки)</span>
+{% else %}<span class="pill warn">период выгрузки не задан</span> — загрузите отчёт в нужный период{% endif %}</p>
+
+{% if totals %}
+<section class="cards">
+  <div class="card"><div class="num">{{ totals.total }}</div>
+    <div class="lbl">Всего исследований ({{ totals.n_mod }} модальн.)</div></div>
+  <div class="card"><div class="num" style="color:{% if totals.pct_success is not none and totals.pct_success >= 90 %}#2563eb{% elif totals.pct_success is not none and totals.pct_success < 70 %}#c0392b{% endif %}">{{ totals.pct_success if totals.pct_success is not none else '—' }}%</div>
+    <div class="lbl">Успешно обработано ИИ<br>({{ totals.success }} из {{ totals.total }})</div></div>
+  <div class="card {{ 'bad' if totals.err }}"><div class="num">{{ totals.err }}</div>
+    <div class="lbl">С ошибкой ({{ totals.pct_err if totals.pct_err is not none else '—' }}%)</div></div>
+  <div class="card"><div class="num">{{ totals.avg_time if totals.avg_time is not none else '—' }}</div>
+    <div class="lbl">Среднее время обработки, сек</div></div>
+</section>
+<p class="muted small">Ошибки по стороне: медизделие/ИИ-сервис (<b>МИ</b>) — <b>{{ totals.err_mi }}</b> ·
+медорганизация (<b>МО</b>) — <b>{{ totals.err_mo }}</b> · соединение — <b>{{ totals.err_conn }}</b>.
+<b style="color:#2563eb">Синим</b> — успешность ≥ 90 %; <b style="color:#c0392b">красным</b> — ниже 70 %.</p>
+
+<h2>По модальностям</h2>
+<div class="fullbleed" style="overflow-x:auto">
+<table>
+  <tr><th>Модальность</th>
+      <th title="Всего исследований">Всего</th>
+      <th title="Успешно обработано ИИ">Успешно</th><th title="Доля успешно обработанных">%</th>
+      <th title="Исследований с ошибкой">Ошибки</th><th title="Доля с ошибкой">%</th>
+      <th title="Ошибки на стороне медизделия/ИИ-сервиса">МИ</th>
+      <th title="Ошибки на стороне медорганизации">МО</th>
+      <th title="Ошибки соединения">Соед.</th>
+      <th title="Среднее время обработки, сек">Ср.&nbsp;время,&nbsp;с</th></tr>
+  {% for r in rows %}
+  <tr>
+    <td><b>{{ r.modality }}</b></td>
+    <td class="r">{{ r.total }}</td>
+    <td class="r">{{ r.success }}</td>
+    <td class="r" style="{% if r.pct_success is not none and r.pct_success >= 90 %}color:#2563eb;font-weight:bold{% elif r.pct_success is not none and r.pct_success < 70 %}color:#c0392b;font-weight:bold{% endif %}">{{ (r.pct_success ~ '%') if r.pct_success is not none else '—' }}</td>
+    <td class="r {{ 'bad' if r.err }}">{{ r.err }}</td>
+    <td class="r" style="{% if r.pct_err and r.pct_err >= 10 %}color:#c0392b{% endif %}">{{ (r.pct_err ~ '%') if r.pct_err is not none else '—' }}</td>
+    <td class="r {{ 'bad' if r.err_mi }}">{{ r.err_mi }}</td>
+    <td class="r {{ 'bad' if r.err_mo }}">{{ r.err_mo }}</td>
+    <td class="r {{ 'bad' if r.err_conn }}">{{ r.err_conn }}</td>
+    <td class="r">{{ r.avg_time }}</td>
+  </tr>
+  {% endfor %}
+  <tr style="font-weight:bold;background:#eef">
+    <td>ИТОГО</td>
+    <td class="r">{{ totals.total }}</td>
+    <td class="r">{{ totals.success }}</td>
+    <td class="r">{{ totals.pct_success if totals.pct_success is not none else '—' }}%</td>
+    <td class="r">{{ totals.err }}</td>
+    <td class="r">{{ totals.pct_err if totals.pct_err is not none else '—' }}%</td>
+    <td class="r">{{ totals.err_mi }}</td>
+    <td class="r">{{ totals.err_mo }}</td>
+    <td class="r">{{ totals.err_conn }}</td>
+    <td class="r">{{ totals.avg_time if totals.avg_time is not none else '—' }}</td>
+  </tr>
+</table>
+</div>
+{% else %}
+<div class="empty">Отчёт по обработке лучевых исследований ИИ не загружен.
+  <a href="{{ url_for('upload') }}">Загрузите</a> файл .xlsx «Отчёт по обработке лучевых исследований сервисом ИИ».</div>
+{% endif %}
+{% endblock %}

@@ -51,6 +51,9 @@ def init():
             doctor TEXT, position TEXT, purpose TEXT,
             zap INTEGER, zap_max INTEGER, otm INTEGER, otm_max INTEGER,
             prov INTEGER, prov_max INTEGER, bl_max INTEGER);
+        CREATE TABLE IF NOT EXISTS xray(
+            modality TEXT, total INTEGER, success INTEGER, err INTEGER,
+            err_mi INTEGER, err_mo INTEGER, err_conn INTEGER, avg_time REAL);
         CREATE TABLE IF NOT EXISTS koiki_map(otdelenie TEXT PRIMARY KEY, resp TEXT, email TEXT);
         CREATE TABLE IF NOT EXISTS koiki_plan(otdelenie TEXT PRIMARY KEY, plan INTEGER DEFAULT 0);
         CREATE TABLE IF NOT EXISTS report_resp(report TEXT, email TEXT, name TEXT DEFAULT '', PRIMARY KEY(report, email));
@@ -136,6 +139,11 @@ def replace_report(rtype, filename, period, nrows, records):
             c.executemany(
                 "INSERT INTO max_tmk(doctor,position,purpose,zap,zap_max,otm,otm_max,prov,prov_max,bl_max) "
                 "VALUES(:doctor,:position,:purpose,:zap,:zap_max,:otm,:otm_max,:prov,:prov_max,:bl_max)", records)
+        elif rtype == "xray":
+            c.execute("DELETE FROM xray")
+            c.executemany(
+                "INSERT INTO xray(modality,total,success,err,err_mi,err_mo,err_conn,avg_time) "
+                "VALUES(:modality,:total,:success,:err,:err_mi,:err_mo,:err_conn,:avg_time)", records)
 
 
 def meta_all():
@@ -163,7 +171,7 @@ def reset_reports():
     init()
     with _conn() as c:
         for t in ("meta", "vrachi", "debts", "errors", "notrans",
-                  "fap", "vidy", "docerr", "status", "koiki", "max_tmk"):
+                  "fap", "vidy", "docerr", "status", "koiki", "max_tmk", "xray"):
             c.execute(f"DELETE FROM {t}")
 
 
@@ -242,6 +250,7 @@ RTYPE_TABLE = {
     "vrachi": "vrachi", "debts": "debts", "flk": "errors",
     "notrans": "notrans", "fap": "fap", "vidy": "vidy",
     "docerr": "docerr", "status": "status", "koiki": "koiki", "max": "max_tmk",
+    "xray": "xray",
 }
 
 
@@ -481,6 +490,45 @@ def max_by_position():
 
 def max_by_purpose():
     return _max_group("purpose")
+
+
+# --- Рентген: обработка лучевых исследований сервисом ИИ ---
+
+def xray_list():
+    """Модальности с рассчитанными долями (успешно / с ошибкой / по сторонам ошибок).
+    Сортировка по числу исследований (убыв.)."""
+    with _conn() as c:
+        rows = [dict(r) for r in c.execute("SELECT * FROM xray")]
+    for r in rows:
+        t = r["total"]
+        r["pct_success"] = round(100 * r["success"] / t, 1) if t else None
+        r["pct_err"] = round(100 * r["err"] / t, 1) if t else None
+        r["pct_mi"] = round(100 * r["err_mi"] / t, 1) if t else None
+        r["pct_mo"] = round(100 * r["err_mo"] / t, 1) if t else None
+        r["pct_conn"] = round(100 * r["err_conn"] / t, 1) if t else None
+    rows.sort(key=lambda x: -x["total"])
+    return rows
+
+
+def xray_totals():
+    """Итоги по всем модальностям: всего/успешно/с ошибкой, доли, разбивка ошибок
+    (МИ/МО/соединение) и средневзвешенное время обработки. None — если не загружено."""
+    with _conn() as c:
+        rows = [dict(r) for r in c.execute("SELECT * FROM xray")]
+    if not rows:
+        return None
+    def s(k):
+        return sum(r[k] or 0 for r in rows)
+    total, success, err = s("total"), s("success"), s("err")
+    # среднее время — взвешиваем по числу исследований модальности
+    tw = sum((r["avg_time"] or 0) * (r["total"] or 0) for r in rows)
+    return {
+        "n_mod": len(rows), "total": total, "success": success, "err": err,
+        "err_mi": s("err_mi"), "err_mo": s("err_mo"), "err_conn": s("err_conn"),
+        "pct_success": round(100 * success / total, 1) if total else None,
+        "pct_err": round(100 * err / total, 1) if total else None,
+        "avg_time": round(tw / total, 1) if total else None,
+    }
 
 
 # --- Коечный фонд (занятость коек в стационарах) ---

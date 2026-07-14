@@ -10,9 +10,11 @@
   - status   : «Статистика по статусам документов в РЭМД» (воронка дашборда)
   - koiki    : «Сводная ведомость движения пациентов и коечного фонда»
   - max      : «Отчёт о количестве записей и оказания услуг ТМК через чат-бот MAX»
+  - xray     : «Отчёт по обработке лучевых исследований сервисом ИИ» (.xlsx, без периода)
 """
 import re
 import datetime
+import zipfile
 import xml.etree.ElementTree as ET
 
 SS = "urn:schemas-microsoft-com:office:spreadsheet"
@@ -61,6 +63,63 @@ def _rows_merged(path):
     return out
 
 
+def _is_xlsx(path):
+    """.xlsx — это ZIP (сигнатура PK). SpreadsheetML .xls — это XML (начинается с '<')."""
+    try:
+        with open(path, "rb") as f:
+            return f.read(2) == b"PK"
+    except OSError:
+        return False
+
+
+def _col_num(ref):
+    """Ссылка ячейки → номер колонки (1-based): A1→1, B3→2, AA1→27."""
+    n = 0
+    for ch in ref:
+        if ch.isalpha():
+            n = n * 26 + (ord(ch.upper()) - 64)
+        else:
+            break
+    return n or 1
+
+
+def _rows_xlsx(path):
+    """Читает .xlsx (ZIP с XML) минимально, без внешних зависимостей (openpyxl не нужен).
+    Возвращает список dict{col(1-based)->text}, как _rows. Для плоских отчётов без
+    объединённых ячеек (напр., «обработка лучевых исследований сервисом ИИ»)."""
+    ns = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
+    with zipfile.ZipFile(path) as z:
+        names = z.namelist()
+        shared = []
+        if "xl/sharedStrings.xml" in names:
+            st = ET.fromstring(z.read("xl/sharedStrings.xml"))
+            for si in st.findall(f"{ns}si"):
+                shared.append("".join(t.text or "" for t in si.iter(f"{ns}t")))
+        sheets = sorted(n for n in names
+                        if n.startswith("xl/worksheets/") and n.endswith(".xml"))
+        if not sheets:
+            return []
+        sheet = ET.fromstring(z.read(sheets[0]))
+        out = []
+        for row in sheet.iter(f"{ns}row"):
+            cells = {}
+            for c in row.findall(f"{ns}c"):
+                ref = c.get("r") or ""
+                col = _col_num(ref) if ref else (max(cells) + 1 if cells else 1)
+                t = c.get("t")
+                v = c.find(f"{ns}v")
+                if t == "s":
+                    txt = shared[int(v.text)] if (v is not None and v.text) else ""
+                elif t == "inlineStr":
+                    is_ = c.find(f"{ns}is")
+                    txt = "".join(x.text or "" for x in is_.iter(f"{ns}t")) if is_ is not None else ""
+                else:
+                    txt = v.text if v is not None else ""
+                cells[col] = (txt or "").strip()
+            out.append(cells)
+        return out
+
+
 def _num(x):
     try:
         return float(str(x).replace(" ", "").replace(",", "."))
@@ -74,6 +133,9 @@ def detect_type(rows):
     allhead = " ".join(v for r in rows[:8] for v in r.values() if v).lower()
     if "коечного фонда" in allhead or "движения пациентов и коечного" in allhead:
         return "koiki"
+    # Обработка лучевых исследований ИИ — шапка «Модальность | … исследований …»
+    if "модальность" in allhead and "исследован" in allhead:
+        return "xray"
     head = " ".join(
         (r.get(1, "") or "") for r in rows[:6]
     ).lower()
@@ -162,8 +224,9 @@ def period_days(text):
 
 
 def parse(path):
-    """Главная функция. Возвращает dict с типом, периодом и записями."""
-    rows = _rows(path)
+    """Главная функция. Возвращает dict с типом, периодом и записями.
+    Поддерживает и SpreadsheetML .xls (XML), и настоящий .xlsx (ZIP)."""
+    rows = _rows_xlsx(path) if _is_xlsx(path) else _rows(path)
     rtype = detect_type(rows)
     res = {"type": rtype, "period": _period(rows), "rows": len(rows), "records": []}
 
@@ -187,6 +250,8 @@ def parse(path):
         res["records"] = _parse_status(rows)
     elif rtype == "max":
         res["records"] = _parse_max(rows)
+    elif rtype == "xray":
+        res["records"] = _parse_xray(rows)
     return res
 
 
@@ -446,5 +511,34 @@ def _parse_max(rows):
             "prov": int(_num(r.get(12, "")) or 0),
             "prov_max": int(_num(r.get(13, "")) or 0),
             "bl_max": int(_num(r.get(15, "")) or 0),
+        })
+    return out
+
+
+def _parse_xray(rows):
+    """«Отчёт по обработке лучевых исследований сервисом ИИ» (.xlsx).
+    В отчёте НЕТ периода — период берётся из выгрузки (report_period → active_period).
+    Одна строка = одна модальность (ФЛГ, ММГ, РГ, КТ, …). Колонки (1-based):
+      c1 модальность, c2 всего исследований, c3 успешно обработано, c4 с ошибкой,
+      c7 ошибок на стороне МИ (медизделие/ИИ-сервис), c9 на стороне МО,
+      c11 ошибок соединения, c13 среднее время обработки, сек.
+    Доли % (c5,c6,c8,c10,c12) не храним — пересчитываем из сумм."""
+    out = []
+    for r in rows:
+        mod = (r.get(1, "") or "").strip()
+        if not mod or mod.lower().startswith(("модальность", "итог", "всего")):
+            continue
+        total = _num(r.get(2, ""))
+        if total is None:
+            continue
+        out.append({
+            "modality": mod,
+            "total": int(total or 0),
+            "success": int(_num(r.get(3, "")) or 0),
+            "err": int(_num(r.get(4, "")) or 0),
+            "err_mi": int(_num(r.get(7, "")) or 0),
+            "err_mo": int(_num(r.get(9, "")) or 0),
+            "err_conn": int(_num(r.get(11, "")) or 0),
+            "avg_time": round(_num(r.get(13, "")) or 0, 1),
         })
     return out
