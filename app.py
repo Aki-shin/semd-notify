@@ -667,12 +667,38 @@ def koiki_plan():
 
 @app.route("/koiki/plan/save", methods=["POST"])
 def koiki_plan_save():
+    groups = set(storage.koiki_groups())
     saved = 0
     for k, v in request.form.items():
         if k.startswith("year__"):
-            storage.set_koiki_plan(k[len("year__"):], v or 0)
+            name = k[len("year__"):]
+            if name in groups:
+                storage.set_koiki_group_plan(name, v or 0)
+            else:
+                storage.set_koiki_plan(name, v or 0)
             saved += 1
-    flash(f"Годовой план госпитализаций сохранён ({saved} отд.).", "ok")
+    flash(f"Годовой план госпитализаций сохранён ({saved} строк).", "ok")
+    return redirect(url_for("koiki_plan"))
+
+
+@app.route("/koiki/group/create", methods=["POST"])
+def koiki_group_create():
+    name = (request.form.get("grp_name") or "").strip()
+    picks = [p for p in request.form.getlist("pick") if (p or "").strip()]
+    if not name or len(picks) < 2:
+        flash("Укажите название группы и отметьте не менее двух отделений.", "warn")
+        return redirect(url_for("koiki_plan"))
+    storage.koiki_group_create(name, picks)
+    flash(f"Отделения объединены в группу «{name}» ({len(picks)}). План теперь считается по группе.", "ok")
+    return redirect(url_for("koiki_plan"))
+
+
+@app.route("/koiki/group/disband", methods=["POST"])
+def koiki_group_disband():
+    name = (request.form.get("grp") or "").strip()
+    if name:
+        storage.koiki_group_disband(name)
+        flash(f"Группа «{name}» разъединена — отделения снова считаются по отдельности.", "ok")
     return redirect(url_for("koiki_plan"))
 
 

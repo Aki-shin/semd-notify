@@ -3,24 +3,45 @@
 <div style="margin:0 0 8px;font-size:14px"><a href="{{ url_for('koiki') }}">Занятость</a> · <b>План</b></div>
 <h1>Стационары — план госпитализаций и выполнение</h1>
 
-<h2>План госпитализаций по отделениям</h2>
+<h2>План госпитализаций по отделениям и группам</h2>
 <p class="muted small">Впишите любой из трёх столбцов (год / месяц / неделя) — остальные пересчитаются автоматически.
-Хранится <b>годовой</b> план; месяц = год ÷ 12, неделя = год ÷ 52. За произвольный период план считается пропорционально числу дней.</p>
-<form method="post" action="{{ url_for('koiki_plan_save') }}">
-  <div class="toolbar"><span class="muted small">Годовой план — канонический</span>
-    <button type="submit">💾 Сохранить план</button></div>
-  <table>
-    <tr><th>Отделение</th><th>Год</th><th>Месяц</th><th>Неделя</th></tr>
-    {% for p in plans %}
-    <tr data-plan>
-      <td>{{ p.otdelenie }}</td>
-      <td><input type="number" class="py" name="year__{{ p.otdelenie }}" value="{{ p.year or '' }}" min="0" style="width:90px" placeholder="—"></td>
-      <td><input type="number" class="pm" value="{{ p.month or '' }}" min="0" style="width:90px" placeholder="—"></td>
-      <td><input type="number" class="pw" value="{{ p.week or '' }}" min="0" style="width:90px" placeholder="—"></td>
-    </tr>
-    {% else %}<tr><td colspan="4" class="empty">Загрузите отчёт по койкам, чтобы появились отделения.</td></tr>{% endfor %}
-  </table>
-</form>
+Хранится <b>годовой</b> план; месяц = год ÷ 12, неделя = год ÷ 52. За произвольный период план считается пропорционально числу дней.<br>
+Если план ведётся на <b>группу отделений</b> — отметьте отделения галочками, впишите название группы и нажмите «Объединить».
+Тогда план и выполнение считаются по всей группе (факт = сумма поступивших по участникам).</p>
+
+{# Две формы-соседа: сохранение плана и создание группы. Поля в таблице привязаны через form=. #}
+<form id="planform" method="post" action="{{ url_for('koiki_plan_save') }}"></form>
+<form id="grpform" method="post" action="{{ url_for('koiki_group_create') }}"></form>
+
+<div class="toolbar" style="gap:8px;flex-wrap:wrap;align-items:center">
+  <input form="grpform" name="grp_name" placeholder="Название группы (напр. «Хирургия — всё»)" class="email" style="width:300px">
+  <button form="grpform" type="submit">➕ Объединить отмеченные</button>
+  <span style="flex:1"></span>
+  <button form="planform" type="submit">💾 Сохранить план</button>
+</div>
+<table>
+  <tr><th style="width:28px"></th><th>Отделение / группа</th><th>Год</th><th>Месяц</th><th>Неделя</th></tr>
+  {% for p in plans %}
+  <tr data-plan>
+    <td>{% if not p.is_group %}<input type="checkbox" form="grpform" name="pick" value="{{ p.name }}" title="Отметить для объединения в группу">{% endif %}</td>
+    <td>
+      {% if p.is_group %}
+        <b>{{ p.name }}</b> <span class="pill" title="Общий план на несколько отделений">группа</span>
+        <div class="small muted" style="margin-top:2px">{{ p.members|join(' · ') }}
+          <form method="post" action="{{ url_for('koiki_group_disband') }}" style="display:inline;margin:0"
+                onsubmit="return confirm('Разъединить группу «{{ p.name }}»? Отделения снова будут считаться по отдельности (их индивидуальные планы вернутся).')">
+            <input type="hidden" name="grp" value="{{ p.name }}">
+            <button type="submit" class="pill" style="border:0;cursor:pointer;background:#f3d6d6;color:#a33">разъединить</button>
+          </form>
+        </div>
+      {% else %}{{ p.name }}{% endif %}
+    </td>
+    <td><input form="planform" type="number" class="py" name="year__{{ p.name }}" value="{{ p.year or '' }}" min="0" style="width:90px" placeholder="—"></td>
+    <td><input type="number" class="pm" value="{{ p.month or '' }}" min="0" style="width:90px" placeholder="—"></td>
+    <td><input type="number" class="pw" value="{{ p.week or '' }}" min="0" style="width:90px" placeholder="—"></td>
+  </tr>
+  {% else %}<tr><td colspan="5" class="empty">Загрузите отчёт по койкам, чтобы появились отделения.</td></tr>{% endfor %}
+</table>
 
 <h2 style="margin-top:24px">Сводное выполнение за все загруженные периоды</h2>
 {% if cum.span %}
@@ -38,10 +59,10 @@
 {% endif %}
 
 <table>
-  <tr><th>Отделение</th><th>Годовой план</th><th>План за {{ cum.covered }} дн.</th><th>Факт (поступило)</th><th>Выполнение</th></tr>
+  <tr><th>Отделение / группа</th><th>Годовой план</th><th>План за {{ cum.covered }} дн.</th><th>Факт (поступило)</th><th>Выполнение</th></tr>
   {% for r in cum.rows %}
   <tr>
-    <td>{{ r.otdelenie }}</td>
+    <td>{{ r.otdelenie }}{% if r.is_group %} <span class="pill" title="Группа: {{ r.members|join(', ') }}">группа</span>{% endif %}</td>
     <td class="r">{{ r.plan_year or '—' }}</td>
     <td class="r">{{ r.plan_cov or '—' }}</td>
     <td class="r">{{ r.fact }}</td>
@@ -50,7 +71,7 @@
   {% endfor %}
   {% if cum.tot_plan %}
   <tr style="font-weight:bold;background:#eef">
-    <td>ИТОГО (по отделениям с планом)</td><td></td>
+    <td>ИТОГО (по единицам с планом)</td><td></td>
     <td class="r">{{ cum.tot_plan }}</td><td class="r">{{ cum.tot_fact }}</td>
     <td class="r" style="color:{% if cum.total_vypoln and cum.total_vypoln >= 100 %}#2563eb{% else %}#c0392b{% endif %}">{{ cum.total_vypoln }}%</td>
   </tr>
@@ -63,6 +84,7 @@
 <script>
 document.querySelectorAll('tr[data-plan]').forEach(function(tr){
   var y=tr.querySelector('.py'), m=tr.querySelector('.pm'), w=tr.querySelector('.pw');
+  if(!y||!m||!w) return;
   function setMW(){var v=parseFloat(y.value); if(!isNaN(v)&&v>0){m.value=Math.round(v/12); w.value=Math.round(v/52);}else{m.value='';w.value='';}}
   y.addEventListener('input', setMW);
   m.addEventListener('input', function(){var v=parseFloat(m.value); if(!isNaN(v)&&v>0){y.value=Math.round(v*12); w.value=Math.round(v*12/52);}else{y.value='';w.value='';}});

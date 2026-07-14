@@ -56,6 +56,8 @@ def init():
             err_mi INTEGER, err_mo INTEGER, err_conn INTEGER, avg_time REAL);
         CREATE TABLE IF NOT EXISTS koiki_map(otdelenie TEXT PRIMARY KEY, resp TEXT, email TEXT);
         CREATE TABLE IF NOT EXISTS koiki_plan(otdelenie TEXT PRIMARY KEY, plan INTEGER DEFAULT 0);
+        CREATE TABLE IF NOT EXISTS koiki_group(grp TEXT PRIMARY KEY, plan INTEGER DEFAULT 0);
+        CREATE TABLE IF NOT EXISTS koiki_group_member(otdelenie TEXT PRIMARY KEY, grp TEXT);
         CREATE TABLE IF NOT EXISTS report_resp(report TEXT, email TEXT, name TEXT DEFAULT '', PRIMARY KEY(report, email));
         CREATE TABLE IF NOT EXISTS report_cfg(rtype TEXT PRIMARY KEY, required INTEGER, comment TEXT DEFAULT '');
         CREATE TABLE IF NOT EXISTS period_files(
@@ -551,6 +553,7 @@ def koiki_list():
         rows = [dict(r) for r in c.execute("SELECT * FROM koiki")]
         rmap = {r["otdelenie"]: dict(r) for r in c.execute("SELECT * FROM koiki_map")}
         pmap = {r["otdelenie"]: r["plan"] for r in c.execute("SELECT * FROM koiki_plan")}
+        gm = {r["otdelenie"]: r["grp"] for r in c.execute("SELECT otdelenie, grp FROM koiki_group_member")}
     for r in rows:
         koek, kd, vyp = r["koek"], r["kd"], r["vyp"]
         r["zan"] = round(kd / (koek * days) * 100, 1) if koek else None
@@ -560,7 +563,9 @@ def koiki_list():
         r["no_beds"] = koek == 0
         m = rmap.get(r["otdelenie"], {})
         r["resp"], r["email"] = m.get("resp", ""), m.get("email", "")
-        r["plan_year"] = pmap.get(r["otdelenie"], 0) or 0
+        # у сгруппированных отделений план на уровне группы — индивидуальный не показываем
+        r["grp"] = gm.get(r["otdelenie"], "")
+        r["plan_year"] = 0 if r["grp"] else (pmap.get(r["otdelenie"], 0) or 0)
         r["plan"] = round(r["plan_year"] / 365 * days) if r["plan_year"] else 0  # план за текущий период
         r["vypoln"] = round(r["postup"] / r["plan"] * 100, 1) if r["plan"] else None
     rows.sort(key=lambda x: (x["zan"] is None, -(x["zan"] or 0)))
@@ -574,7 +579,6 @@ def koiki_totals():
     with _conn() as c:
         rows = [dict(r) for r in c.execute(
             "SELECT otdelenie, koek, kd, day, postup, vyp, pered, umer FROM koiki")]
-        pmap = {r["otdelenie"]: (r["plan"] or 0) for r in c.execute("SELECT * FROM koiki_plan")}
 
     def agg(sel):
         k = sum(r["koek"] for r in rows if sel(r))
@@ -591,10 +595,15 @@ def koiki_totals():
             low += 1
     # итоги движения пациентов по учреждению
     mov = {k: sum(r[k] or 0 for r in rows) for k in ("postup", "vyp", "pered", "umer")}
-    # выполнение плана за текущий период: годовой план пропорционально дням; факт — только по отд. с планом
-    plan_period = sum(round((pmap.get(r["otdelenie"], 0) or 0) / 365 * days)
-                      for r in rows if pmap.get(r["otdelenie"], 0))
-    plan_fact = sum(r["postup"] or 0 for r in rows if pmap.get(r["otdelenie"], 0))
+    # выполнение плана за текущий период по план-единицам (группы + одиночные отделения с планом):
+    # годовой план пропорционально дням; факт — сумма поступивших по участникам единицы
+    postup_by_od = {r["otdelenie"]: (r["postup"] or 0) for r in rows}
+    plan_period = plan_fact = 0
+    for u in _plan_units():
+        if not u["plan_year"]:
+            continue
+        plan_period += round(u["plan_year"] / 365 * days)
+        plan_fact += sum(postup_by_od.get(m, 0) for m in u["members"])
     plan_vypoln = round(plan_fact / plan_period * 100, 1) if plan_period else None
     return {"days": days, "n": len(rows), "over": over, "low": low, "mov": mov,
             "plan": plan_period, "plan_fact": plan_fact, "plan_vypoln": plan_vypoln,
@@ -647,27 +656,94 @@ def set_report_cfg(rtype, required, comment):
 
 # --- План госпитализаций по отделениям (стационары) ---
 
-def set_koiki_plan(otdelenie, plan):
+def _plan_int(plan):
     try:
-        p = int(float(str(plan).replace(",", ".")))
+        return int(float(str(plan).replace(",", ".")))
     except (ValueError, TypeError):
-        p = 0
+        return 0
+
+
+def set_koiki_plan(otdelenie, plan):
     with _conn() as c:
-        c.execute("INSERT OR REPLACE INTO koiki_plan(otdelenie,plan) VALUES(?,?)", (otdelenie, p))
+        c.execute("INSERT OR REPLACE INTO koiki_plan(otdelenie,plan) VALUES(?,?)", (otdelenie, _plan_int(plan)))
 
 
-def koiki_plan_list(extra_ods=None):
-    """Отделения с годовым планом госпитализаций и производными (месяц = год/12, неделя = год/52).
-    Отделения — объединение: текущая загрузка коек + все загруженные периоды (extra_ods,
-    напр. из koiki_cumulative) + справочник планов. Так план и сводка используют один набор."""
+def set_koiki_group_plan(grp, plan):
+    with _conn() as c:
+        c.execute("INSERT OR REPLACE INTO koiki_group(grp,plan) VALUES(?,?)", (grp, _plan_int(plan)))
+
+
+def koiki_groups():
+    """{имя_группы: [отделения-участники]} — объединения отделений с общим планом."""
+    with _conn() as c:
+        rows = [dict(r) for r in c.execute("SELECT otdelenie, grp FROM koiki_group_member")]
+    g = {}
+    for r in rows:
+        g.setdefault(r["grp"], []).append(r["otdelenie"])
+    return {k: sorted(v) for k, v in g.items()}
+
+
+def koiki_group_create(name, otdeleniya):
+    """Объединяет отделения (≥2) в группу с общим планом. Индивидуальные планы участников
+    сохраняются (пока в группе — не учитываются; при разъединении вернутся). План группы по
+    умолчанию — сумма индивидуальных планов участников (если у группы плана ещё нет)."""
+    name = (name or "").strip()
+    members = [o.strip() for o in (otdeleniya or []) if (o or "").strip()]
+    if not name or len(members) < 2:
+        return False
+    with _conn() as c:
+        for od in members:
+            c.execute("INSERT OR REPLACE INTO koiki_group_member(otdelenie,grp) VALUES(?,?)", (od, name))
+        if c.execute("SELECT 1 FROM koiki_group WHERE grp=?", (name,)).fetchone() is None:
+            total = 0
+            for od in members:
+                r = c.execute("SELECT plan FROM koiki_plan WHERE otdelenie=?", (od,)).fetchone()
+                total += (r["plan"] if r else 0) or 0
+            c.execute("INSERT INTO koiki_group(grp,plan) VALUES(?,?)", (name, total))
+    return True
+
+
+def koiki_group_disband(name):
+    """Разъединяет группу: убирает участников и план группы. Отделения снова считаются
+    по отдельности (их сохранённые индивидуальные планы возвращаются)."""
+    with _conn() as c:
+        c.execute("DELETE FROM koiki_group_member WHERE grp=?", (name,))
+        c.execute("DELETE FROM koiki_group WHERE grp=?", (name,))
+
+
+def _plan_units(extra_ods=None):
+    """План-единицы: группы (общий план) + одиночные отделения (не входящие в группы).
+    Каждая: {name, is_group, members(list), plan_year}."""
     with _conn() as c:
         ods = {r["otdelenie"] for r in c.execute("SELECT otdelenie FROM koiki")}
         pmap = {r["otdelenie"]: (r["plan"] or 0) for r in c.execute("SELECT * FROM koiki_plan")}
-    ods |= set(pmap) | set(extra_ods or [])
+        gm = [dict(r) for r in c.execute("SELECT otdelenie, grp FROM koiki_group_member")]
+        gplan = {r["grp"]: (r["plan"] or 0) for r in c.execute("SELECT grp, plan FROM koiki_group")}
+    groups = {}
+    for r in gm:
+        groups.setdefault(r["grp"], []).append(r["otdelenie"])
+    grouped = {r["otdelenie"] for r in gm}
+    ods |= set(extra_ods or []) | set(pmap)
     ods.discard("")
-    return [{"otdelenie": od, "year": pmap.get(od, 0),
-             "month": round(pmap.get(od, 0) / 12) if pmap.get(od) else 0,
-             "week": round(pmap.get(od, 0) / 52) if pmap.get(od) else 0} for od in sorted(ods)]
+    units = [{"name": grp, "is_group": True, "members": sorted(mem), "plan_year": gplan.get(grp, 0)}
+             for grp, mem in sorted(groups.items())]
+    units += [{"name": od, "is_group": False, "members": [od], "plan_year": pmap.get(od, 0)}
+              for od in sorted(o for o in ods if o not in grouped)]
+    return units
+
+
+def koiki_plan_list(extra_ods=None):
+    """План-единицы с годовым планом и производными (месяц = год/12, неделя = год/52).
+    Объединение: текущая загрузка коек + все загруженные периоды (extra_ods) + справочник
+    планов; отделения, сведённые в группу, показываются как одна строка-группа."""
+    out = []
+    for u in _plan_units(extra_ods):
+        py = u["plan_year"]
+        out.append({"name": u["name"], "is_group": u["is_group"], "members": u["members"],
+                    "year": py,
+                    "month": round(py / 12) if py else 0,
+                    "week": round(py / 52) if py else 0})
+    return out
 
 
 def koiki_cumulative():
@@ -678,7 +754,6 @@ def koiki_cumulative():
     with _conn() as c:
         blobs = [(r["period"], bytes(r["data"])) for r in
                  c.execute("SELECT period, data FROM period_files WHERE rtype='koiki'")]
-        pmap = {r["otdelenie"]: (r["plan"] or 0) for r in c.execute("SELECT * FROM koiki_plan")}
     periods = []
     for per, data in blobs:
         fd, tmp = tempfile.mkstemp(suffix=".xls"); _os.close(fd)
@@ -722,12 +797,17 @@ def koiki_cumulative():
     for p in selected:
         for od, ps in p["postup"].items():
             cum[od] = cum.get(od, 0) + (ps or 0)
+    # сворачиваем факт по план-единицам (группы суммируют поступивших по всем участникам)
     rows, tf, tp = [], 0, 0
-    for od in sorted(set(cum) | {k for k, v in pmap.items() if v}):
-        fact = cum.get(od, 0); py = pmap.get(od, 0)
+    for u in _plan_units(extra_ods=list(cum)):
+        fact = sum(cum.get(m, 0) for m in u["members"])
+        py = u["plan_year"]
+        if not (fact or py):
+            continue
         plan_cov = round(py / 365 * covered) if (py and covered) else 0
         vyp = round(fact / plan_cov * 100, 1) if plan_cov else None
-        rows.append({"otdelenie": od, "fact": fact, "plan_year": py, "plan_cov": plan_cov, "vypoln": vyp})
+        rows.append({"otdelenie": u["name"], "is_group": u["is_group"], "members": u["members"],
+                     "fact": fact, "plan_year": py, "plan_cov": plan_cov, "vypoln": vyp})
         if py:
             tf += fact; tp += plan_cov
     return {"selected": [{"label": p["label"], "days": p["days"]} for p in selected],
