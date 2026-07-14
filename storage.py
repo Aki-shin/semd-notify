@@ -554,6 +554,14 @@ def koiki_list():
         rmap = {r["otdelenie"]: dict(r) for r in c.execute("SELECT * FROM koiki_map")}
         pmap = {r["otdelenie"]: r["plan"] for r in c.execute("SELECT * FROM koiki_plan")}
         gm = {r["otdelenie"]: r["grp"] for r in c.execute("SELECT otdelenie, grp FROM koiki_group_member")}
+    # план и выполнение по группам (общий план на группу; факт — сумма поступивших участников)
+    postup_by_od = {r["otdelenie"]: (r["postup"] or 0) for r in rows}
+    grp_plan = {}
+    for u in _plan_units():
+        if u["is_group"] and u["plan_year"]:
+            pp = round(u["plan_year"] / 365 * days)
+            fact = sum(postup_by_od.get(m, 0) for m in u["members"])
+            grp_plan[u["name"]] = {"plan": pp, "vypoln": round(fact / pp * 100, 1) if pp else None}
     for r in rows:
         koek, kd, vyp = r["koek"], r["kd"], r["vyp"]
         r["zan"] = round(kd / (koek * days) * 100, 1) if koek else None
@@ -563,11 +571,17 @@ def koiki_list():
         r["no_beds"] = koek == 0
         m = rmap.get(r["otdelenie"], {})
         r["resp"], r["email"] = m.get("resp", ""), m.get("email", "")
-        # у сгруппированных отделений план на уровне группы — индивидуальный не показываем
         r["grp"] = gm.get(r["otdelenie"], "")
-        r["plan_year"] = 0 if r["grp"] else (pmap.get(r["otdelenie"], 0) or 0)
-        r["plan"] = round(r["plan_year"] / 365 * days) if r["plan_year"] else 0  # план за текущий период
-        r["vypoln"] = round(r["postup"] / r["plan"] * 100, 1) if r["plan"] else None
+        if r["grp"]:
+            # сгруппированное отделение: показываем ОБЩИЙ план и выполнение группы
+            gp = grp_plan.get(r["grp"], {})
+            r["plan_year"] = 0
+            r["plan"] = gp.get("plan", 0)
+            r["vypoln"] = gp.get("vypoln")
+        else:
+            r["plan_year"] = pmap.get(r["otdelenie"], 0) or 0
+            r["plan"] = round(r["plan_year"] / 365 * days) if r["plan_year"] else 0
+            r["vypoln"] = round(r["postup"] / r["plan"] * 100, 1) if r["plan"] else None
     rows.sort(key=lambda x: (x["zan"] is None, -(x["zan"] or 0)))
     return rows
 
@@ -727,8 +741,10 @@ def _plan_units(extra_ods=None):
     ods.discard("")
     units = [{"name": grp, "is_group": True, "members": sorted(mem), "plan_year": gplan.get(grp, 0)}
              for grp, mem in sorted(groups.items())]
+    # одиночные — всё, кроме участников групп И самих имён групп (имя группы может прийти
+    # через extra_ods из сводного cum и иначе задвоилось бы как «отделение»)
     units += [{"name": od, "is_group": False, "members": [od], "plan_year": pmap.get(od, 0)}
-              for od in sorted(o for o in ods if o not in grouped)]
+              for od in sorted(o for o in ods if o not in grouped and o not in groups)]
     return units
 
 
