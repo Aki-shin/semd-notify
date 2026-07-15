@@ -862,6 +862,87 @@ def users_eisz_upload():
     return redirect(url_for("users_eisz"))
 
 
+def _write_xlsx(headers, rows, sheet="Лист1"):
+    """Минимальная запись .xlsx на stdlib (inline strings), без openpyxl."""
+    import io, zipfile, re as _re
+    from xml.sax.saxutils import escape
+    def colref(n):
+        s = ""
+        while n > 0:
+            n, r = divmod(n - 1, 26); s = chr(65 + r) + s
+        return s
+    def rowxml(ri, vals):
+        cells = "".join(
+            f'<c r="{colref(ci+1)}{ri}" t="inlineStr"><is><t xml:space="preserve">'
+            f'{escape("" if v is None else str(v))}</t></is></c>' for ci, v in enumerate(vals))
+        return f'<row r="{ri}">{cells}</row>'
+    body = "".join(rowxml(i + 1, v) for i, v in enumerate([headers] + list(rows)))
+    safe = _re.sub(r'[:\\/?*\[\]]', " ", str(sheet))[:31] or "Лист1"
+    sheet_xml = ('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                 '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+                 f'<sheetData>{body}</sheetData></worksheet>')
+    ct = ('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+          '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+          '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+          '<Default Extension="xml" ContentType="application/xml"/>'
+          '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'
+          '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
+          '</Types>')
+    rels = ('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+            '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>'
+            '</Relationships>')
+    wb = ('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+          '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" '
+          'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+          f'<sheets><sheet name="{escape(safe)}" sheetId="1" r:id="rId1"/></sheets></workbook>')
+    wbrels = ('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+              '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+              '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>'
+              '</Relationships>')
+    bio = io.BytesIO()
+    with zipfile.ZipFile(bio, "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr("[Content_Types].xml", ct)
+        z.writestr("_rels/.rels", rels)
+        z.writestr("xl/workbook.xml", wb)
+        z.writestr("xl/_rels/workbook.xml.rels", wbrels)
+        z.writestr("xl/worksheets/sheet1.xml", sheet_xml)
+    bio.seek(0)
+    return bio
+
+
+@app.route("/users/eisz/export/<block>")
+def users_eisz_export(block):
+    """Выгрузка выбранного блока сверки ЕИСЗ в .xlsx."""
+    rec = storage.eisz_reconcile()
+    if block == "eisz":
+        head = ["ФИО", "СНИЛС", "Подразделение", "Должность", "Ставка", "Начало работы", "Окончание работы", "ФРМО"]
+        rows = [[e["fio"], e["snils"], e["podr"], e["position"], e["stavka"], e["start"], e["endwork"], e["frmo"]]
+                for e in storage.eisz_list()]
+        title, fn = "ЕИСЗ — все записи", "eisz_vse_zapisi.xlsx"
+    elif block == "access":
+        head = ["ФИО", "СНИЛС", "Должность(и)", "Подразделение(я)"]
+        rows = [[p["fio"], p["snils"], p["positions"], p["podrs"]] for p in rec["has_access"]]
+        title, fn = "Есть доступ ЕИСЗ", "eisz_est_dostup.xlsx"
+    elif block == "delete":
+        head = ["ФИО", "СНИЛС", "Должность(и)", "Подразделение(я)", "Причина"]
+        rows = []
+        for p in rec["to_delete"]:
+            reason = (["нет в штате"] if not p["in_staff"] else []) + \
+                     (["уволен" + (f" ({p['end']})" if p["end"] else "")] if p["terminated"] else [])
+            rows.append([p["fio"], p["snils"], p["positions"], p["podrs"], "; ".join(reason)])
+        title, fn = "Профили на удаление", "eisz_na_udalenie.xlsx"
+    elif block == "noaccess":
+        head = ["ФИО", "Логин", "Должность", "Подразделение", "Почта"]
+        rows = [[s["cn"], s["uid"], s["title"], s["ou"], s["mail"]] for s in rec["no_access"]]
+        title, fn = "Штат без доступа ЕИСЗ", "eisz_bez_dostupa.xlsx"
+    else:
+        flash("Неизвестный блок выгрузки.", "warn")
+        return redirect(url_for("users_eisz"))
+    return send_file(_write_xlsx(head, rows, title), as_attachment=True, download_name=fn,
+                     mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+
 @app.route("/users/sync", methods=["POST"])
 def users_sync():
     if not ipa.available():

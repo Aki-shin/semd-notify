@@ -8,7 +8,19 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-<div id="pgload" aria-hidden="true"><span class="pgbar"></span><span class="pgspin"></span></div>
+<div id="pgload" aria-hidden="true">
+  <div class="pl-icon">
+    <svg class="pl-ring" viewBox="0 0 80 80" width="84" height="84"><circle cx="40" cy="40" r="36" fill="none" stroke="#0d6efd" stroke-width="4" stroke-linecap="round" stroke-dasharray="70 160"/></svg>
+    <svg class="pl-fav" viewBox="0 0 32 32" width="52" height="52">
+      <rect width="32" height="32" rx="7" fill="#0d6efd"/>
+      <g fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" transform="translate(4 4)">
+        <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7l-5-5Z"/>
+        <path d="M14 2v4a2 2 0 0 0 2 2h4"/>
+        <path class="pl-check" d="m9 15 2 2 4-4"/>
+      </g>
+    </svg>
+  </div>
+</div>
 <div class="layout">
   <aside class="sidebar">
     <div class="side-brand">
@@ -156,16 +168,8 @@
 })();
 (function(){
   var el=document.getElementById('pgload'); if(!el) return;
-  var bar=el.querySelector('.pgbar'), t=null, p=0;
-  function set(v){ p=Math.max(0,Math.min(1,v)); bar.style.width=(p*100)+'%'; }
-  function start(){
-    clearInterval(t); el.classList.add('on'); set(0.08);
-    t=setInterval(function(){ if(p<0.9) set(p+(0.9-p)*0.1); }, 300);
-  }
-  function done(){
-    clearInterval(t); el.classList.add('on'); set(1);
-    setTimeout(function(){ el.classList.remove('on'); setTimeout(function(){ set(0); }, 260); }, 350);
-  }
+  function show(){ el.classList.add('on'); }
+  function hide(){ el.classList.remove('on'); }
   function navigable(a){
     try { return a && a.href && a.origin===location.origin && a.target!=='_blank'
       && !a.hasAttribute('download') && (a.getAttribute('href')||'').charAt(0)!=='#'; }
@@ -174,11 +178,11 @@
   document.addEventListener('click', function(e){
     if(e.button!==0||e.metaKey||e.ctrlKey||e.shiftKey||e.altKey||e.defaultPrevented) return;
     var a=e.target.closest ? e.target.closest('a') : null;
-    if(navigable(a)) start();
+    if(navigable(a)) show();   // мгновенно показываем центральную иконку
   }, true);
-  document.addEventListener('submit', function(e){ if(!e.defaultPrevented) start(); }, true);
-  window.addEventListener('pagehide', start);
-  window.addEventListener('pageshow', done);   // новая страница загрузилась — завершаем полосу
+  document.addEventListener('submit', function(e){ if(!e.defaultPrevented) show(); }, true);
+  window.addEventListener('pagehide', show);
+  window.addEventListener('pageshow', hide);   // новая страница загрузилась — скрываем
 })();
 </script>
 </body>

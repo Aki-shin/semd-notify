@@ -75,6 +75,20 @@ td.r, th.r { text-align: center; }
 td.bad { color: #b91c1c; font-weight: 600; }
 tr.lowpct td, tr.lowpct { background: #fff9f9; }
 .empty { color: #9aa3af; text-align: center; padding: 16px; }
+/* Карточки-переключатели блоков (ЕИСЗ) */
+.ecard { text-align: left; cursor: pointer; background: #fff; border: 1px solid #e5e7eb; border-radius: 10px;
+  padding: 14px 16px; font: inherit; color: inherit; transition: border-color .12s, box-shadow .12s, transform .06s; }
+.ecard:hover { border-color: #9ec3f0; }
+.ecard:active { transform: translateY(1px); }
+.ecard.active { border-color: #0d6efd; box-shadow: 0 0 0 1px #0d6efd inset, 0 5px 16px rgba(13,110,253,.15); }
+.ecard .num { font-size: 26px; font-weight: 700; }
+.ecard .num.bad-num { color: #b91c1c; }
+.ecard .lbl { color: #6b7280; font-size: 13px; margin-top: 4px; }
+.eblk { display: none; }
+.eblk.show { display: block; }
+a.dl { display: inline-flex; align-items: center; gap: 6px; background: #1e7d46; color: #fff; text-decoration: none;
+  border-radius: 7px; padding: 7px 12px; font-size: 13px; white-space: nowrap; }
+a.dl:hover { background: #17673a; }
 .box { background: #fff; border: 1px dashed #c7ccd3; border-radius: 10px; padding: 22px; display: flex; gap: 12px; align-items: center; }
 button { background: #1e3a5f; color: #fff; border: 0; border-radius: 7px; padding: 9px 16px; font-size: 14px; cursor: pointer; }
 button:hover { background: #16304f; }
@@ -128,19 +142,18 @@ code { background: #eef0f2; padding: 1px 5px; border-radius: 4px; font-size: 12p
 .to-top.show { opacity: 1; visibility: visible; transform: translateY(0); }
 .to-top:hover { background: rgba(13,110,253,.9); }
 .to-top svg { display: block; }
-/* Индикатор загрузки при переходах между страницами (полоса прогресса + значок) */
-#pgload { position: fixed; top: 0; left: 0; right: 0; z-index: 200; pointer-events: none;
-  opacity: 0; transition: opacity .25s; }
-#pgload.on { opacity: 1; }
-#pgload .pgbar { display: block; height: 3px; width: 0;
-  background: linear-gradient(90deg, #0b5ed7, #4a90ff); border-radius: 0 3px 3px 0;
-  box-shadow: 0 0 10px rgba(13,110,253,.8), 0 0 4px rgba(13,110,253,.6);
-  transition: width .2s ease; }
-#pgload .pgspin { position: fixed; top: 12px; right: 16px; width: 20px; height: 20px;
-  border: 2.5px solid rgba(13,110,253,.22); border-top-color: #0d6efd; border-radius: 50%;
-  animation: pgspin .7s linear infinite; }
-@keyframes pgspin { to { transform: rotate(360deg); } }
+/* Индикатор загрузки при переходах — центральная анимированная иконка в стиле favicon */
+#pgload { position: fixed; inset: 0; z-index: 300; display: none; align-items: center; justify-content: center;
+  background: rgba(246,247,249,.6); -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); }
+#pgload.on { display: flex; }
+#pgload .pl-icon { position: relative; width: 84px; height: 84px; display: flex; align-items: center; justify-content: center; }
+#pgload .pl-fav { position: relative; z-index: 1; border-radius: 12px;
+  filter: drop-shadow(0 6px 18px rgba(13,110,253,.4)); animation: plpulse 1.2s ease-in-out infinite; }
+#pgload .pl-ring { position: absolute; inset: 0; animation: plspin .9s linear infinite; }
+#pgload .pl-check { stroke-dasharray: 12; animation: pldraw 1.2s ease-in-out infinite; }
+@keyframes plspin { to { transform: rotate(360deg); } }
+@keyframes plpulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.08); } }
+@keyframes pldraw { 0% { stroke-dashoffset: 12; } 40% { stroke-dashoffset: 0; } 70% { stroke-dashoffset: 0; } 100% { stroke-dashoffset: -12; } }
 @media (prefers-reduced-motion: reduce) {
-  #pgload .pgspin { animation-duration: 1.4s; }
-  #pgload .pgbar { transition: none; }
+  #pgload .pl-ring, #pgload .pl-fav, #pgload .pl-check { animation: none; }
 }
