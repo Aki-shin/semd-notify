@@ -8,6 +8,7 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
+<div id="pgload" aria-hidden="true"><span class="pgbar"></span><span class="pgspin"></span></div>
 <div class="layout">
   <aside class="sidebar">
     <div class="side-brand">
@@ -152,6 +153,32 @@
   function upd(){ b.classList.toggle('show', (window.scrollY||document.documentElement.scrollTop) > 320); }
   window.addEventListener('scroll', upd, {passive:true}); upd();
   b.addEventListener('click', function(){ window.scrollTo({top:0, behavior:'smooth'}); });
+})();
+(function(){
+  var el=document.getElementById('pgload'); if(!el) return;
+  var bar=el.querySelector('.pgbar'), t=null, p=0;
+  function set(v){ p=Math.max(0,Math.min(1,v)); bar.style.width=(p*100)+'%'; }
+  function start(){
+    clearInterval(t); el.classList.add('on'); set(0.08);
+    t=setInterval(function(){ if(p<0.9) set(p+(0.9-p)*0.1); }, 300);
+  }
+  function done(){
+    clearInterval(t); el.classList.add('on'); set(1);
+    setTimeout(function(){ el.classList.remove('on'); setTimeout(function(){ set(0); }, 260); }, 350);
+  }
+  function navigable(a){
+    try { return a && a.href && a.origin===location.origin && a.target!=='_blank'
+      && !a.hasAttribute('download') && (a.getAttribute('href')||'').charAt(0)!=='#'; }
+    catch(e){ return false; }
+  }
+  document.addEventListener('click', function(e){
+    if(e.button!==0||e.metaKey||e.ctrlKey||e.shiftKey||e.altKey||e.defaultPrevented) return;
+    var a=e.target.closest ? e.target.closest('a') : null;
+    if(navigable(a)) start();
+  }, true);
+  document.addEventListener('submit', function(e){ if(!e.defaultPrevented) start(); }, true);
+  window.addEventListener('pagehide', start);
+  window.addEventListener('pageshow', done);   // новая страница загрузилась — завершаем полосу
 })();
 </script>
 </body>

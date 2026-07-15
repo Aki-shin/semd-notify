@@ -128,3 +128,19 @@ code { background: #eef0f2; padding: 1px 5px; border-radius: 4px; font-size: 12p
 .to-top.show { opacity: 1; visibility: visible; transform: translateY(0); }
 .to-top:hover { background: rgba(13,110,253,.9); }
 .to-top svg { display: block; }
+/* Индикатор загрузки при переходах между страницами (полоса прогресса + значок) */
+#pgload { position: fixed; top: 0; left: 0; right: 0; z-index: 200; pointer-events: none;
+  opacity: 0; transition: opacity .25s; }
+#pgload.on { opacity: 1; }
+#pgload .pgbar { display: block; height: 3px; width: 0;
+  background: linear-gradient(90deg, #0b5ed7, #4a90ff); border-radius: 0 3px 3px 0;
+  box-shadow: 0 0 10px rgba(13,110,253,.8), 0 0 4px rgba(13,110,253,.6);
+  transition: width .2s ease; }
+#pgload .pgspin { position: fixed; top: 12px; right: 16px; width: 20px; height: 20px;
+  border: 2.5px solid rgba(13,110,253,.22); border-top-color: #0d6efd; border-radius: 50%;
+  animation: pgspin .7s linear infinite; }
+@keyframes pgspin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  #pgload .pgspin { animation-duration: 1.4s; }
+  #pgload .pgbar { transition: none; }
+}
