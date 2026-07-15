@@ -10,7 +10,9 @@ body { font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 
 .side-nav { flex: 1; padding: 8px 10px; display: flex; flex-direction: column; gap: 2px; }
 .side-nav a { display: flex; align-items: center; gap: 11px; padding: 9px 12px; border-radius: 9px;
   color: rgba(255,255,255,.86); text-decoration: none; font-size: 14px; transition: background .12s, color .12s; }
-.side-nav a .ic { width: 20px; text-align: center; font-size: 15px; }
+.side-nav a .ic { width: 20px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.side-nav a .ic svg { display: block; opacity: .92; }
+.side-nav a.active .ic svg { opacity: 1; }
 .side-nav a:hover { background: rgba(255,255,255,.15); color: #fff; }
 .side-nav a.active { background: #fff; color: #0d6efd; font-weight: 600; box-shadow: 0 2px 8px rgba(0,0,0,.12); }
 .side-foot { padding: 12px 16px 16px; border-top: 1px solid rgba(255,255,255,.20); font-size: 13px;
@@ -108,3 +110,15 @@ code { background: #eef0f2; padding: 1px 5px; border-radius: 4px; font-size: 12p
 .period-item .pdel { background: none; color: #b91c1c; border: 0; padding: 4px 7px; font-size: 12px; cursor: pointer; border-radius: 6px; }
 .period-item .pdel:hover { background: #fdecec; }
 .period-empty { color: #9aa3af; text-align: center; padding: 12px; font-size: 13px; }
+/* Полупрозрачная кнопка «наверх» — появляется при прокрутке */
+.to-top { position: fixed; right: 22px; bottom: 22px; z-index: 70;
+  width: 44px; height: 44px; border-radius: 50%; padding: 0; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: rgba(13,110,253,.5); color: #fff; border: 1px solid rgba(255,255,255,.35);
+  backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+  box-shadow: 0 6px 18px rgba(13,110,253,.28);
+  opacity: 0; visibility: hidden; transform: translateY(10px);
+  transition: opacity .2s, transform .2s, background .15s; }
+.to-top.show { opacity: 1; visibility: visible; transform: translateY(0); }
+.to-top:hover { background: rgba(13,110,253,.9); }
+.to-top svg { display: block; }

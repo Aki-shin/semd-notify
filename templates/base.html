@@ -16,23 +16,37 @@
     </div>
     <nav class="side-nav">
       {% set p = request.path %}
+      {% set icons = {
+        'dashboard': '<rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/>',
+        'upload': '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m17 8-5-5-5 5"/><path d="M12 3v12"/>',
+        'stethoscope': '<path d="M11 2v2"/><path d="M5 2v2"/><path d="M5 3H4a2 2 0 0 0-2 2v4a6 6 0 0 0 12 0V5a2 2 0 0 0-2-2h-1"/><path d="M8 15a6 6 0 0 0 12 0v-3"/><circle cx="20" cy="10" r="2"/>',
+        'building': '<path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"/><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"/><path d="M10 6h4"/><path d="M10 10h4"/><path d="M10 14h4"/><path d="M10 18h4"/>',
+        'cross': '<path d="M11 2a2 2 0 0 0-2 2v5H4a2 2 0 0 0-2 2v2c0 1.1.9 2 2 2h5v5c0 1.1.9 2 2 2h2a2 2 0 0 0 2-2v-5h5a2 2 0 0 0 2-2v-2a2 2 0 0 0-2-2h-5V4a2 2 0 0 0-2-2Z"/>',
+        'bed': '<path d="M2 4v16"/><path d="M2 8h18a2 2 0 0 1 2 2v10"/><path d="M2 17h20"/><path d="M6 8v9"/>',
+        'chat': '<path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/>',
+        'scan': '<path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 12h10"/>',
+        'alert': '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
+        'clipboard': '<rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4"/><path d="M12 16h4"/><path d="M8 11h.01"/><path d="M8 16h.01"/>',
+        'users': '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+        'settings': '<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>'
+      } %}
       {% set nav = [
-        ('index', '/', '🏠', 'Дашборд'),
-        ('upload', '/upload', '⬆️', 'Загрузка'),
-        ('doctors', '/doctors', '🩺', 'Врачи / долги'),
-        ('departments', '/departments', '🏥', 'Отделения'),
-        ('fap', '/fap', '🚑', 'ФАП'),
-        ('koiki', '/koiki', '🛏️', 'Стационары'),
-        ('max_page', '/max', '💬', 'MAX'),
-        ('xray', '/xray', '🩻', 'Рентген'),
-        ('errors', '/errors', '⚠️', 'Ошибки'),
-        ('send_log_page', '/log', '📋', 'Журнал'),
-        ('users_page', '/users', '👥', 'Сотрудники'),
-        ('settings', '/settings', '⚙️', 'Настройки'),
+        ('index', '/', 'dashboard', 'Дашборд'),
+        ('upload', '/upload', 'upload', 'Загрузка'),
+        ('doctors', '/doctors', 'stethoscope', 'Врачи / долги'),
+        ('departments', '/departments', 'building', 'Отделения'),
+        ('fap', '/fap', 'cross', 'ФАП'),
+        ('koiki', '/koiki', 'bed', 'Стационары'),
+        ('max_page', '/max', 'chat', 'MAX'),
+        ('xray', '/xray', 'scan', 'Рентген'),
+        ('errors', '/errors', 'alert', 'Ошибки'),
+        ('send_log_page', '/log', 'clipboard', 'Журнал'),
+        ('users_page', '/users', 'users', 'Сотрудники'),
+        ('settings', '/settings', 'settings', 'Настройки'),
       ] %}
-      {% for ep, b, ic, label in nav %}
+      {% for ep, b, ico, label in nav %}
         {% set on = (p == b) if b == '/' else (p == b or p.startswith(b + '/')) %}
-        <a href="{{ url_for(ep) }}" class="{{ 'active' if on }}"><span class="ic">{{ ic }}</span>{{ label }}</a>
+        <a href="{{ url_for(ep) }}" class="{{ 'active' if on }}"><span class="ic"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{{ icons[ico]|safe }}</svg></span>{{ label }}</a>
       {% endfor %}
     </nav>
     <div class="side-foot">
@@ -88,6 +102,10 @@
   </div>
 </div>
 
+<button id="toTop" class="to-top" type="button" aria-label="Наверх" title="Наверх">
+  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></svg>
+</button>
+
 <script>
 (function(){
   function esc(s){var d=document.createElement('div');d.textContent=(s==null?'':s);return d.innerHTML;}
@@ -128,6 +146,12 @@
   menu.addEventListener('click', function(e){ e.stopPropagation(); });
   if(search) search.addEventListener('input', filter);
   document.addEventListener('click', function(){ menu.hidden=true; });
+})();
+(function(){
+  var b=document.getElementById('toTop'); if(!b) return;
+  function upd(){ b.classList.toggle('show', (window.scrollY||document.documentElement.scrollTop) > 320); }
+  window.addEventListener('scroll', upd, {passive:true}); upd();
+  b.addEventListener('click', function(){ window.scrollTo({top:0, behavior:'smooth'}); });
 })();
 </script>
 </body>
