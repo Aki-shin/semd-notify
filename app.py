@@ -814,14 +814,24 @@ def send_log_page():
 
 @app.route("/users")
 def users_page():
-    ipacfg = {k: appconfig.get(k, "") for k in ("IPA_LDAP_URI", "IPA_BASE_DN", "IPA_BIND_DN")}
-    ipacfg["IPA_AUTOSYNC"] = appconfig.get_bool("IPA_AUTOSYNC", False)
-    ipacfg["IPA_SYNC_HOURS"] = appconfig.get("IPA_SYNC_HOURS", "24")
-    ipacfg["pass_set"] = appconfig.is_set("IPA_BIND_PW")
     return render_template("users.html",
                            users=storage.ipa_users_list(),
                            stats=storage.ipa_users_stats(),
+                           ipa_ready=ipa.available(),
+                           ipa_group=appconfig.get("IPA_GROUP", ""),
+                           ipa_last=ipa.last_sync_info())
+
+
+@app.route("/users/integration")
+def users_integration():
+    ipacfg = {k: appconfig.get(k, "")
+              for k in ("IPA_LDAP_URI", "IPA_BASE_DN", "IPA_BIND_DN", "IPA_GROUP")}
+    ipacfg["IPA_AUTOSYNC"] = appconfig.get_bool("IPA_AUTOSYNC", False)
+    ipacfg["IPA_SYNC_HOURS"] = appconfig.get("IPA_SYNC_HOURS", "24")
+    ipacfg["pass_set"] = appconfig.is_set("IPA_BIND_PW")
+    return render_template("users_integration.html",
                            ipacfg=ipacfg,
+                           stats=storage.ipa_users_stats(),
                            ipa_ready=ipa.available(),
                            ipa_last=ipa.last_sync_info())
 
@@ -829,11 +839,13 @@ def users_page():
 @app.route("/users/sync", methods=["POST"])
 def users_sync():
     if not ipa.available():
-        flash("FreeIPA не настроен — задайте параметры на этой странице.", "warn")
-        return redirect(url_for("users_page"))
+        flash("FreeIPA не настроен — задайте параметры на вкладке «Интеграция».", "warn")
+        return redirect(url_for("users_integration"))
     try:
         loaded, matched = ipa.run_sync_and_record()
-        flash(f"FreeIPA: загружено {loaded} учёток, сопоставлено врачам {matched}.", "ok")
+        grp = appconfig.get("IPA_GROUP", "")
+        src = f" (из группы «{grp}»)" if grp else ""
+        flash(f"FreeIPA{src}: загружено {loaded} учёток, сопоставлено врачам {matched}.", "ok")
     except Exception as e:
         flash(f"FreeIPA ошибка: {e}", "warn")
     return redirect(url_for("users_page"))
@@ -841,16 +853,16 @@ def users_sync():
 
 @app.route("/users/save_ipa", methods=["POST"])
 def users_save_ipa():
-    """Настройки FreeIPA перенесены со страницы Настроек на «Пользователи»."""
-    for k in ("IPA_LDAP_URI", "IPA_BASE_DN", "IPA_BIND_DN"):
+    """Настройки интеграции FreeIPA (вкладка «Интеграция» страницы «Пользователи»)."""
+    for k in ("IPA_LDAP_URI", "IPA_BASE_DN", "IPA_BIND_DN", "IPA_GROUP"):
         appconfig.set(k, (request.form.get(k) or "").strip())
     appconfig.set("IPA_AUTOSYNC", "1" if request.form.get("IPA_AUTOSYNC") else "0")
     appconfig.set("IPA_SYNC_HOURS", (request.form.get("IPA_SYNC_HOURS") or "24").strip())
     pw = request.form.get("IPA_BIND_PW") or ""
     if pw:
         appconfig.set("IPA_BIND_PW", pw)
-    flash("Настройки FreeIPA сохранены.", "ok")
-    return redirect(url_for("users_page"))
+    flash("Настройки интеграции FreeIPA сохранены.", "ok")
+    return redirect(url_for("users_integration"))
 
 
 @app.route("/custom/save", methods=["POST"])

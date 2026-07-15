@@ -13,7 +13,20 @@ def _cfg():
         "base": cfg.get("IPA_BASE_DN", ""),          # cn=users,cn=accounts,dc=example,dc=local
         "bind_dn": cfg.get("IPA_BIND_DN", ""),       # uid=svc,cn=users,...
         "bind_pw": cfg.get("IPA_BIND_PW", ""),
+        "group": (cfg.get("IPA_GROUP", "") or "").strip(),  # если задана — берём только её участников
     }
+
+
+def _user_filter(c):
+    """LDAP-фильтр пользователей. Если задана группа — только её участники (по memberof).
+    DN группы выводится из Base DN: cn=<группа>,cn=groups,<…,cn=accounts,dc=…>."""
+    grp = c.get("group")
+    if not grp:
+        return "(uid=*)"
+    base = c.get("base", "")
+    suffix = base.split(",", 1)[1] if "," in base else base  # отбрасываем cn=users
+    gdn = f"cn={grp},cn=groups,{suffix}"
+    return f"(&(uid=*)(memberof={gdn}))"
 
 
 def available():
@@ -36,7 +49,7 @@ def fetch_users():
     server = Server(c["uri"], get_info=ALL)
     conn = Connection(server, user=c["bind_dn"] or None, password=c["bind_pw"] or None,
                       auto_bind=True)
-    conn.search(c["base"], "(uid=*)", search_scope=SUBTREE, attributes=_ATTRS)
+    conn.search(c["base"], _user_filter(c), search_scope=SUBTREE, attributes=_ATTRS)
 
     def val(e, a):
         if a not in e:

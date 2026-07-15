@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block body %}
+<div style="margin:0 0 8px;font-size:14px"><a href="{{ url_for('users_page') }}">Пользователи</a> · <b>Интеграция</b></div>
+<h1>Интеграция с FreeIPA {% if ipa_ready %}<span class="pill ok">настроено</span>{% else %}<span class="pill warn">не настроено</span>{% endif %}</h1>
+<p class="muted">Подключение к FreeIPA для выгрузки пользователей на вкладку «Пользователи» и сопоставления
+корпоративных почт врачам. Служебная учётная запись — только на чтение. Пароль скрыт: оставьте поле пустым,
+чтобы не менять сохранённый.
+{% if ipa_last[0] %}<br>Последняя синхронизация: <b>{{ ipa_last[0] }}</b> — {{ ipa_last[1] }}.{% endif %}</p>
+
+<form method="post" action="{{ url_for('users_save_ipa') }}" class="cfg">
+  <label>LDAP URI <input name="IPA_LDAP_URI" value="{{ ipacfg.IPA_LDAP_URI }}" placeholder="ldaps://ipa.osacrb.local"></label>
+  <label>Base DN <input name="IPA_BASE_DN" value="{{ ipacfg.IPA_BASE_DN }}" placeholder="cn=users,cn=accounts,dc=osacrb,dc=local"></label>
+  <label>Bind DN <input name="IPA_BIND_DN" value="{{ ipacfg.IPA_BIND_DN }}" placeholder="uid=semd-svc,cn=users,..."></label>
+  <label>Bind пароль <input type="password" name="IPA_BIND_PW" placeholder="{{ '•••• сохранён — оставьте пустым' if ipacfg.pass_set else 'не задан' }}"></label>
+  <label>Группа <input name="IPA_GROUP" value="{{ ipacfg.IPA_GROUP }}" placeholder="напр. employees (пусто — все пользователи)">
+    <span class="small muted">Если задана — берутся только участники этой группы FreeIPA (по memberof). Пусто — все учётные записи.</span></label>
+  <label class="chk"><input type="checkbox" name="IPA_AUTOSYNC" {{ 'checked' if ipacfg.IPA_AUTOSYNC }}> Автосинхронизация</label>
+  <label>Интервал, часов <input name="IPA_SYNC_HOURS" value="{{ ipacfg.IPA_SYNC_HOURS or '24' }}" size="5"></label>
+  <div><button type="submit">Сохранить интеграцию</button></div>
+</form>
+
+<form method="post" action="{{ url_for('users_sync') }}" class="inline" style="margin-top:10px">
+  <button type="submit" {{ 'disabled' if not ipa_ready }}>↻ Синхронизировать сейчас</button>
+  <span class="muted small">
+    {% if ipacfg.IPA_AUTOSYNC %}Автосинхронизация раз в {{ ipacfg.IPA_SYNC_HOURS }} ч.{% else %}Автосинхронизация выключена.{% endif %}
+    Сейчас загружено: <b>{{ stats.total }}</b> учёток.
+  </span>
+</form>
+{% endblock %}
