@@ -2,8 +2,8 @@
 {% block body %}
 <h1>Подразделения — эскалация зав. отделениям</h1>
 <p class="muted">Сводка неподписанных по подразделениям (из отчёта «в разрезе врачей»). Отметьте — каждому зав.
-отделением уйдёт письмо со списком его врачей и их неподписанных документов. Почту зав. отделения можно
-задать в строке или в <a href="{{ url_for('settings') }}">Настройках</a>.
+отделением уйдёт письмо со списком его врачей и их неподписанных документов. Почту зав. отделения впишите
+в строке и нажмите «💾 Сохранить почты» — запомнится на следующие недели.
 {% if smtp_dry %}<b>DRYRUN: письма не отправляются.</b>{% endif %}</p>
 
 <!-- Сводный отчёт по всем подразделениям — ответственному -->
@@ -11,10 +11,14 @@
 {% set send_action = url_for('departments_report_send') %}
 {% include "_resp_box.html" %}
 
+{% set ckey = 'CUSTOM_DEPT' %}{% set clabel = 'Сводка заведующему отделением' %}
+{% include "_custom_text.html" %}
+
 <h2>Эскалация по подразделениям <span class="small muted">— письмо каждому зав. отделением</span></h2>
 <form method="post" action="{{ url_for('departments_send') }}">
   <div class="toolbar">
     <label><input type="checkbox" id="all"> выбрать все с неподписанными и почтой</label>
+    <button type="submit" formaction="{{ url_for('departments_save_emails') }}">💾 Сохранить почты</button>
     <button type="submit">✉ Отправить сводки зав. отделениям</button>
   </div>
   <table>

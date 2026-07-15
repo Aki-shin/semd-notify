@@ -9,6 +9,9 @@
 {% set send_action = url_for('report_send') %}
 {% include "_resp_box.html" %}
 
+{% set ckey = 'CUSTOM_ERR' %}{% set clabel = 'Отчёт ответственному за исправление ошибок РЭМД' %}
+{% include "_custom_text.html" %}
+
 <div class="cols">
   <div>
     <h2>По кодам ошибок</h2>

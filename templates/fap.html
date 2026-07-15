@@ -8,6 +8,9 @@
 {% set send_action = url_for('fap_report_send') %}
 {% include "_resp_box.html" %}
 
+{% set ckey = 'CUSTOM_FAP' %}{% set clabel = 'Отчёт ответственному за ФАП' %}
+{% include "_custom_text.html" %}
+
 {% if s %}
 <section class="cards">
   <div class="card"><div class="num">{{ s.n }}</div><div class="lbl">Фельдшеров ФАП</div></div>

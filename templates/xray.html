@@ -13,6 +13,9 @@
 {% set send_action = url_for('xray_report_send') %}
 {% include "_resp_box.html" %}
 
+{% set ckey = 'CUSTOM_XRAY' %}{% set clabel = 'Отчёт по обработке лучевых исследований ИИ (Рентген)' %}
+{% include "_custom_text.html" %}
+
 {% if totals %}
 <section class="cards">
   <div class="card"><div class="num">{{ totals.total }}</div>

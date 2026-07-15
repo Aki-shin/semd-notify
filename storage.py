@@ -30,6 +30,9 @@ def init():
         CREATE TABLE IF NOT EXISTS errors(
             fio TEXT, snils TEXT, req_type TEXT, code TEXT, descr TEXT, extra TEXT);
         CREATE TABLE IF NOT EXISTS email_map(key TEXT PRIMARY KEY, email TEXT);
+        CREATE TABLE IF NOT EXISTS ipa_users(
+            uid TEXT PRIMARY KEY, cn TEXT, givenname TEXT, sn TEXT, mail TEXT,
+            title TEXT, ou TEXT, phone TEXT, mobile TEXT, empnum TEXT, blocked INTEGER DEFAULT 0);
         CREATE TABLE IF NOT EXISTS send_log(
             ts TEXT, vrach TEXT, email TEXT, cnt INTEGER, status TEXT);
         CREATE TABLE IF NOT EXISTS dept_map(podr TEXT PRIMARY KEY, email TEXT);
@@ -925,6 +928,39 @@ def set_email(key, email):
 def bulk_set_emails(pairs):
     with _conn() as c:
         c.executemany("INSERT OR REPLACE INTO email_map(key,email) VALUES(?,?)", pairs)
+
+
+# --- Пользователи FreeIPA (полный профиль, для страницы «Пользователи») ---
+
+def set_ipa_users(users):
+    """Заменяет таблицу пользователей IPA свежей выгрузкой. users — список dict
+    с ключами uid, cn, givenname, sn, mail, title, ou, phone, mobile, empnum, blocked."""
+    init()
+    with _conn() as c:
+        c.execute("DELETE FROM ipa_users")
+        c.executemany(
+            "INSERT OR REPLACE INTO ipa_users(uid,cn,givenname,sn,mail,title,ou,phone,mobile,empnum,blocked) "
+            "VALUES(:uid,:cn,:givenname,:sn,:mail,:title,:ou,:phone,:mobile,:empnum,:blocked)",
+            [{"uid": u.get("uid", ""), "cn": u.get("cn", ""), "givenname": u.get("givenname", ""),
+              "sn": u.get("sn", ""), "mail": u.get("mail", ""), "title": u.get("title", ""),
+              "ou": u.get("ou", ""), "phone": u.get("phone", ""), "mobile": u.get("mobile", ""),
+              "empnum": u.get("empnum", ""), "blocked": 1 if u.get("blocked") else 0} for u in users])
+
+
+def ipa_users_list():
+    init()
+    with _conn() as c:
+        return [dict(r) for r in c.execute(
+            "SELECT * FROM ipa_users ORDER BY (mail=''), cn")]
+
+
+def ipa_users_stats():
+    init()
+    with _conn() as c:
+        rows = list(c.execute("SELECT blocked, mail FROM ipa_users"))
+    return {"total": len(rows),
+            "blocked": sum(1 for r in rows if r["blocked"]),
+            "no_mail": sum(1 for r in rows if not (r["mail"] or "").strip())}
 
 
 def bulk_set_doctor_emails(items):

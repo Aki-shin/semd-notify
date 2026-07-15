@@ -133,6 +133,10 @@ REPORT_MAILING = {
     "xray": "Ответственному за цифровизацию / лучевую диагностику",
 }
 
+# Ключи произвольного текста писем (редактируются на страницах соответствующих отчётов)
+CUSTOM_KEYS = ("CUSTOM_DEBT", "CUSTOM_DEPT", "CUSTOM_ERR", "CUSTOM_FAP",
+               "CUSTOM_KOIKI", "CUSTOM_MAX", "CUSTOM_XRAY")
+
 
 def current_user():
     """Читает заголовки Host Manager с корректной перекодировкой кириллицы."""
@@ -151,7 +155,8 @@ def inject():
             "smtp_ok": mailer.configured(), "smtp_dry": mailer.is_dryrun(),
             "ipa_ok": ipa.available(), "periods": storage.periods_info(),
             "period_history": storage.periods_history(),
-            "active_period": appconfig.get("active_period", "")}
+            "active_period": appconfig.get("active_period", ""),
+            "custom_texts": {k: appconfig.get(k, "") for k in CUSTOM_KEYS}}
 
 
 @app.route("/")
@@ -807,36 +812,75 @@ def send_log_page():
     return render_template("log.html", log=storage.send_log(200))
 
 
+@app.route("/users")
+def users_page():
+    ipacfg = {k: appconfig.get(k, "") for k in ("IPA_LDAP_URI", "IPA_BASE_DN", "IPA_BIND_DN")}
+    ipacfg["IPA_AUTOSYNC"] = appconfig.get_bool("IPA_AUTOSYNC", False)
+    ipacfg["IPA_SYNC_HOURS"] = appconfig.get("IPA_SYNC_HOURS", "24")
+    ipacfg["pass_set"] = appconfig.is_set("IPA_BIND_PW")
+    return render_template("users.html",
+                           users=storage.ipa_users_list(),
+                           stats=storage.ipa_users_stats(),
+                           ipacfg=ipacfg,
+                           ipa_ready=ipa.available(),
+                           ipa_last=ipa.last_sync_info())
+
+
+@app.route("/users/sync", methods=["POST"])
+def users_sync():
+    if not ipa.available():
+        flash("FreeIPA не настроен — задайте параметры на этой странице.", "warn")
+        return redirect(url_for("users_page"))
+    try:
+        loaded, matched = ipa.run_sync_and_record()
+        flash(f"FreeIPA: загружено {loaded} учёток, сопоставлено врачам {matched}.", "ok")
+    except Exception as e:
+        flash(f"FreeIPA ошибка: {e}", "warn")
+    return redirect(url_for("users_page"))
+
+
+@app.route("/users/save_ipa", methods=["POST"])
+def users_save_ipa():
+    """Настройки FreeIPA перенесены со страницы Настроек на «Пользователи»."""
+    for k in ("IPA_LDAP_URI", "IPA_BASE_DN", "IPA_BIND_DN"):
+        appconfig.set(k, (request.form.get(k) or "").strip())
+    appconfig.set("IPA_AUTOSYNC", "1" if request.form.get("IPA_AUTOSYNC") else "0")
+    appconfig.set("IPA_SYNC_HOURS", (request.form.get("IPA_SYNC_HOURS") or "24").strip())
+    pw = request.form.get("IPA_BIND_PW") or ""
+    if pw:
+        appconfig.set("IPA_BIND_PW", pw)
+    flash("Настройки FreeIPA сохранены.", "ok")
+    return redirect(url_for("users_page"))
+
+
+@app.route("/custom/save", methods=["POST"])
+def custom_save():
+    """Сохраняет произвольный текст письма одного типа (со страницы отчёта)."""
+    key = (request.form.get("key") or "").strip()
+    if key in CUSTOM_KEYS:
+        appconfig.set(key, (request.form.get("value") or "").strip())
+        flash("Текст письма сохранён.", "ok")
+    else:
+        flash("Неизвестный тип письма.", "warn")
+    return redirect(request.form.get("back") or request.referrer or url_for("index"))
+
+
+@app.route("/departments/save_emails", methods=["POST"])
+def departments_save_emails():
+    """Сохраняет почты заведующих отделениями (перенесено из Настроек)."""
+    saved = 0
+    for k, v in request.form.items():
+        if k.startswith("email__"):
+            storage.set_dept_email(k[len("email__"):], (v or "").strip())
+            saved += 1
+    flash(f"Сохранены почты отделений ({saved}).", "ok" if saved else "warn")
+    return redirect(url_for("departments"))
+
+
 @app.route("/settings", methods=["GET", "POST"])
 def settings():
     if request.method == "POST":
-        action = request.form.get("action")
-        if action == "ipa_sync":
-            try:
-                loaded, matched = ipa.run_sync_and_record()
-                flash(f"FreeIPA: загружено {loaded} учёток, сопоставлено врачам {matched}.", "ok")
-            except Exception as e:
-                flash(f"FreeIPA ошибка: {e}", "warn")
-        elif action == "set_email":
-            key = (request.form.get("key") or "").strip()
-            email = (request.form.get("email") or "").strip()
-            if key and email:
-                storage.set_email(key, email)
-                flash("Почта сохранена.", "ok")
-        elif action == "set_dept":
-            podr = (request.form.get("podr") or "").strip()
-            email = (request.form.get("email") or "").strip()
-            if podr and email:
-                storage.set_dept_email(podr, email)
-                flash("Почта подразделения сохранена.", "ok")
-        elif action == "set_dept_bulk":
-            saved = 0
-            for key, val in request.form.items():
-                if key.startswith("dept_email__"):
-                    storage.set_dept_email(key[len("dept_email__"):], (val or "").strip())
-                    saved += 1
-            flash(f"Сохранены почты отделений ({saved}).", "ok")
-        elif action == "save_smtp":
+        if request.form.get("action") == "save_smtp":
             for k in ("SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_FROM", "SMTP_FROM_NAME",
                       "SMTP_BATCH_DELAY", "SMTP_BATCH_SIZE", "SMTP_BATCH_PAUSE"):
                 appconfig.set(k, (request.form.get(k) or "").strip())
@@ -846,20 +890,6 @@ def settings():
             if pw:  # пустое поле — не перезаписываем сохранённый пароль
                 appconfig.set("SMTP_PASS", pw)
             flash("Настройки почты сохранены.", "ok")
-        elif action == "save_custom":
-            for k in ("CUSTOM_DEBT", "CUSTOM_DEPT", "CUSTOM_ERR", "CUSTOM_FAP", "CUSTOM_KOIKI",
-                      "CUSTOM_MAX", "CUSTOM_XRAY"):
-                appconfig.set(k, (request.form.get(k) or "").strip())
-            flash("Дополнительный текст писем сохранён.", "ok")
-        elif action == "save_ipa":
-            for k in ("IPA_LDAP_URI", "IPA_BASE_DN", "IPA_BIND_DN"):
-                appconfig.set(k, (request.form.get(k) or "").strip())
-            appconfig.set("IPA_AUTOSYNC", "1" if request.form.get("IPA_AUTOSYNC") else "0")
-            appconfig.set("IPA_SYNC_HOURS", (request.form.get("IPA_SYNC_HOURS") or "24").strip())
-            pw = request.form.get("IPA_BIND_PW") or ""
-            if pw:
-                appconfig.set("IPA_BIND_PW", pw)
-            flash("Настройки FreeIPA сохранены.", "ok")
         return redirect(url_for("settings"))
 
     smtp = {k: appconfig.get(k, "") for k in
@@ -870,17 +900,7 @@ def settings():
     smtp["SMTP_BATCH_DELAY"] = appconfig.get("SMTP_BATCH_DELAY", "2")
     smtp["SMTP_BATCH_SIZE"] = appconfig.get("SMTP_BATCH_SIZE", "25")
     smtp["SMTP_BATCH_PAUSE"] = appconfig.get("SMTP_BATCH_PAUSE", "30")
-    custom = {k: appconfig.get(k, "") for k in
-              ("CUSTOM_DEBT", "CUSTOM_DEPT", "CUSTOM_ERR", "CUSTOM_FAP", "CUSTOM_KOIKI",
-               "CUSTOM_MAX", "CUSTOM_XRAY")}
-    ipacfg = {k: appconfig.get(k, "") for k in ("IPA_LDAP_URI", "IPA_BASE_DN", "IPA_BIND_DN")}
-    ipacfg["IPA_AUTOSYNC"] = appconfig.get_bool("IPA_AUTOSYNC", False)
-    ipacfg["IPA_SYNC_HOURS"] = appconfig.get("IPA_SYNC_HOURS", "24")
-    ipacfg["pass_set"] = appconfig.is_set("IPA_BIND_PW")
-    last_ts, last_res = ipa.last_sync_info()
-    return render_template("settings.html", smtp=smtp, ipacfg=ipacfg, custom=custom,
-                           ipa_last=(last_ts, last_res),
-                           docs=storage.doctors(), depts=storage.dept_summary())
+    return render_template("settings.html", smtp=smtp)
 
 
 @app.route("/healthz")

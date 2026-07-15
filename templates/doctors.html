@@ -5,6 +5,9 @@
 его неподписанных документов. Почту можно поправить прямо в строке и сохранить кнопкой «💾 Сохранить почты».
 {% if smtp_dry %}<b>Режим DRYRUN: письма не отправляются, только логируются.</b>{% endif %}</p>
 
+{% set ckey = 'CUSTOM_DEBT' %}{% set clabel = 'Письмо врачу о неподписанных документах (долги по РЭМД)' %}
+{% include "_custom_text.html" %}
+
 <div class="sort">Сортировка:
   <a href="?order=nepodp" class="{{ 'on' if order=='nepodp' }}">по неподписанным</a>
   <a href="?order=pct" class="{{ 'on' if order=='pct' }}">по % подписания</a>

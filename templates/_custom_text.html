@@ -1,0 +1,11 @@
+{# Редактор произвольного текста письма. Ждёт: ckey (напр. 'CUSTOM_DEBT'), clabel (подпись). #}
+<details class="ctext" style="margin:10px 0"{% if custom_texts.get(ckey) %} open{% endif %}>
+  <summary class="small" style="cursor:pointer;color:#1d4ed8">✎ Текст, добавляемый в конец письма{% if custom_texts.get(ckey) %} <span class="pill ok">задан</span>{% endif %}</summary>
+  <form method="post" action="{{ url_for('custom_save') }}" style="margin-top:6px;max-width:660px">
+    <input type="hidden" name="key" value="{{ ckey }}">
+    <input type="hidden" name="back" value="{{ request.path }}">
+    <div class="small muted" style="margin-bottom:4px">{{ clabel }}. Добавляется в конце письма (перед служебной подписью) выделенным блоком; HTML экранируется. Пусто — ничего не добавляется.</div>
+    <textarea name="value" rows="3" style="width:100%;box-sizing:border-box;font-family:inherit;font-size:13px;padding:6px 8px" placeholder="напр.: Прошу отработать и сообщить о результатах.">{{ custom_texts.get(ckey, '') }}</textarea>
+    <div style="margin-top:6px"><button type="submit">Сохранить текст</button></div>
+  </form>
+</details>

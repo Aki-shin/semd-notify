@@ -21,35 +21,66 @@ def available():
     return bool(c["uri"] and c["base"])
 
 
-def fetch_all():
-    """Возвращает список {cn, mail} всех пользователей с почтой."""
+# Атрибуты FreeIPA/LDAP, заполняемые кадровой синхронизацией (см. User Manager):
+#   title→должность, ou→подразделение, telephoneNumber→рабочий, mobile→моб.,
+#   employeeNumber→кадровый код, nsaccountlock→блокировка.
+_ATTRS = ["uid", "cn", "displayName", "givenName", "sn", "mail", "title", "ou",
+          "telephoneNumber", "mobile", "employeeNumber", "nsaccountlock"]
+
+
+def fetch_users():
+    """Полный профиль ВСЕХ пользователей FreeIPA (для страницы «Пользователи»).
+    Возвращает список dict {uid, cn, givenname, sn, mail, title, ou, phone, mobile, empnum, blocked}."""
     from ldap3 import Server, Connection, ALL, SUBTREE
     c = _cfg()
     server = Server(c["uri"], get_info=ALL)
     conn = Connection(server, user=c["bind_dn"] or None, password=c["bind_pw"] or None,
                       auto_bind=True)
-    conn.search(c["base"], "(&(objectClass=person)(mail=*))",
-                search_scope=SUBTREE, attributes=["cn", "displayName", "mail"])
+    conn.search(c["base"], "(uid=*)", search_scope=SUBTREE, attributes=_ATTRS)
+
+    def val(e, a):
+        if a not in e:
+            return ""
+        v = e[a].value
+        if isinstance(v, (list, tuple)):
+            v = v[0] if v else ""
+        return str(v) if v is not None else ""
+
     res = []
     for e in conn.entries:
-        cn = str(e.cn) if "cn" in e else (str(e.displayName) if "displayName" in e else "")
-        mail = str(e.mail) if "mail" in e else ""
-        if cn and mail:
-            res.append({"cn": cn, "mail": mail})
+        uid = val(e, "uid")
+        if not uid:
+            continue
+        res.append({
+            "uid": uid,
+            "cn": val(e, "cn") or val(e, "displayName"),
+            "givenname": val(e, "givenName"),
+            "sn": val(e, "sn"),
+            "mail": val(e, "mail"),
+            "title": val(e, "title"),
+            "ou": val(e, "ou"),
+            "phone": val(e, "telephoneNumber"),
+            "mobile": val(e, "mobile"),
+            "empnum": val(e, "employeeNumber"),
+            "blocked": val(e, "nsaccountlock").upper() == "TRUE",
+        })
     conn.unbind()
     return res
 
 
+def fetch_all():
+    """Совместимость: список {cn, mail} пользователей с почтой (для сопоставления врачам)."""
+    return [{"cn": u["cn"], "mail": u["mail"]} for u in fetch_users() if u["cn"] and u["mail"]]
+
+
 def sync_to_map():
-    """Тянет почты из IPA и кладёт в email_map по нормализованному ФИО.
-    Возвращает (кол-во загруженных, кол-во сопоставленных к врачам)."""
-    users = fetch_all()
-    pairs = []
-    for u in users:
-        key = " ".join(u["cn"].upper().split())
-        pairs.append((key, u["mail"]))
+    """Тянет пользователей из IPA: сохраняет полный список (страница «Пользователи»)
+    и почты в email_map по нормализованному ФИО. Возвращает (загружено, сопоставлено врачам)."""
+    users = fetch_users()
+    storage.set_ipa_users(users)
+    pairs = [(" ".join(u["cn"].upper().split()), u["mail"])
+             for u in users if u["cn"] and u["mail"]]
     storage.bulk_set_emails(pairs)
-    # сколько врачей теперь имеют почту
     docs = storage.doctors()
     matched = sum(1 for d in docs if d["email"])
     return len(users), matched

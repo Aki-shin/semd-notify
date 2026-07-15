@@ -2,7 +2,9 @@
 {% block body %}
 <h1>Настройки</h1>
 <p class="muted">Параметры можно задать здесь (сохраняются в БД, приоритет над переменными окружения)
-либо через env в Host Manager. Пароли при отображении скрыты — оставьте поле пустым, чтобы не менять сохранённый.</p>
+либо через env в Host Manager. Пароли при отображении скрыты — оставьте поле пустым, чтобы не менять сохранённый.<br>
+<span class="small">Текст писем настраивается на страницах соответствующих отчётов; почты заведующих — на «Отделениях»;
+пользователи и FreeIPA — на «Пользователях».</span></p>
 
 <h2>Почта (SMTP) {% if smtp_ok %}{% if smtp_dry %}<span class="pill warn">DRYRUN</span>{% else %}<span class="pill ok">готово</span>{% endif %}{% else %}<span class="pill warn">не настроено</span>{% endif %}</h2>
 <form method="post" class="cfg">
@@ -20,86 +22,5 @@
   <label>Размер пачки (после N — пауза) <input name="SMTP_BATCH_SIZE" value="{{ smtp.SMTP_BATCH_SIZE or '25' }}" size="5"></label>
   <label>Пауза между пачками, сек <input name="SMTP_BATCH_PAUSE" value="{{ smtp.SMTP_BATCH_PAUSE or '30' }}" size="5"></label>
   <div><button type="submit">Сохранить почту</button></div>
-</form>
-
-<h2>Дополнительный текст в письмах</h2>
-<p class="muted">Произвольный текст добавляется <b>в конце</b> соответствующего письма (перед служебной подписью), в виде выделенного блока.
-Переводы строк сохраняются; HTML экранируется (вставляется как обычный текст). Пустое поле — ничего не добавляется.</p>
-<form method="post" class="cfg">
-  <input type="hidden" name="action" value="save_custom">
-  <label>Письмо врачу (долги по РЭМД)
-    <textarea name="CUSTOM_DEBT" rows="3" placeholder="напр.: Просьба подписать документы до конца недели. По вопросам — каб. 12, тел. 4-45-55.">{{ custom.CUSTOM_DEBT }}</textarea></label>
-  <label>Сводка заведующему отделением
-    <textarea name="CUSTOM_DEPT" rows="3" placeholder="напр.: Прошу довести до сведения врачей отделения и проконтролировать подписание.">{{ custom.CUSTOM_DEPT }}</textarea></label>
-  <label>Отчёт ответственному за исправление ошибок РЭМД
-    <textarea name="CUSTOM_ERR" rows="3" placeholder="напр.: Прошу отработать ошибки и сообщить о результатах.">{{ custom.CUSTOM_ERR }}</textarea></label>
-  <label>Отчёт ответственному за ФАП
-    <textarea name="CUSTOM_FAP" rows="3" placeholder="напр.: Прошу обеспечить заполнение ЭМК по всем посещениям.">{{ custom.CUSTOM_FAP }}</textarea></label>
-  <label>Письма по занятости коек (ответственным и сводный)
-    <textarea name="CUSTOM_KOIKI" rows="3" placeholder="напр.: Прошу проанализировать занятость и при отклонениях представить пояснения.">{{ custom.CUSTOM_KOIKI }}</textarea></label>
-  <label>Отчёт по ТМК через чат-бот MAX
-    <textarea name="CUSTOM_MAX" rows="3" placeholder="напр.: Прошу довести до врачей и повысить долю приёмов через чат-бот MAX.">{{ custom.CUSTOM_MAX }}</textarea></label>
-  <label>Отчёт по обработке лучевых исследований ИИ (Рентген)
-    <textarea name="CUSTOM_XRAY" rows="3" placeholder="напр.: Прошу проанализировать ошибки обработки и принять меры по стороне МО.">{{ custom.CUSTOM_XRAY }}</textarea></label>
-  <div><button type="submit">Сохранить текст писем</button></div>
-</form>
-
-<h2>FreeIPA — корпоративные почты {% if ipa_ok %}<span class="pill ok">подключено</span>{% else %}<span class="pill warn">не настроено</span>{% endif %}</h2>
-<form method="post" class="cfg">
-  <input type="hidden" name="action" value="save_ipa">
-  <label>LDAP URI <input name="IPA_LDAP_URI" value="{{ ipacfg.IPA_LDAP_URI }}" placeholder="ldaps://ipa.osacrb.local"></label>
-  <label>Base DN <input name="IPA_BASE_DN" value="{{ ipacfg.IPA_BASE_DN }}" placeholder="cn=users,cn=accounts,dc=osacrb,dc=local"></label>
-  <label>Bind DN <input name="IPA_BIND_DN" value="{{ ipacfg.IPA_BIND_DN }}" placeholder="uid=semd-svc,cn=users,..."></label>
-  <label>Bind пароль <input type="password" name="IPA_BIND_PW" placeholder="{{ '•••• сохранён — оставьте пустым' if ipacfg.pass_set else 'не задан' }}"></label>
-  <label class="chk"><input type="checkbox" name="IPA_AUTOSYNC" {{ 'checked' if ipacfg.IPA_AUTOSYNC }}> Автосинхронизация</label>
-  <label>Интервал, часов <input name="IPA_SYNC_HOURS" value="{{ ipacfg.IPA_SYNC_HOURS or '24' }}" size="5"></label>
-  <div><button type="submit">Сохранить FreeIPA</button></div>
-</form>
-<form method="post" class="inline" style="margin-top:8px">
-  <input type="hidden" name="action" value="ipa_sync">
-  <button type="submit" {{ 'disabled' if not ipa_ok }}>↻ Синхронизировать сейчас</button>
-  <span class="muted">
-    {% if ipacfg.IPA_AUTOSYNC %}Автосинхронизация раз в {{ ipacfg.IPA_SYNC_HOURS }} ч.{% else %}Автосинхронизация выключена.{% endif %}
-    {% if ipa_last[0] %} Последняя: {{ ipa_last[0] }} — {{ ipa_last[1] }}.{% else %} Ещё не выполнялась.{% endif %}
-  </span>
-</form>
-
-<h2>Ручное сопоставление почты врача</h2>
-<p class="muted">Если по ФИО не сопоставилось автоматически — задайте почту по СНИЛС или ФИО (как в отчёте).</p>
-<form method="post" class="inline">
-  <input type="hidden" name="action" value="set_email">
-  <input name="key" placeholder="СНИЛС или ФИО" size="36">
-  <input name="email" type="email" placeholder="ivanov@med.permkrai.ru" size="26">
-  <button type="submit">Сохранить</button>
-</form>
-<h3>Врачи без почты ({{ docs|rejectattr('unassigned')|selectattr('email','equalto','')|list|length }})</h3>
-<table>
-  <tr><th>Врач</th><th>СНИЛС</th><th>Долгов</th></tr>
-  {% for d in docs if not d.email and not d.unassigned %}
-  <tr><td>{{ d.vrach }}</td><td>{{ d.snils }}</td><td class="r">{{ d.debts }}</td></tr>
-  {% endfor %}
-</table>
-
-<h2>Почты заведующих отделениями</h2>
-<p class="muted">Впишите почту напротив подразделения и нажмите «Сохранить почты». Пустое поле — очистить.
-<b>Можно несколько адресов через запятую</b> — письмо уйдёт всем.</p>
-<form method="post">
-  <input type="hidden" name="action" value="set_dept_bulk">
-  <div class="toolbar">
-    <span class="muted">Подразделений: {{ depts|length }}</span>
-    <button type="submit">💾 Сохранить почты отделений</button>
-  </div>
-  <table>
-    <tr><th>Подразделение</th><th>Не подп.</th><th>Долгов</th><th>Почта зав. отделением</th></tr>
-    {% for d in depts %}
-    <tr>
-      <td>{{ d.podr }}{% if d.from_debts %} <span class="pill warn">по списку долгов</span>{% endif %}</td>
-      <td class="r">{{ d.nepodp }}</td><td class="r">{{ d.debts }}</td>
-      <td><input type="text" name="dept_email__{{ d.podr }}" value="{{ d.email }}"
-                 placeholder="zav@med.permkrai.ru, zam@med.permkrai.ru" size="40"
-                 class="email {{ 'noemail' if not d.email }}"></td>
-    </tr>
-    {% else %}<tr><td colspan="4" class="empty">Загрузите отчёт «в разрезе врачей».</td></tr>{% endfor %}
-  </table>
 </form>
 {% endblock %}

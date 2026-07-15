@@ -13,6 +13,9 @@
 {% set send_action = url_for('koiki_report_send') %}
 {% include "_resp_box.html" %}
 
+{% set ckey = 'CUSTOM_KOIKI' %}{% set clabel = 'Письма по занятости коек (ответственным за отделения и сводный)' %}
+{% include "_custom_text.html" %}
+
 {% if wards %}
 <section class="cards">
   <div class="card"><div class="num">{{ totals.all.zan if totals.all.zan is not none else '—' }}%</div>

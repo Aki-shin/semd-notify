@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>Пользователи FreeIPA</h1>
+<p class="muted">Полный список учётных записей из FreeIPA (заполняется программой User Manager из кадровой выгрузки).
+Синхронизация тянет пользователей сюда и одновременно сопоставляет корпоративные почты врачам.
+{% if ipa_last[0] %}<br>Последняя синхронизация: <b>{{ ipa_last[0] }}</b> — {{ ipa_last[1] }}.{% else %}<br>Синхронизация ещё не выполнялась.{% endif %}</p>
+
+<section class="cards">
+  <div class="card"><div class="num">{{ stats.total }}</div><div class="lbl">Всего учёток</div></div>
+  <div class="card {{ 'bad' if stats.blocked }}"><div class="num">{{ stats.blocked }}</div><div class="lbl">Заблокировано</div></div>
+  <div class="card"><div class="num">{{ stats.no_mail }}</div><div class="lbl">Без почты</div></div>
+</section>
+
+<form method="post" action="{{ url_for('users_sync') }}" class="inline" style="margin:4px 0 14px">
+  <button type="submit" {{ 'disabled' if not ipa_ready }}>↻ Синхронизировать с FreeIPA</button>
+  <input type="search" id="usearch" placeholder="Поиск: ФИО, логин, должность, отделение, почта…"
+         class="email" style="width:340px" autocomplete="off">
+  {% if not ipa_ready %}<span class="pill warn">FreeIPA не настроен — см. ниже</span>{% endif %}
+</form>
+
+{% if users %}
+<div class="fullbleed" style="overflow-x:auto">
+<table id="utable">
+  <tr><th>ФИО</th><th>Логин</th><th>Должность</th><th>Подразделение</th><th>Почта</th>
+      <th>Телефон</th><th title="Кадровый код">Код</th><th>Статус</th></tr>
+  {% for u in users %}
+  <tr>
+    <td>{{ u.cn or (u.sn ~ ' ' ~ u.givenname) }}</td>
+    <td class="small">{{ u.uid }}</td>
+    <td class="small">{{ u.title or '—' }}</td>
+    <td class="small">{{ u.ou or '—' }}</td>
+    <td class="{{ 'noemail' if not u.mail }}">{{ u.mail or '—' }}</td>
+    <td class="small">{{ u.phone or u.mobile or '—' }}</td>
+    <td class="small muted">{{ u.empnum or '—' }}</td>
+    <td>{% if u.blocked %}<span class="pill warn">заблокирован</span>{% else %}<span class="pill ok">активен</span>{% endif %}</td>
+  </tr>
+  {% endfor %}
+</table>
+</div>
+{% else %}
+<div class="empty">Пользователи ещё не загружены. Настройте FreeIPA ниже и нажмите «Синхронизировать».</div>
+{% endif %}
+
+<h2 style="margin-top:24px">FreeIPA — подключение {% if ipa_ready %}<span class="pill ok">настроено</span>{% else %}<span class="pill warn">не настроено</span>{% endif %}</h2>
+<p class="muted small">Служебная учётная запись только на чтение (для выгрузки пользователей и почт). Пароль скрыт — оставьте пустым, чтобы не менять.</p>
+<form method="post" action="{{ url_for('users_save_ipa') }}" class="cfg">
+  <label>LDAP URI <input name="IPA_LDAP_URI" value="{{ ipacfg.IPA_LDAP_URI }}" placeholder="ldaps://ipa.osacrb.local"></label>
+  <label>Base DN <input name="IPA_BASE_DN" value="{{ ipacfg.IPA_BASE_DN }}" placeholder="cn=users,cn=accounts,dc=osacrb,dc=local"></label>
+  <label>Bind DN <input name="IPA_BIND_DN" value="{{ ipacfg.IPA_BIND_DN }}" placeholder="uid=semd-svc,cn=users,..."></label>
+  <label>Bind пароль <input type="password" name="IPA_BIND_PW" placeholder="{{ '•••• сохранён — оставьте пустым' if ipacfg.pass_set else 'не задан' }}"></label>
+  <label class="chk"><input type="checkbox" name="IPA_AUTOSYNC" {{ 'checked' if ipacfg.IPA_AUTOSYNC }}> Автосинхронизация</label>
+  <label>Интервал, часов <input name="IPA_SYNC_HOURS" value="{{ ipacfg.IPA_SYNC_HOURS or '24' }}" size="5"></label>
+  <div><button type="submit">Сохранить FreeIPA</button></div>
+</form>
+
+<script>
+(function(){
+  var q=document.getElementById('usearch'), t=document.getElementById('utable');
+  if(!q||!t) return;
+  q.addEventListener('input', function(){
+    var v=q.value.trim().toLowerCase();
+    t.querySelectorAll('tr').forEach(function(tr,i){
+      if(i===0) return;
+      tr.style.display = (!v || tr.textContent.toLowerCase().indexOf(v)>=0) ? '' : 'none';
+    });
+  });
+})();
+</script>
+{% endblock %}
