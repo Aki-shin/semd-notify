@@ -17,16 +17,20 @@ def _cfg():
     }
 
 
+def group_dn(grp, base):
+    """DN группы FreeIPA. Контейнер групп всегда cn=groups,cn=accounts,<домен>,
+    где домен — dc=-компоненты Base DN (работает и для Base=cn=accounts,dc=… ,
+    и для Base=cn=users,cn=accounts,dc=…)."""
+    domain = ",".join(p.strip() for p in base.split(",") if p.strip().lower().startswith("dc="))
+    return f"cn={grp},cn=groups,cn=accounts,{domain}" if domain else f"cn={grp},cn=groups,{base}"
+
+
 def _user_filter(c):
-    """LDAP-фильтр пользователей. Если задана группа — только её участники (по memberof).
-    DN группы выводится из Base DN: cn=<группа>,cn=groups,<…,cn=accounts,dc=…>."""
+    """LDAP-фильтр пользователей. Если задана группа — только её участники (по memberof)."""
     grp = c.get("group")
     if not grp:
         return "(uid=*)"
-    base = c.get("base", "")
-    suffix = base.split(",", 1)[1] if "," in base else base  # отбрасываем cn=users
-    gdn = f"cn={grp},cn=groups,{suffix}"
-    return f"(&(uid=*)(memberof={gdn}))"
+    return f"(&(uid=*)(memberof={group_dn(grp, c.get('base', ''))}))"
 
 
 def available():
