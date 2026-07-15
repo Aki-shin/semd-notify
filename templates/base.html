@@ -12,7 +12,7 @@
   <aside class="sidebar">
     <div class="side-brand">
       <img src="{{ url_for('static', filename='favicon.svg') }}" alt="">
-      <span>Центр<br>Цифровизации</span>
+      <span class="lbl">Центр<br>Цифровизации</span>
     </div>
     <nav class="side-nav">
       {% set p = request.path %}
@@ -46,7 +46,7 @@
       ] %}
       {% for ep, b, ico, label in nav %}
         {% set on = (p == b) if b == '/' else (p == b or p.startswith(b + '/')) %}
-        <a href="{{ url_for(ep) }}" class="{{ 'active' if on }}"><span class="ic"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{{ icons[ico]|safe }}</svg></span>{{ label }}</a>
+        <a href="{{ url_for(ep) }}" class="{{ 'active' if on }}" title="{{ label }}"><span class="ic"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{{ icons[ico]|safe }}</svg></span><span class="lbl">{{ label }}</span></a>
       {% endfor %}
     </nav>
     <div class="side-foot">

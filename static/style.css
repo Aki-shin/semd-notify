@@ -1,36 +1,42 @@
 * { box-sizing: border-box; }
 body { font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 0; color: #1f2937; background: #f6f7f9; }
-/* --- Раскладка: боковое меню (фон — как у иконки) + рабочая область --- */
-.layout { display: flex; min-height: 100vh; }
-.sidebar { width: 232px; flex-shrink: 0; position: sticky; top: 0; height: 100vh; overflow-y: auto;
+/* --- Боковое меню-рельс: узкое (иконки), плавно выезжает при наведении --- */
+.layout { min-height: 100vh; }
+.sidebar { position: fixed; left: 0; top: 0; bottom: 0; width: 66px; z-index: 100; overflow: hidden;
   background: linear-gradient(180deg, #0d6efd 0%, #0b5ed7 100%); color: #fff;
-  display: flex; flex-direction: column; box-shadow: 2px 0 14px rgba(13,110,253,.20); }
-.side-brand { display: flex; align-items: center; gap: 11px; padding: 18px 16px 14px; font-weight: 700; font-size: 16px; line-height: 1.12; }
+  display: flex; flex-direction: column;
+  transition: width .22s cubic-bezier(.4,0,.2,1), box-shadow .22s; }
+.sidebar:hover { width: 240px; box-shadow: 8px 0 30px rgba(13,110,253,.22); }
+.side-brand { display: flex; align-items: center; gap: 12px; padding: 16px 18px 12px; font-weight: 700;
+  font-size: 15.5px; line-height: 1.12; white-space: nowrap; }
 .side-brand img { width: 30px; height: 30px; flex-shrink: 0; }
-.side-nav { flex: 1; padding: 8px 10px; display: flex; flex-direction: column; gap: 2px; }
-.side-nav a { display: flex; align-items: center; gap: 11px; padding: 9px 12px; border-radius: 9px;
-  color: rgba(255,255,255,.86); text-decoration: none; font-size: 14px; transition: background .12s, color .12s; }
+.side-nav { flex: 1; padding: 6px 12px; display: flex; flex-direction: column; gap: 3px; overflow-y: auto; overflow-x: hidden; }
+.side-nav a { display: flex; align-items: center; gap: 13px; padding: 10px 11px; border-radius: 10px; white-space: nowrap;
+  color: rgba(255,255,255,.82); text-decoration: none; font-size: 14px; transition: background .13s, color .13s; }
 .side-nav a .ic { width: 20px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
-.side-nav a .ic svg { display: block; opacity: .92; }
-.side-nav a.active .ic svg { opacity: 1; }
-.side-nav a:hover { background: rgba(255,255,255,.15); color: #fff; }
-.side-nav a.active { background: #fff; color: #0d6efd; font-weight: 600; box-shadow: 0 2px 8px rgba(0,0,0,.12); }
-.side-foot { padding: 12px 16px 16px; border-top: 1px solid rgba(255,255,255,.20); font-size: 13px;
-  color: rgba(255,255,255,.92); display: flex; flex-direction: column; gap: 8px; }
+.side-nav a .ic svg { display: block; }
+.side-nav a:hover { background: rgba(255,255,255,.16); color: #fff; }
+.side-nav a.active { background: rgba(255,255,255,.97); color: #0d6efd; font-weight: 600; }
+.sidebar .lbl { opacity: 0; transition: opacity .14s ease .02s; }
+.sidebar:hover .lbl { opacity: 1; }
+.side-foot { padding: 10px 18px 16px; font-size: 13px; color: rgba(255,255,255,.92); white-space: nowrap;
+  display: flex; flex-direction: column; gap: 7px; opacity: 0; transition: opacity .14s; }
+.sidebar:hover .side-foot { opacity: 1; }
 .side-foot .sf-user { font-weight: 600; }
-.main-wrap { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.main-wrap { margin-left: 66px; min-height: 100vh; display: flex; flex-direction: column; }
 .topbar { display: flex; align-items: center; justify-content: flex-end; gap: 10px;
   padding: 8px 28px; min-height: 46px; background: #fff; border-bottom: 1px solid #e8ebef;
   position: sticky; top: 0; z-index: 50; }
-main { flex: 1; padding: 20px 28px; width: 100%; }
+main { flex: 1; padding: 20px 28px; }
 footer { text-align: center; color: #9aa3af; font-size: 12px; padding: 20px; }
 @media (max-width: 860px) {
-  .layout { flex-direction: column; }
-  .sidebar { width: auto; height: auto; position: static; }
-  .side-brand span br { display: none; }
+  .sidebar { position: static; width: auto; height: auto; overflow: visible; }
   .side-nav { flex-direction: row; flex-wrap: wrap; }
-  .side-nav a { padding: 7px 10px; }
-  .side-foot { flex-direction: row; align-items: center; justify-content: space-between; }
+  .side-nav a { padding: 8px 11px; }
+  .sidebar .lbl, .sidebar:hover .lbl { opacity: 1; }
+  .side-brand .lbl br { display: none; }
+  .side-foot { opacity: 1; flex-direction: row; align-items: center; gap: 12px; }
+  .main-wrap { margin-left: 0; }
 }
 h1 { font-size: 22px; margin: 6px 0 14px; }
 h2 { font-size: 16px; margin: 22px 0 8px; }
