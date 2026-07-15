@@ -9,7 +9,8 @@
 </head>
 <body>
 <header>
-  <div class="brand">📊 Центр Цифровизации</div>
+  <div class="brand"><img src="{{ url_for('static', filename='favicon.svg') }}" alt=""
+       style="height:22px;width:22px;vertical-align:-5px;margin-right:7px"> Центр Цифровизации</div>
   <nav>
     <a href="{{ url_for('index') }}">Дашборд</a>
     <a href="{{ url_for('upload') }}">Загрузка</a>
@@ -21,7 +22,7 @@
     <a href="{{ url_for('xray') }}">Рентген</a>
     <a href="{{ url_for('errors') }}">Ошибки</a>
     <a href="{{ url_for('send_log_page') }}">Журнал</a>
-    <a href="{{ url_for('users_page') }}">Пользователи</a>
+    <a href="{{ url_for('users_page') }}">Сотрудники</a>
     <a href="{{ url_for('settings') }}">Настройки</a>
   </nav>
   <div class="who">

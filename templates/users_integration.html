@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block body %}
-<div style="margin:0 0 8px;font-size:14px"><a href="{{ url_for('users_page') }}">Пользователи</a> · <b>Интеграция</b></div>
+<div style="margin:0 0 8px;font-size:14px"><a href="{{ url_for('users_page') }}">Сотрудники</a> · <a href="{{ url_for('users_eisz') }}">Доступ ЕИСЗ ПК</a> · <b>Интеграция</b></div>
 <h1>Интеграция с FreeIPA {% if ipa_ready %}<span class="pill ok">настроено</span>{% else %}<span class="pill warn">не настроено</span>{% endif %}</h1>
 <p class="muted">Подключение к FreeIPA для выгрузки пользователей на вкладку «Пользователи» и сопоставления
 корпоративных почт врачам. Служебная учётная запись — только на чтение. Пароль скрыт: оставьте поле пустым,

@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block body %}
-<div style="margin:0 0 8px;font-size:14px"><b>Пользователи</b> · <a href="{{ url_for('users_integration') }}">Интеграция</a></div>
-<h1>Пользователи FreeIPA</h1>
+<div style="margin:0 0 8px;font-size:14px"><b>Сотрудники</b> · <a href="{{ url_for('users_eisz') }}">Доступ ЕИСЗ ПК</a> · <a href="{{ url_for('users_integration') }}">Интеграция</a></div>
+<h1>Сотрудники (FreeIPA)</h1>
 <p class="muted">Учётные записи из FreeIPA (заполняются программой User Manager из кадровой выгрузки).
 Синхронизация тянет пользователей сюда и сопоставляет корпоративные почты врачам.
 {% if ipa_group %}<br>Источник: <b>группа «{{ ipa_group }}»</b>.{% endif %}

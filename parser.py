@@ -515,6 +515,35 @@ def _parse_max(rows):
     return out
 
 
+def parse_birt_eisz(text):
+    """Разбор HTML-выгрузки сотрудников ЕИСЗ ПК (BIRT Report Viewer).
+    Колонки: № | ФИО | СНИЛС | синхр.ФРМО(сотр) | ID ФРМР(сотр) | структурный элемент |
+    должность | ставка | начало работы | окончание работы | синхр.ФРМО(место) | ID ФРМР(место).
+    Одна строка = одно рабочее место (у сотрудника может быть несколько). Пустое «окончание
+    работы» — место действующее."""
+    import html as _html
+    out = []
+    for tr in re.findall(r"<tr[^>]*>(.*?)</tr>", text, re.S | re.I):
+        cells = re.findall(r"<t[dh][^>]*>(.*?)</t[dh]>", tr, re.S | re.I)
+        c = [_html.unescape(re.sub(r"<[^>]+>", "", x)).replace("\xa0", " ").strip() for x in cells]
+        if len(c) < 10:
+            continue
+        pp, fio = c[0].strip(), c[1].strip()
+        if not pp.isdigit() or not fio or fio.isdigit() or fio.lower().startswith("фио"):
+            continue
+        out.append({
+            "fio": " ".join(fio.split()),
+            "snils": re.sub(r"\D", "", c[2]),
+            "frmo": c[3].strip(),
+            "podr": c[5].strip(),
+            "position": c[6].strip(),
+            "stavka": c[7].strip(),
+            "start": c[8].strip(),
+            "end": c[9].strip(),
+        })
+    return out
+
+
 def _parse_xray(rows):
     """«Отчёт по обработке лучевых исследований сервисом ИИ» (.xlsx).
     В отчёте НЕТ периода — период берётся из выгрузки (report_period → active_period).

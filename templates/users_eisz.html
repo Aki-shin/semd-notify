@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block body %}
+<div style="margin:0 0 8px;font-size:14px"><a href="{{ url_for('users_page') }}">Сотрудники</a> · <b>Доступ ЕИСЗ ПК</b> · <a href="{{ url_for('users_integration') }}">Интеграция</a></div>
+<h1>Доступ в ЕИСЗ ПК</h1>
+<p class="muted">Выгрузка сотрудников из ЕИСЗ ПК (отчёт BIRT, .html) сверяется с актуальным штатом из FreeIPA (по ФИО):
+видно, у кого <b>есть доступ</b>, кому доступ <b>нужно завести</b>, и какие профили <b>подлежат удалению</b>
+(сотрудника нет в актуальном штате или все места работы закрыты).</p>
+
+<form method="post" action="{{ url_for('users_eisz_upload') }}" enctype="multipart/form-data" class="inline" style="margin:6px 0 14px">
+  <input type="file" name="file" accept=".html,.htm" required>
+  <button type="submit">⬆ Загрузить выгрузку ЕИСЗ</button>
+</form>
+
+{% if rec.records %}
+<section class="cards">
+  <div class="card"><div class="num">{{ rec.persons }}</div><div class="lbl">Сотрудников в ЕИСЗ ({{ rec.records }} мест)</div></div>
+  <div class="card"><div class="num" style="color:#2563eb">{{ rec.n_has }}</div><div class="lbl">Есть доступ (в штате)</div></div>
+  <div class="card {{ 'bad' if rec.n_del }}"><div class="num">{{ rec.n_del }}</div><div class="lbl">Профили на удаление</div></div>
+  <div class="card"><div class="num">{{ rec.n_no }}</div><div class="lbl">Штат без доступа ЕИСЗ</div></div>
+</section>
+
+{% if not rec.staff_loaded %}
+<div class="alert">⚠️ Штат из FreeIPA не загружен — сверка «в штате / не в штате» недоступна. Сначала синхронизируйте
+  <a href="{{ url_for('users_integration') }}">FreeIPA</a>. Пока показаны только уволенные (по дате окончания работы).</div>
+{% endif %}
+
+<h2>Профили на удаление <span class="small muted">— нет в актуальном штате или уволены</span></h2>
+<div class="fullbleed" style="overflow-x:auto">
+<table>
+  <tr><th>ФИО</th><th>СНИЛС</th><th>Должность(и)</th><th>Подразделение</th><th>Причина</th></tr>
+  {% for p in rec.to_delete %}
+  <tr>
+    <td>{{ p.fio }}</td>
+    <td class="small">{{ p.snils or '—' }}</td>
+    <td class="small">{{ p.positions or '—' }}</td>
+    <td class="small muted">{{ p.podrs or '—' }}</td>
+    <td class="small">
+      {%- if not p.in_staff %}<span class="pill warn">нет в штате</span>{% endif %}
+      {%- if p.terminated %} <span class="pill warn">уволен{% if p.end %} ({{ p.end }}){% endif %}</span>{% endif %}</td>
+  </tr>
+  {% else %}<tr><td colspan="5" class="empty">Профилей на удаление не найдено.</td></tr>{% endfor %}
+</table>
+</div>
+
+<h2 style="margin-top:22px">Штат без доступа в ЕИСЗ <span class="small muted">— сотрудники FreeIPA без записи в ЕИСЗ</span></h2>
+<div class="fullbleed" style="overflow-x:auto">
+<table>
+  <tr><th>ФИО</th><th>Логин</th><th>Должность</th><th>Подразделение</th><th>Почта</th></tr>
+  {% for s in rec.no_access %}
+  <tr><td>{{ s.cn }}</td><td class="small">{{ s.uid }}</td><td class="small">{{ s.title or '—' }}</td>
+      <td class="small muted">{{ s.ou or '—' }}</td><td class="small">{{ s.mail or '—' }}</td></tr>
+  {% else %}<tr><td colspan="5" class="empty">{% if rec.staff_loaded %}Все сотрудники штата имеют доступ в ЕИСЗ.{% else %}Штат не загружен.{% endif %}</td></tr>{% endfor %}
+</table>
+</div>
+
+<h2 style="margin-top:22px">Все записи ЕИСЗ ({{ rec.records }})</h2>
+<input type="search" id="esearch" placeholder="Поиск: ФИО, СНИЛС, должность, подразделение…" class="email" style="width:340px;margin-bottom:8px" autocomplete="off">
+<div class="fullbleed" style="overflow-x:auto">
+<table id="etable">
+  <tr><th>ФИО</th><th>СНИЛС</th><th>Подразделение</th><th>Должность</th><th>Ставка</th>
+      <th>Начало</th><th>Окончание</th><th title="Синхронизация с ФРМО">ФРМО</th></tr>
+  {% for e in eisz %}
+  <tr>
+    <td>{{ e.fio }}</td><td class="small">{{ e.snils or '—' }}</td>
+    <td class="small muted">{{ e.podr or '—' }}</td><td class="small">{{ e.position or '—' }}</td>
+    <td class="small">{{ e.stavka or '—' }}</td><td class="small">{{ e.start or '—' }}</td>
+    <td class="small {{ 'bad' if e.endwork }}">{{ e.endwork or '—' }}</td>
+    <td class="small">{{ e.frmo or '—' }}</td>
+  </tr>
+  {% endfor %}
+</table>
+</div>
+{% else %}
+<div class="empty">Выгрузка ЕИСЗ не загружена. Выгрузите из ЕИСЗ ПК отчёт по сотрудникам (BIRT Report Viewer, .html)
+  и загрузите его кнопкой выше.</div>
+{% endif %}
+
+<script>
+(function(){
+  var q=document.getElementById('esearch'), t=document.getElementById('etable');
+  if(!q||!t) return;
+  q.addEventListener('input', function(){
+    var v=q.value.trim().toLowerCase();
+    t.querySelectorAll('tr').forEach(function(tr,i){
+      if(i===0) return;
+      tr.style.display=(!v || tr.textContent.toLowerCase().indexOf(v)>=0)?'':'none';
+    });
+  });
+})();
+</script>
+{% endblock %}

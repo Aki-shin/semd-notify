@@ -33,6 +33,9 @@ def init():
         CREATE TABLE IF NOT EXISTS ipa_users(
             uid TEXT PRIMARY KEY, cn TEXT, givenname TEXT, sn TEXT, mail TEXT,
             title TEXT, ou TEXT, phone TEXT, mobile TEXT, empnum TEXT, blocked INTEGER DEFAULT 0);
+        CREATE TABLE IF NOT EXISTS eisz_users(
+            fio TEXT, snils TEXT, frmo TEXT, podr TEXT, position TEXT,
+            stavka TEXT, start TEXT, endwork TEXT);
         CREATE TABLE IF NOT EXISTS send_log(
             ts TEXT, vrach TEXT, email TEXT, cnt INTEGER, status TEXT);
         CREATE TABLE IF NOT EXISTS dept_map(podr TEXT PRIMARY KEY, email TEXT);
@@ -961,6 +964,75 @@ def ipa_users_stats():
     return {"total": len(rows),
             "blocked": sum(1 for r in rows if r["blocked"]),
             "no_mail": sum(1 for r in rows if not (r["mail"] or "").strip())}
+
+
+# --- Доступ в ЕИСЗ ПК (выгрузка BIRT) и сверка с актуальным штатом (FreeIPA) ---
+
+def set_eisz_users(records):
+    """Заменяет выгрузку ЕИСЗ свежей. records — из parser.parse_birt_eisz."""
+    init()
+    with _conn() as c:
+        c.execute("DELETE FROM eisz_users")
+        c.executemany(
+            "INSERT INTO eisz_users(fio,snils,frmo,podr,position,stavka,start,endwork) "
+            "VALUES(:fio,:snils,:frmo,:podr,:position,:stavka,:start,:end)", records)
+
+
+def eisz_list():
+    init()
+    with _conn() as c:
+        return [dict(r) for r in c.execute("SELECT * FROM eisz_users ORDER BY fio")]
+
+
+def _norm_fio(s):
+    return " ".join((s or "").upper().split())
+
+
+def eisz_reconcile():
+    """Сверяет доступ в ЕИСЗ с актуальным штатом (FreeIPA), сопоставляя по ФИО.
+    Возвращает группы: есть доступ, нет доступа (штат без ЕИСЗ), на удаление
+    (ЕИСЗ без действующего сотрудника в штате). У человека может быть несколько мест —
+    схлопываем по СНИЛС/ФИО; уволенным считаем того, у кого все места с датой окончания."""
+    init()
+    with _conn() as c:
+        eisz = [dict(r) for r in c.execute("SELECT * FROM eisz_users")]
+        staff = [dict(r) for r in c.execute(
+            "SELECT cn, uid, mail, ou, title, blocked FROM ipa_users")]
+    staff_names = {_norm_fio(s["cn"]) for s in staff}
+    # схлопываем ЕИСЗ по человеку
+    persons = {}
+    for e in eisz:
+        key = e["snils"] or _norm_fio(e["fio"])
+        p = persons.setdefault(key, {"fio": e["fio"], "snils": e["snils"], "podrs": set(),
+                                     "positions": set(), "active": False, "ends": set()})
+        if e["position"]:
+            p["positions"].add(e["position"])
+        if e["podr"]:
+            p["podrs"].add(e["podr"])
+        if (e["endwork"] or "").strip():
+            p["ends"].add(e["endwork"])
+        else:
+            p["active"] = True
+    for p in persons.values():
+        p["in_staff"] = _norm_fio(p["fio"]) in staff_names
+        p["terminated"] = not p["active"]  # у всех мест проставлена дата окончания
+        p["positions"] = " · ".join(sorted(p["positions"]))
+        p["podrs"] = " · ".join(sorted(p["podrs"]))
+        p["end"] = " · ".join(sorted(p["ends"]))
+    plist = list(persons.values())
+    eisz_names = {_norm_fio(p["fio"]) for p in plist}
+    has_access = sorted([p for p in plist if p["in_staff"]], key=lambda x: x["fio"])
+    # на удаление: нет в актуальном штате ИЛИ уволен (все места закрыты)
+    to_delete = sorted([p for p in plist if not p["in_staff"] or p["terminated"]],
+                       key=lambda x: (x["in_staff"], x["fio"]))
+    no_access = sorted([s for s in staff if not s["blocked"]
+                        and _norm_fio(s["cn"]) not in eisz_names], key=lambda x: x["cn"])
+    return {
+        "persons": len(plist), "records": len(eisz), "staff": len(staff),
+        "staff_loaded": len(staff) > 0,
+        "has_access": has_access, "no_access": no_access, "to_delete": to_delete,
+        "n_has": len(has_access), "n_no": len(no_access), "n_del": len(to_delete),
+    }
 
 
 def bulk_set_doctor_emails(items):

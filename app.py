@@ -836,6 +836,32 @@ def users_integration():
                            ipa_last=ipa.last_sync_info())
 
 
+@app.route("/users/eisz")
+def users_eisz():
+    return render_template("users_eisz.html",
+                           rec=storage.eisz_reconcile(),
+                           eisz=storage.eisz_list())
+
+
+@app.route("/users/eisz/upload", methods=["POST"])
+def users_eisz_upload():
+    f = request.files.get("file")
+    if not f or not f.filename:
+        flash("Файл выгрузки ЕИСЗ не выбран.", "warn")
+        return redirect(url_for("users_eisz"))
+    try:
+        text = f.read().decode("utf-8", errors="replace")
+        recs = report_parser.parse_birt_eisz(text)
+        if not recs:
+            flash("В файле не найдено записей сотрудников — это точно выгрузка ЕИСЗ (BIRT)?", "warn")
+            return redirect(url_for("users_eisz"))
+        storage.set_eisz_users(recs)
+        flash(f"Загружена выгрузка ЕИСЗ ПК: {len(recs)} записей (рабочих мест).", "ok")
+    except Exception as e:
+        flash(f"Ошибка разбора выгрузки: {e}", "warn")
+    return redirect(url_for("users_eisz"))
+
+
 @app.route("/users/sync", methods=["POST"])
 def users_sync():
     if not ipa.available():
