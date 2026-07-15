@@ -1,13 +1,35 @@
 * { box-sizing: border-box; }
 body { font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 0; color: #1f2937; background: #f6f7f9; }
-header { display: flex; align-items: center; gap: 18px; padding: 10px 20px; background: #1e3a5f; color: #fff; }
-header .brand { font-weight: 700; font-size: 17px; }
-header nav { display: flex; gap: 14px; flex: 1; }
-header nav a { color: #cfe0f2; text-decoration: none; font-size: 14px; }
-header nav a:hover { color: #fff; }
-header .who { font-size: 13px; color: #cfe0f2; display: flex; align-items: center; gap: 8px; }
-main { max-width: 1180px; margin: 18px auto; padding: 0 20px; }
-footer { text-align: center; color: #9aa3af; font-size: 12px; padding: 24px; }
+/* --- Раскладка: боковое меню (фон — как у иконки) + рабочая область --- */
+.layout { display: flex; min-height: 100vh; }
+.sidebar { width: 232px; flex-shrink: 0; position: sticky; top: 0; height: 100vh; overflow-y: auto;
+  background: linear-gradient(180deg, #0d6efd 0%, #0b5ed7 100%); color: #fff;
+  display: flex; flex-direction: column; box-shadow: 2px 0 14px rgba(13,110,253,.20); }
+.side-brand { display: flex; align-items: center; gap: 11px; padding: 18px 16px 14px; font-weight: 700; font-size: 16px; line-height: 1.12; }
+.side-brand img { width: 30px; height: 30px; flex-shrink: 0; }
+.side-nav { flex: 1; padding: 8px 10px; display: flex; flex-direction: column; gap: 2px; }
+.side-nav a { display: flex; align-items: center; gap: 11px; padding: 9px 12px; border-radius: 9px;
+  color: rgba(255,255,255,.86); text-decoration: none; font-size: 14px; transition: background .12s, color .12s; }
+.side-nav a .ic { width: 20px; text-align: center; font-size: 15px; }
+.side-nav a:hover { background: rgba(255,255,255,.15); color: #fff; }
+.side-nav a.active { background: #fff; color: #0d6efd; font-weight: 600; box-shadow: 0 2px 8px rgba(0,0,0,.12); }
+.side-foot { padding: 12px 16px 16px; border-top: 1px solid rgba(255,255,255,.20); font-size: 13px;
+  color: rgba(255,255,255,.92); display: flex; flex-direction: column; gap: 8px; }
+.side-foot .sf-user { font-weight: 600; }
+.main-wrap { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.topbar { display: flex; align-items: center; justify-content: flex-end; gap: 10px;
+  padding: 8px 28px; min-height: 46px; background: #fff; border-bottom: 1px solid #e8ebef;
+  position: sticky; top: 0; z-index: 50; }
+main { flex: 1; padding: 20px 28px; width: 100%; }
+footer { text-align: center; color: #9aa3af; font-size: 12px; padding: 20px; }
+@media (max-width: 860px) {
+  .layout { flex-direction: column; }
+  .sidebar { width: auto; height: auto; position: static; }
+  .side-brand span br { display: none; }
+  .side-nav { flex-direction: row; flex-wrap: wrap; }
+  .side-nav a { padding: 7px 10px; }
+  .side-foot { flex-direction: row; align-items: center; justify-content: space-between; }
+}
 h1 { font-size: 22px; margin: 6px 0 14px; }
 h2 { font-size: 16px; margin: 22px 0 8px; }
 h3 { font-size: 14px; margin: 18px 0 6px; }
@@ -67,12 +89,12 @@ code { background: #eef0f2; padding: 1px 5px; border-radius: 4px; font-size: 12p
 .chip { display: inline-flex; align-items: center; gap: 4px; background: #eef2f7; border: 1px solid #dbe2ea; border-radius: 14px; padding: 3px 8px 3px 11px; font-size: 13px; }
 .chip .chip-x { background: none; border: 0; color: #b91c1c; cursor: pointer; font-size: 15px; line-height: 1; padding: 0 2px; }
 .chip .chip-x:hover { color: #7f1414; }
-/* Раздел во всю ширину окна (вырывается из центрированного main) */
-.fullbleed { margin-left: calc(50% - 50vw); margin-right: calc(50% - 50vw); padding: 0 24px; }
+/* Раздел во всю ширину рабочей области (вырывается из отступов main) */
+.fullbleed { margin-left: -28px; margin-right: -28px; padding: 0 28px; }
 /* Переключатель периодов (в хедере, доступен на всех страницах) */
 .period-switch { position: relative; display: inline-flex; align-items: center; gap: 6px; }
 .period-switch > .pill.period { border: 0; cursor: pointer; font-family: inherit; font-size: 11px; line-height: 1.5; }
-.period-menu { position: absolute; right: 0; top: 24px; z-index: 60; width: 300px; background: #fff; color: #1f2937;
+.period-menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 60; width: 300px; background: #fff; color: #1f2937;
   border: 1px solid #d5dae1; border-radius: 10px; box-shadow: 0 10px 28px rgba(0,0,0,.20); padding: 8px; }
 .period-menu[hidden] { display: none; }
 .period-menu .psearch { width: 100%; margin: 0 0 6px; border: 1px solid #cbd2da; border-radius: 6px; padding: 6px 9px; font-size: 13px; }

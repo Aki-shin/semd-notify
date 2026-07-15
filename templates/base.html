@@ -8,67 +8,86 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-<header>
-  <div class="brand"><img src="{{ url_for('static', filename='favicon.svg') }}" alt=""
-       style="height:22px;width:22px;vertical-align:-5px;margin-right:7px"> Центр Цифровизации</div>
-  <nav>
-    <a href="{{ url_for('index') }}">Дашборд</a>
-    <a href="{{ url_for('upload') }}">Загрузка</a>
-    <a href="{{ url_for('doctors') }}">Врачи / долги</a>
-    <a href="{{ url_for('departments') }}">Отделения</a>
-    <a href="{{ url_for('fap') }}">ФАП</a>
-    <a href="{{ url_for('koiki') }}">Стационары</a>
-    <a href="{{ url_for('max_page') }}">MAX</a>
-    <a href="{{ url_for('xray') }}">Рентген</a>
-    <a href="{{ url_for('errors') }}">Ошибки</a>
-    <a href="{{ url_for('send_log_page') }}">Журнал</a>
-    <a href="{{ url_for('users_page') }}">Сотрудники</a>
-    <a href="{{ url_for('settings') }}">Настройки</a>
-  </nav>
-  <div class="who">
-    <span id="sendchip"></span>
-    <div class="period-switch" id="periodSwitch">
-      <button type="button" class="pill period" id="periodBtn" title="Переключить период выгрузки">📅 {{ active_period or 'нет выгрузки' }} ▾</button>
-      {% if not periods.consistent %}<span class="pill warn" title="В выгрузке отчёты за разные периоды — см. Загрузка">≠</span>{% endif %}
-      <div class="period-menu" id="periodMenu" hidden>
-        <input type="search" class="psearch" id="periodSearch" placeholder="Поиск периода…" autocomplete="off">
-        <div class="period-list" id="periodList">
-          {% for h in period_history %}
-          <div class="period-item {{ 'active' if h.active }}" data-period="{{ h.period|lower }}">
-            <form method="post" action="{{ url_for('period_switch') }}" style="flex:1;margin:0">
-              <input type="hidden" name="period" value="{{ h.period }}">
-              <button type="submit" class="psw" title="Переключиться на выгрузку {{ h.period }}">{{ h.period }} <span class="pcnt">· {{ h.n }} отч.</span>{% if h.active %} ✓{% endif %}</button>
-            </form>
-            {% if not h.active %}
-            <form method="post" action="{{ url_for('period_delete') }}" style="margin:0"
-                  onsubmit="return confirm('Удалить выгрузку «{{ h.period }}» из истории? Файлы этого периода будут удалены.')">
-              <input type="hidden" name="period" value="{{ h.period }}">
-              <button type="submit" class="pdel" title="Удалить выгрузку из истории">🗑</button>
-            </form>
-            {% endif %}
+<div class="layout">
+  <aside class="sidebar">
+    <div class="side-brand">
+      <img src="{{ url_for('static', filename='favicon.svg') }}" alt="">
+      <span>Центр<br>Цифровизации</span>
+    </div>
+    <nav class="side-nav">
+      {% set p = request.path %}
+      {% set nav = [
+        ('index', '/', '🏠', 'Дашборд'),
+        ('upload', '/upload', '⬆️', 'Загрузка'),
+        ('doctors', '/doctors', '🩺', 'Врачи / долги'),
+        ('departments', '/departments', '🏥', 'Отделения'),
+        ('fap', '/fap', '🚑', 'ФАП'),
+        ('koiki', '/koiki', '🛏️', 'Стационары'),
+        ('max_page', '/max', '💬', 'MAX'),
+        ('xray', '/xray', '🩻', 'Рентген'),
+        ('errors', '/errors', '⚠️', 'Ошибки'),
+        ('send_log_page', '/log', '📋', 'Журнал'),
+        ('users_page', '/users', '👥', 'Сотрудники'),
+        ('settings', '/settings', '⚙️', 'Настройки'),
+      ] %}
+      {% for ep, b, ic, label in nav %}
+        {% set on = (p == b) if b == '/' else (p == b or p.startswith(b + '/')) %}
+        <a href="{{ url_for(ep) }}" class="{{ 'active' if on }}"><span class="ic">{{ ic }}</span>{{ label }}</a>
+      {% endfor %}
+    </nav>
+    <div class="side-foot">
+      <div class="sf-user">👤 {{ user.name or user.login }}</div>
+      <div>
+        {% if not smtp_ok %}<span class="pill warn">SMTP не настроен</span>
+        {% elif smtp_dry %}<span class="pill warn">SMTP · DRYRUN</span>
+        {% else %}<span class="pill ok">SMTP готов</span>{% endif %}
+      </div>
+    </div>
+  </aside>
+
+  <div class="main-wrap">
+    <div class="topbar">
+      <span id="sendchip"></span>
+      <div class="period-switch" id="periodSwitch">
+        <button type="button" class="pill period" id="periodBtn" title="Переключить период выгрузки">📅 {{ active_period or 'нет выгрузки' }} ▾</button>
+        {% if not periods.consistent %}<span class="pill warn" title="В выгрузке отчёты за разные периоды — см. Загрузка">≠</span>{% endif %}
+        <div class="period-menu" id="periodMenu" hidden>
+          <input type="search" class="psearch" id="periodSearch" placeholder="Поиск периода…" autocomplete="off">
+          <div class="period-list" id="periodList">
+            {% for h in period_history %}
+            <div class="period-item {{ 'active' if h.active }}" data-period="{{ h.period|lower }}">
+              <form method="post" action="{{ url_for('period_switch') }}" style="flex:1;margin:0">
+                <input type="hidden" name="period" value="{{ h.period }}">
+                <button type="submit" class="psw" title="Переключиться на выгрузку {{ h.period }}">{{ h.period }} <span class="pcnt">· {{ h.n }} отч.</span>{% if h.active %} ✓{% endif %}</button>
+              </form>
+              {% if not h.active %}
+              <form method="post" action="{{ url_for('period_delete') }}" style="margin:0"
+                    onsubmit="return confirm('Удалить выгрузку «{{ h.period }}» из истории? Файлы этого периода будут удалены.')">
+                <input type="hidden" name="period" value="{{ h.period }}">
+                <button type="submit" class="pdel" title="Удалить выгрузку из истории">🗑</button>
+              </form>
+              {% endif %}
+            </div>
+            {% else %}
+            <div class="period-empty">нет сохранённых выгрузок</div>
+            {% endfor %}
           </div>
-          {% else %}
-          <div class="period-empty">нет сохранённых выгрузок</div>
-          {% endfor %}
         </div>
       </div>
     </div>
-    {{ user.name or user.login }}
-    {% if not smtp_ok %}<span class="pill warn">SMTP не настроен</span>
-    {% elif smtp_dry %}<span class="pill warn">DRYRUN</span>
-    {% else %}<span class="pill ok">SMTP</span>{% endif %}
-  </div>
-</header>
 
-<main>
-  {% with msgs = get_flashed_messages(with_categories=true) %}
-    {% for cat, m in msgs %}
-      <div class="flash {{ cat }}">{{ m }}</div>
-    {% endfor %}
-  {% endwith %}
-  {% block body %}{% endblock %}
-</main>
-<footer>Отдел ИТ · ГБУЗ ПК «Осинская ЦРБ» · данные обрабатываются во внутреннем контуре</footer>
+    <main>
+      {% with msgs = get_flashed_messages(with_categories=true) %}
+        {% for cat, m in msgs %}
+          <div class="flash {{ cat }}">{{ m }}</div>
+        {% endfor %}
+      {% endwith %}
+      {% block body %}{% endblock %}
+    </main>
+    <footer>Отдел ИТ · ГБУЗ ПК «Осинская ЦРБ» · данные обрабатываются во внутреннем контуре</footer>
+  </div>
+</div>
+
 <script>
 (function(){
   function esc(s){var d=document.createElement('div');d.textContent=(s==null?'':s);return d.innerHTML;}
