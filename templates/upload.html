@@ -26,13 +26,13 @@
   Удалите лишний отчёт либо начните «🔄 Новую выгрузку» и загрузите один период.</div>
 {% endif %}
 
-<p class="muted small">История выгрузок и переключение между ними — в шапке справа (📅, с поиском). Доступно на любой странице; переключение перезагружает рабочие данные (почты и настройки сохраняются).</p>
+<p class="muted small">История выгрузок и переключение между ними — кнопка «Выгрузка» в шапке (там же «＋ Новая»). Доступно на любой странице; переключение перезагружает рабочие данные (почты и настройки сохраняются).</p>
 
 <div class="fullbleed">
 <div class="toolbar">
   <h2 style="margin:0">Отчёты — поддерживаемые и загруженные{% if periods.period %} <span class="small muted">— период {{ periods.period }}</span>{% endif %}</h2>
   <div style="display:flex;gap:8px">
-    <button type="submit" form="rcfg" title="Сохранить тип (основной/доп.) и комментарии отчётов">💾 Сохранить настройки</button>
+    <button type="submit" form="rcfg" title="Сохранить комментарии отчётов">💾 Сохранить комментарии</button>
     {% if meta %}
     <form method="post" action="{{ url_for('reprocess') }}" style="margin:0"
           title="Заново разобрать сохранённые файлы активного периода (после обновления приложения)">
@@ -46,19 +46,42 @@
   </div>
 </div>
 <form id="rcfg" method="post" action="{{ url_for('reports_config') }}"></form>
-{% macro reports_table(rows, meta_by_rtype, exports) %}
+
+<div class="tagbar" id="tagbar">
+  <button type="button" class="tchip on" data-tag="*">Все <span class="tcnt">{{ reports|length }}</span></button>
+  {% for t, n in tag_counts %}
+  <button type="button" class="tchip" data-tag="{{ t|lower }}"
+          style="border-color:hsl({{ tag_hues[t] }},45%,72%)">{{ t }} <span class="tcnt">{{ n }}</span></button>
+  {% endfor %}
+  {% if untagged %}<button type="button" class="tchip" data-tag="-">Без тегов <span class="tcnt">{{ untagged }}</span></button>{% endif %}
+  <span class="small muted" style="align-self:center">— фильтр; свои теги назначаются в таблице (введите название и Enter)</span>
+</div>
+
 {% set gcls = {'ЭМД': '#e6effb', 'Ошибки': '#fdecec', 'Стационары': '#e6f6f1', 'ФАП': '#eaf3e6'} %}
-<table>
-  <tr><th>Направление</th><th>Наименование отчёта (как в ЕИСЗ ПК)</th><th>Тип</th><th>Что даёт в системе</th>
+<table id="rtable">
+  <tr><th>Направление</th><th>Наименование отчёта (как в ЕИСЗ ПК)</th><th>Теги</th><th>Что даёт в системе</th>
       <th>Рассылка</th><th>Комментарий</th><th>Статус</th><th>Период</th><th>Загружен</th><th>Действия</th></tr>
-  {% for r in rows %}
+  {% for r in reports %}
   {% set m = meta_by_rtype.get(r.key) %}
-  <tr>
+  <tr data-tags="|{{ r.tags|map('lower')|join('|') }}|">
     <td><span class="pill" style="background:{{ gcls.get(r.group, '#eef0f2') }};color:#374151">{{ r.group }}</span></td>
     <td><b>{{ r.title }}</b>{% if r.note %}<br><span class="small muted">{{ r.note }}</span>{% endif %}</td>
-    <td><select name="req__{{ r.key }}" form="rcfg" style="font-size:12px">
-      <option value="1"{{ ' selected' if r.req }}>основной</option>
-      <option value="0"{{ ' selected' if not r.req }}>дополнит.</option></select></td>
+    <td class="tags-cell">
+      {% for t in r.tags %}
+      <form class="tag" method="post" action="{{ url_for('reports_tag_remove') }}"
+            style="background:hsl({{ tag_hues[t] }},70%,93%);border-color:hsl({{ tag_hues[t] }},45%,72%)">
+        <span>{{ t }}</span>
+        <input type="hidden" name="rtype" value="{{ r.key }}">
+        <input type="hidden" name="tag" value="{{ t }}">
+        <button type="submit" class="tag-x" title="Убрать тег «{{ t }}»">×</button>
+      </form>
+      {% endfor %}
+      <form class="tag-add" method="post" action="{{ url_for('reports_tag_add') }}">
+        <input type="hidden" name="rtype" value="{{ r.key }}">
+        <input name="tag" list="alltags" placeholder="+ тег" autocomplete="off" maxlength="40"
+               title="Добавить тег: введите название (или выберите из существующих) и нажмите Enter">
+      </form>
+    </td>
     <td>{{ r.gives }}</td>
     <td class="small">{% if r.mailing %}✉ {{ r.mailing }}{% else %}<span class="muted">—</span>{% endif %}</td>
     <td><input type="text" name="comment__{{ r.key }}" form="rcfg" value="{{ r.comment }}" placeholder="—" style="width:150px"></td>
@@ -78,11 +101,22 @@
   </tr>
   {% endfor %}
 </table>
-{% endmacro %}
-
-<h3>Необходимые <span class="small muted">— грузить каждую неделю, на них строятся рассылки</span></h3>
-{{ reports_table(reports_req, meta_by_rtype, exports) }}
-<h3 style="margin-top:18px">Дополнительные <span class="small muted">— по желанию, для визуализации и общей картины</span></h3>
-{{ reports_table(reports_opt, meta_by_rtype, exports) }}
+<datalist id="alltags">{% for t, n in tag_counts %}<option value="{{ t }}"></option>{% endfor %}</datalist>
 </div>
+
+<script>
+(function(){
+  var bar=document.getElementById('tagbar'); if(!bar) return;
+  var rows=[].slice.call(document.querySelectorAll('#rtable tr[data-tags]'));
+  bar.addEventListener('click', function(e){
+    var b=e.target.closest ? e.target.closest('.tchip') : null; if(!b) return;
+    bar.querySelectorAll('.tchip').forEach(function(x){ x.classList.toggle('on', x===b); });
+    var t=b.getAttribute('data-tag');
+    rows.forEach(function(r){
+      var dt=r.getAttribute('data-tags');
+      r.style.display=(t==='*' || (t==='-' ? dt==='||' : dt.indexOf('|'+t+'|')>=0)) ? '' : 'none';
+    });
+  });
+})();
+</script>
 {% endblock %}

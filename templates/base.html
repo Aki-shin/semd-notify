@@ -63,11 +63,18 @@
       {% endfor %}
     </nav>
     <div class="side-foot">
-      <div class="sf-user">👤 {{ user.name or user.login }}</div>
-      <div>
-        {% if not smtp_ok %}<span class="pill warn">SMTP не настроен</span>
-        {% elif smtp_dry %}<span class="pill warn">SMTP · DRYRUN</span>
-        {% else %}<span class="pill ok">SMTP готов</span>{% endif %}
+      {% if not smtp_ok or smtp_dry %}
+      <a class="sf-warn" href="{{ url_for('settings') }}" title="Открыть настройки почты">
+        <span class="ic"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg></span>
+        <span class="lbl">{{ 'SMTP: тестовый режим' if smtp_ok else 'SMTP не настроен' }}</span>
+      </a>
+      {% endif %}
+      <div class="sf-user" title="{{ user.name or user.login }}{% if user.name and user.login != '—' %} ({{ user.login }}){% endif %}">
+        <span class="sf-ava">{{ user.initials }}</span>
+        <span class="sf-txt lbl">
+          <span class="sf-name">{{ user.name or user.login }}</span>
+          {% if user.name and user.login != '—' %}<span class="sf-login">{{ user.login }}</span>{% endif %}
+        </span>
       </div>
     </div>
   </aside>
@@ -76,18 +83,43 @@
     <div class="topbar">
       <span id="sendchip"></span>
       <div class="period-switch" id="periodSwitch">
-        <button type="button" class="pill period" id="periodBtn" title="Переключить период выгрузки">📅 {{ active_period or 'нет выгрузки' }} ▾</button>
-        {% if not periods.consistent %}<span class="pill warn" title="В выгрузке отчёты за разные периоды — см. Загрузка">≠</span>{% endif %}
+        <button type="button" class="period-btn" id="periodBtn" title="Выгрузки: переключение, создание, история">
+          <span class="pb-ico"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h18"/></svg></span>
+          <span class="pb-txt">
+            <span class="pb-cap">Выгрузка</span>
+            <span class="pb-val">{{ active_period or 'не загружена' }}</span>
+          </span>
+          {% if active_period and periods.n_reports %}<span class="pb-cnt" title="Отчётов в выгрузке">{{ periods.n_reports }}</span>{% endif %}
+          {% if not periods.consistent %}<span class="pb-dot" title="В выгрузке отчёты за разные периоды"></span>{% endif %}
+          <span class="pb-chev"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span>
+        </button>
         <div class="period-menu" id="periodMenu" hidden>
+          <div class="pm-head">
+            <span class="pm-title">Выгрузки</span>
+            <form method="post" action="{{ url_for('period_new') }}" style="margin:0"
+                  onsubmit="return confirm('Начать новую выгрузку? Текущие отчёты очистятся (останутся в истории), затем загрузите новый период.')">
+              <button type="submit" class="pm-new" title="Очистить рабочие данные и начать выгрузку нового периода">＋ Новая</button>
+            </form>
+          </div>
+          {% if not periods.consistent %}
+          <div class="pm-warn">⚠ В выгрузке отчёты за разные периоды — <a href="{{ url_for('upload') }}">разобраться</a></div>
+          {% endif %}
+          {% if period_history|length > 7 %}
           <input type="search" class="psearch" id="periodSearch" placeholder="Поиск периода…" autocomplete="off">
+          {% endif %}
           <div class="period-list" id="periodList">
             {% for h in period_history %}
             <div class="period-item {{ 'active' if h.active }}" data-period="{{ h.period|lower }}">
-              <form method="post" action="{{ url_for('period_switch') }}" style="flex:1;margin:0">
+              <form method="post" action="{{ url_for('period_switch') }}" class="pi-form">
                 <input type="hidden" name="period" value="{{ h.period }}">
-                <button type="submit" class="psw" title="Переключиться на выгрузку {{ h.period }}">{{ h.period }} <span class="pcnt">· {{ h.n }} отч.</span>{% if h.active %} ✓{% endif %}</button>
+                <button type="submit" class="psw" {% if h.active %}disabled{% endif %}
+                        title="{{ 'Текущая выгрузка' if h.active else 'Переключиться на выгрузку ' + h.period }}">
+                  <span class="pi-name">{{ h.period }}</span>
+                  <span class="pi-meta">{{ h.n }} отч. · загружена {{ h.ts_h }}</span>
+                </button>
               </form>
-              {% if not h.active %}
+              {% if h.active %}<span class="pi-check" title="Текущая">✓</span>
+              {% else %}
               <form method="post" action="{{ url_for('period_delete') }}" style="margin:0"
                     onsubmit="return confirm('Удалить выгрузку «{{ h.period }}» из истории? Файлы этого периода будут удалены.')">
                 <input type="hidden" name="period" value="{{ h.period }}">
@@ -96,7 +128,7 @@
               {% endif %}
             </div>
             {% else %}
-            <div class="period-empty">нет сохранённых выгрузок</div>
+            <div class="period-empty">нет сохранённых выгрузок —<br>загрузите отчёты на странице «Загрузка»</div>
             {% endfor %}
           </div>
         </div>
@@ -154,11 +186,12 @@
   }
   btn.addEventListener('click', function(e){
     e.stopPropagation(); menu.hidden=!menu.hidden;
-    if(!menu.hidden){ search.value=''; filter(); search.focus(); }
+    sw.classList.toggle('open', !menu.hidden);
+    if(!menu.hidden && search){ search.value=''; filter(); search.focus(); }
   });
   menu.addEventListener('click', function(e){ e.stopPropagation(); });
   if(search) search.addEventListener('input', filter);
-  document.addEventListener('click', function(){ menu.hidden=true; });
+  document.addEventListener('click', function(){ menu.hidden=true; sw.classList.remove('open'); });
 })();
 (function(){
   var b=document.getElementById('toTop'); if(!b) return;

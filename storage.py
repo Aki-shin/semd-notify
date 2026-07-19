@@ -66,6 +66,7 @@ def init():
         CREATE TABLE IF NOT EXISTS koiki_group_member(otdelenie TEXT PRIMARY KEY, grp TEXT);
         CREATE TABLE IF NOT EXISTS report_resp(report TEXT, email TEXT, name TEXT DEFAULT '', PRIMARY KEY(report, email));
         CREATE TABLE IF NOT EXISTS report_cfg(rtype TEXT PRIMARY KEY, required INTEGER, comment TEXT DEFAULT '');
+        CREATE TABLE IF NOT EXISTS report_tags(rtype TEXT, tag TEXT, PRIMARY KEY(rtype, tag));
         CREATE TABLE IF NOT EXISTS period_files(
             period TEXT, rtype TEXT, filename TEXT, uploaded_at TEXT, data BLOB,
             PRIMARY KEY(period, rtype));
@@ -195,6 +196,14 @@ def save_period_file(period, rtype, filename, data):
                    datetime.datetime.now().isoformat(timespec="seconds"), sqlite3.Binary(data)))
 
 
+def _ts_human(ts):
+    """ISO-метка -> короткий вид для меню («15.07.2026 14:29»)."""
+    try:
+        return datetime.datetime.fromisoformat(ts).strftime("%d.%m.%Y %H:%M")
+    except (TypeError, ValueError):
+        return (ts or "")[:16]
+
+
 def periods_history():
     """Список сохранённых периодов (для переключения), новые сверху, активный помечен."""
     init()
@@ -202,7 +211,8 @@ def periods_history():
     with _conn() as c:
         rows = c.execute("SELECT period, COUNT(*) n, MAX(uploaded_at) ts "
                          "FROM period_files GROUP BY period ORDER BY ts DESC").fetchall()
-    return [{"period": r["period"], "n": r["n"], "ts": r["ts"], "active": r["period"] == active}
+    return [{"period": r["period"], "n": r["n"], "ts": r["ts"], "ts_h": _ts_human(r["ts"]),
+             "active": r["period"] == active}
             for r in rows]
 
 
@@ -677,10 +687,37 @@ def report_cfg_all():
                 for r in c.execute("SELECT * FROM report_cfg")}
 
 
-def set_report_cfg(rtype, required, comment):
+def set_report_comment(rtype, comment):
     with _conn() as c:
-        c.execute("INSERT OR REPLACE INTO report_cfg(rtype,required,comment) VALUES(?,?,?)",
-                  (rtype, 1 if required else 0, (comment or "").strip()))
+        c.execute("INSERT INTO report_cfg(rtype,required,comment) VALUES(?,NULL,?) "
+                  "ON CONFLICT(rtype) DO UPDATE SET comment=excluded.comment",
+                  (rtype, (comment or "").strip()))
+
+
+# --- Теги отчётов: свободная пользовательская классификация (страница «Загрузка») ---
+
+def report_tags_all():
+    """{rtype: [теги]} — по алфавиту, без учёта регистра."""
+    init()
+    out = {}
+    with _conn() as c:
+        for r in c.execute("SELECT rtype, tag FROM report_tags ORDER BY tag COLLATE NOCASE"):
+            out.setdefault(r["rtype"], []).append(r["tag"])
+    return out
+
+
+def report_tag_add(rtype, tag):
+    tag = (tag or "").strip()[:40]
+    if not (rtype and tag):
+        return
+    init()
+    with _conn() as c:
+        c.execute("INSERT OR IGNORE INTO report_tags(rtype,tag) VALUES(?,?)", (rtype, tag))
+
+
+def report_tag_remove(rtype, tag):
+    with _conn() as c:
+        c.execute("DELETE FROM report_tags WHERE rtype=? AND tag=?", (rtype, tag))
 
 
 # --- План госпитализаций по отделениям (стационары) ---

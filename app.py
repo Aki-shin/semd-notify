@@ -10,6 +10,8 @@ import os
 import re
 import threading
 import time
+import zlib
+from collections import Counter
 from flask import (Flask, request, render_template, redirect, url_for,
                    flash, send_from_directory, send_file)
 
@@ -118,7 +120,9 @@ REPORT_GROUP = {
     "flk": "Ошибки", "docerr": "Ошибки",
     "fap": "ФАП", "koiki": "Стационары", "max": "Телемед", "xray": "Рентген",
 }
-# Необходимые — на них строятся еженедельные рассылки; остальные дополнительные (визуализация/общая картина).
+# Прежняя жёсткая классификация «необходимые/дополнительные». Оставлена только как
+# источник разовой миграции в стартовые теги (см. _seed_report_tags) — дальше
+# классификацию ведёт пользователь своими тегами на странице «Загрузка».
 REPORT_REQUIRED = {"vrachi", "debts", "flk", "fap", "koiki"}
 REPORT_GROUP_ORDER = {"ЭМД": 0, "Ошибки": 1, "Стационары": 2, "ФАП": 3, "Телемед": 4, "Рентген": 5}
 # Кому уходит рассылка по отчёту (если уходит). Отчётов здесь нет → рассылки нет, только визуализация.
@@ -146,7 +150,9 @@ def current_user():
         name = raw.encode("latin-1").decode("utf-8") if raw else ""
     except (UnicodeError, AttributeError):
         name = raw
-    return {"login": login or "—", "name": name}
+    words = [w for w in (name or login).replace("_", " ").replace(".", " ").split() if w]
+    initials = "".join(w[0] for w in words[:2]).upper() or "•"
+    return {"login": login or "—", "name": name, "initials": initials}
 
 
 @app.context_processor
@@ -227,34 +233,65 @@ def upload():
     # статусы и «что загружено» — строго по набору отчётов активной выгрузки
     exports = {x["rtype"]: x["filename"] for x in storage.period_rtypes(active)} if active else {}
     meta = [m for m in storage.meta_all() if m["rtype"] in exports]
-    loaded = set(exports)
     meta_by_rtype = {m["rtype"]: m for m in meta}
-    rcfg = storage.report_cfg_all()  # пользовательские переопределения тип/комментарий
+    rcfg = storage.report_cfg_all()  # пользовательские комментарии к отчётам
+    _seed_report_tags()
+    tags_by = storage.report_tags_all()
     allr = []
     for r in REPORTS_INFO:
         rc = rcfg.get(r["key"], {})
-        req = bool(rc["required"]) if rc.get("required") is not None else (r["key"] in REPORT_REQUIRED)
-        allr.append(dict(r, group=REPORT_GROUP.get(r["key"], ""), req=req,
-                         mailing=REPORT_MAILING.get(r["key"], ""), comment=rc.get("comment", "")))
-    _gk = lambda r: REPORT_GROUP_ORDER.get(r["group"], 9)
-    reports_req = sorted([r for r in allr if r["req"]], key=_gk)
-    reports_opt = sorted([r for r in allr if not r["req"]], key=_gk)
+        allr.append(dict(r, group=REPORT_GROUP.get(r["key"], ""),
+                         mailing=REPORT_MAILING.get(r["key"], ""),
+                         comment=rc.get("comment", ""),
+                         tags=tags_by.get(r["key"], [])))
+    allr.sort(key=lambda r: (REPORT_GROUP_ORDER.get(r["group"], 9), r["title"]))
+    cnt = Counter(t for ts in tags_by.values() for t in ts)
+    tag_counts = sorted(cnt.items(), key=lambda kv: (-kv[1], kv[0].lower()))
+    tag_hues = {t: zlib.crc32(t.encode("utf-8")) % 360 for t in cnt}
+    untagged = sum(1 for r in allr if not r["tags"])
     return render_template("upload.html", meta=meta, meta_by_rtype=meta_by_rtype, exports=exports,
-                           reports_req=reports_req, reports_opt=reports_opt)
+                           reports=allr, tag_counts=tag_counts, tag_hues=tag_hues, untagged=untagged)
+
+
+def _seed_report_tags():
+    """Разовая миграция: прежнее деление «основные/дополнительные» -> стартовые теги.
+    Дальше пользователь классифицирует отчёты сам (добавляет/убирает свои теги)."""
+    if appconfig.get("REPORT_TAGS_SEEDED"):
+        return
+    rcfg = storage.report_cfg_all()
+    for r in REPORTS_INFO:
+        k = r["key"]
+        rc = rcfg.get(k, {})
+        req = bool(rc["required"]) if rc.get("required") is not None else (k in REPORT_REQUIRED)
+        storage.report_tag_add(k, "Основные" if req else "Дополнительные")
+    appconfig.set("REPORT_TAGS_SEEDED", "1")
 
 
 @app.route("/reports/config", methods=["POST"])
 def reports_config():
+    """Комментарии к отчётам (классификация — тегами, см. reports_tag_*)."""
     saved = 0
     for r in REPORTS_INFO:
-        k = r["key"]
-        req = request.form.get(f"req__{k}")
-        comment = request.form.get(f"comment__{k}")
-        if req is None and comment is None:
+        comment = request.form.get(f"comment__{r['key']}")
+        if comment is None:
             continue
-        storage.set_report_cfg(k, req == "1", comment or "")
+        storage.set_report_comment(r["key"], comment)
         saved += 1
-    flash(f"Настройки отчётов сохранены ({saved}).", "ok")
+    flash(f"Комментарии отчётов сохранены ({saved}).", "ok")
+    return redirect(url_for("upload"))
+
+
+@app.route("/reports/tag/add", methods=["POST"])
+def reports_tag_add():
+    storage.report_tag_add((request.form.get("rtype") or "").strip(),
+                           request.form.get("tag") or "")
+    return redirect(url_for("upload"))
+
+
+@app.route("/reports/tag/remove", methods=["POST"])
+def reports_tag_remove():
+    storage.report_tag_remove((request.form.get("rtype") or "").strip(),
+                              (request.form.get("tag") or "").strip())
     return redirect(url_for("upload"))
 
 
