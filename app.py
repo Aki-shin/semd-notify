@@ -113,8 +113,8 @@ REPORTS_INFO = [
      "note": "Файл .xlsx. В отчёте нет периода — берётся период текущей выгрузки."},
 ]
 
-# Классификация отчётов на странице загрузки.
-# Направление: ЭМД / Стационары / ФАП.
+# Направление отчёта. В UI отдельной колонки больше нет: направления разово
+# мигрируют в теги (см. _seed_report_tags), здесь остаются для порядка сортировки.
 REPORT_GROUP = {
     "vrachi": "ЭМД", "debts": "ЭМД", "notrans": "ЭМД", "vidy": "ЭМД", "status": "ЭМД",
     "flk": "Ошибки", "docerr": "Ошибки",
@@ -240,11 +240,10 @@ def upload():
     allr = []
     for r in REPORTS_INFO:
         rc = rcfg.get(r["key"], {})
-        allr.append(dict(r, group=REPORT_GROUP.get(r["key"], ""),
-                         mailing=REPORT_MAILING.get(r["key"], ""),
+        allr.append(dict(r, mailing=REPORT_MAILING.get(r["key"], ""),
                          comment=rc.get("comment", ""),
                          tags=tags_by.get(r["key"], [])))
-    allr.sort(key=lambda r: (REPORT_GROUP_ORDER.get(r["group"], 9), r["title"]))
+    allr.sort(key=lambda r: (REPORT_GROUP_ORDER.get(REPORT_GROUP.get(r["key"], ""), 9), r["title"]))
     cnt = Counter(t for ts in tags_by.values() for t in ts)
     tag_counts = sorted(cnt.items(), key=lambda kv: (-kv[1], kv[0].lower()))
     tag_hues = {t: zlib.crc32(t.encode("utf-8")) % 360 for t in cnt}
@@ -254,17 +253,22 @@ def upload():
 
 
 def _seed_report_tags():
-    """Разовая миграция: прежнее деление «основные/дополнительные» -> стартовые теги.
-    Дальше пользователь классифицирует отчёты сам (добавляет/убирает свои теги)."""
-    if appconfig.get("REPORT_TAGS_SEEDED"):
-        return
-    rcfg = storage.report_cfg_all()
-    for r in REPORTS_INFO:
-        k = r["key"]
-        rc = rcfg.get(k, {})
-        req = bool(rc["required"]) if rc.get("required") is not None else (k in REPORT_REQUIRED)
-        storage.report_tag_add(k, "Основные" if req else "Дополнительные")
-    appconfig.set("REPORT_TAGS_SEEDED", "1")
+    """Разовые миграции прежней классификации в теги. Дальше пользователь ведёт теги сам.
+    v1: «основные/дополнительные» -> теги. v2: направления (ЭМД/Ошибки/…) -> теги."""
+    if not appconfig.get("REPORT_TAGS_SEEDED"):
+        rcfg = storage.report_cfg_all()
+        for r in REPORTS_INFO:
+            k = r["key"]
+            rc = rcfg.get(k, {})
+            req = bool(rc["required"]) if rc.get("required") is not None else (k in REPORT_REQUIRED)
+            storage.report_tag_add(k, "Основные" if req else "Дополнительные")
+        appconfig.set("REPORT_TAGS_SEEDED", "1")
+    if not appconfig.get("REPORT_TAGS_SEEDED_GROUPS"):
+        for r in REPORTS_INFO:
+            g = REPORT_GROUP.get(r["key"])
+            if g:
+                storage.report_tag_add(r["key"], g)
+        appconfig.set("REPORT_TAGS_SEEDED_GROUPS", "1")
 
 
 @app.route("/reports/config", methods=["POST"])
@@ -819,6 +823,166 @@ def koiki_report_send():
     dry = " (DRYRUN)" if mailer.is_dryrun() else ""
     flash(f"Сводный отчёт по стационарам ({to}): {msg}.{dry}", "ok" if ok else "warn")
     return redirect(url_for("koiki"))
+
+
+@app.route("/send/all", methods=["POST"])
+def send_all():
+    """Одна кнопка: ставит в очередь ВСЕ рассылки по загруженным отчётам активной
+    выгрузки — по сохранённым адресам (врачи, зав. отделениями, ответственные).
+    Всё уходит через общую очередь с троттлингом; прогресс — чип в шапке."""
+    if not mailer.configured():
+        flash("SMTP не настроен — откройте «Настройки».", "warn")
+        return redirect(url_for("upload"))
+    loaded = {m["rtype"] for m in storage.meta_all()}
+    if not loaded:
+        flash("Нет загруженных отчётов — рассылать нечего.", "warn")
+        return redirect(url_for("upload"))
+    queued, skipped = [], []
+
+    def q(items, label, title):
+        if items:
+            _dispatch_batch(items, label)
+            queued.append(f"{title} — {len(items)}")
+
+    def report_to(kind, title, cnt, subject, html):
+        """Сводный отчёт ответственным (одним письмом) через общую очередь."""
+        resp = storage.resp_list(kind)
+        if not resp:
+            skipped.append(f"{title}: нет получателей")
+            return
+        to = ", ".join(r["email"] for r in resp)
+        q([{"to": to, "log_vrach": f"[{title}]", "cnt": cnt, "subject": subject, "html": html}],
+          kind, title)
+
+    # Долги врачам — каждому его список неподписанных (по сохранённым почтам)
+    if "debts" in loaded:
+        rep = storage.report_period("debts")
+        cust = appconfig.get("CUSTOM_DEBT", "")
+        items, noaddr = [], 0
+        for d in storage.doctors("nepodp"):
+            debts = storage.doctor_debts(d["vrach"])
+            if not debts:
+                continue
+            if not d.get("email"):
+                noaddr += 1
+                continue
+            subj = f"Неподписанные документы РЭМД: {len(debts)} шт." + (f" (период {rep})" if rep else "")
+            items.append({"to": d["email"], "log_vrach": d["vrach"], "cnt": len(debts),
+                          "subject": subj, "html": mailer.build_debt_html(d["vrach"], debts, rep, cust)})
+        q(items, "doctors", "долги врачам")
+        if noaddr:
+            skipped.append(f"врачи без почты: {noaddr}")
+
+    # Сводки заведующим отделениями + сводный отчёт по подразделениям
+    if "vrachi" in loaded:
+        rep = storage.report_period("vrachi")
+        cust = appconfig.get("CUSTOM_DEPT", "")
+        depts = storage.dept_summary()
+        items, noaddr = [], 0
+        for dpt in depts:
+            if not dpt["vrachi"]:
+                continue
+            emails = _split_emails(dpt.get("email"))
+            if not emails:
+                noaddr += 1
+                continue
+            subj = (f"Неподписанные документы по подразделению: {dpt['nepodp']} шт."
+                    + (f" (период {rep})" if rep else ""))
+            items.append({"to": ", ".join(emails), "log_vrach": f"[отд.] {dpt['podr']}",
+                          "cnt": dpt["nepodp"], "subject": subj,
+                          "html": mailer.build_dept_html(dpt["podr"], dpt["vrachi"], dpt["nepodp"],
+                                                         rep_period=rep, custom=cust)})
+        q(items, "depts", "сводки заведующим")
+        if noaddr:
+            skipped.append(f"отделения без почты: {noaddr}")
+        if depts:
+            report_to("dept", "свод по подразделениям", len(depts),
+                      "Сводный отчёт по подписанию СЭМД в разрезе подразделений"
+                      + (f" — период {rep}" if rep else ""),
+                      mailer.build_dept_report_html(depts, rep, cust))
+
+    # Ошибки РЭМД — ответственному за исправление
+    if {"flk", "docerr"} & loaded:
+        rep = storage.report_period("vrachi")
+        data = {"funnel": storage.funnel(), "errors": storage.errors_summary()["by_code"],
+                "unassigned": storage.unassigned_summary(), "docerr": storage.docerr_list(),
+                "period": rep}
+        report_to("err", "ошибки РЭМД", len(data["unassigned"]),
+                  "Отчёт по проблемам РЭМД (ответственному за исправление)"
+                  + (f" — период {rep}" if rep else ""),
+                  mailer.build_report_html(data, appconfig.get("CUSTOM_ERR", "")))
+
+    # ФАП — ответственному
+    if "fap" in loaded:
+        s = storage.fap_summary()
+        if s:
+            rep = storage.report_period("fap")
+            report_to("fap", "отчёт по ФАП", s.get("n", 0),
+                      "Отчёт по работе ФАП в ЭМК" + (f" — период {rep}" if rep else ""),
+                      mailer.build_fap_report_html(s, storage.fap_list(), rep,
+                                                   appconfig.get("CUSTOM_FAP", "")))
+
+    # Стационары: ответственным по отделениям (по сохранённым почтам) + сводный
+    if "koiki" in loaded:
+        rep = storage.report_period("koiki")
+        cust = appconfig.get("CUSTOM_KOIKI", "")
+        wards = storage.koiki_list()
+        days = storage.koiki_totals()["days"]
+        _cum = storage.koiki_cumulative()
+        cum_vyp = ({r["otdelenie"]: r.get("vypoln") for r in _cum["rows"]}
+                   if _cum.get("rows") else None)
+        by_mail, noaddr = {}, 0
+        for w in wards:
+            email = (w.get("email") or "").strip()
+            if not email:
+                noaddr += 1
+                continue
+            g = by_mail.setdefault(email.lower(), {"email": email, "resp": w.get("resp") or "", "wards": []})
+            g["wards"].append(w)
+        subj = "Занятость коек по отделениям" + (f" (период {rep})" if rep else "")
+        items = [{"to": g["email"], "log_vrach": f"[стационары] {g['resp'] or g['email']}",
+                  "cnt": len(g["wards"]), "subject": subj,
+                  "html": mailer.build_koiki_resp_html(g["resp"], g["wards"], days, rep, cust, cum_vyp)}
+                 for g in by_mail.values()]
+        q(items, "koiki", "стационары ответственным")
+        if noaddr:
+            skipped.append(f"отделения (койки) без почты: {noaddr}")
+        if wards:
+            report_to("koiki", "свод по стационарам", len(wards),
+                      "Сводный отчёт: занятость коечного фонда" + (f" — период {rep}" if rep else ""),
+                      mailer.build_koiki_overall_html(wards, storage.koiki_totals(), rep, cust, _cum))
+
+    # MAX — ответственному
+    if "max" in loaded:
+        totals = storage.max_totals()
+        if totals:
+            rep = storage.report_period("max")
+            report_to("max", "отчёт MAX", totals.get("n_doctors", 0),
+                      "Сводный отчёт: ТМК через чат-бот MAX" + (f" — период {rep}" if rep else ""),
+                      mailer.build_max_report_html(totals, storage.max_by_doctor(),
+                                                   storage.max_by_purpose(), rep,
+                                                   appconfig.get("CUSTOM_MAX", "")))
+
+    # Рентген — ответственному
+    if "xray" in loaded:
+        totals = storage.xray_totals()
+        if totals:
+            rep = storage.report_period("xray")
+            report_to("xray", "отчёт по рентгену", totals.get("total", 0),
+                      "Сводный отчёт: обработка лучевых исследований ИИ"
+                      + (f" — период {rep}" if rep else ""),
+                      mailer.build_xray_report_html(totals, storage.xray_list(), rep,
+                                                    appconfig.get("CUSTOM_XRAY", "")))
+
+    dry = " (DRYRUN — письма не отправляются)" if mailer.is_dryrun() else ""
+    if queued:
+        flash("Поставлено в очередь: " + "; ".join(queued) + " (писем). "
+              "Прогресс — чип в шапке, результат — в «Журнале»." + dry, "ok")
+    else:
+        flash("Ничего не отправлено: по загруженным отчётам нет адресатов/получателей." + dry, "warn")
+    if skipped:
+        flash("Пропущено: " + "; ".join(skipped) + ".", "warn")
+    return redirect(url_for("upload"))
 
 
 @app.route("/resp/add", methods=["POST"])

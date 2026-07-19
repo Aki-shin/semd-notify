@@ -49,6 +49,7 @@ footer { text-align: center; color: #9aa3af; font-size: 12px; padding: 20px; }
   .main-wrap { margin-left: 0; }
 }
 h1 { font-size: 22px; margin: 6px 0 14px; }
+.subtabs { margin: 0 0 8px; font-size: 14px; }
 h2 { font-size: 16px; margin: 22px 0 8px; }
 h3 { font-size: 14px; margin: 18px 0 6px; }
 a { color: #1d4ed8; }

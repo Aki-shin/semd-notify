@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block body %}
+{% set emd_tab = 'doctors' %}{% include "_emd_tabs.html" %}
 <a class="back" href="{{ url_for('doctors') }}">← к списку врачей</a>
 <h1>{{ vrach }}</h1>
 <p class="muted">
