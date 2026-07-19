@@ -1,22 +1,70 @@
 {% extends "base.html" %}
 {% block body %}
-<h1>Журнал рассылки</h1>
-<p class="muted">Отправленные письма (последние 200). Во время рассылки обновляется автоматически.
+{% set log_tab = 'sends' %}{% include "_log_tabs.html" %}
+<h1>Журнал рассылок</h1>
+<p class="muted">Каждое письмо: какая рассылка, кому, тема, за какой период и кто запустил. Последние 200 записей;
+во время рассылки таблица обновляется автоматически.
 {% if smtp_dry %}<b>DRYRUN: письма не отправляются.</b>{% endif %}</p>
 
+<section class="cards">
+  <div class="card"><div class="num">{{ stats.today }}</div><div class="lbl">Писем сегодня</div></div>
+  <div class="card {{ 'bad' if stats.today_err }}"><div class="num">{{ stats.today_err }}</div><div class="lbl">Ошибок сегодня</div></div>
+  <div class="card"><div class="num">{{ stats.total }}</div><div class="lbl">Всего в журнале</div></div>
+  <div class="card"><div class="num" style="font-size:16px;line-height:2">{{ stats.last or '—' }}</div><div class="lbl">Последняя отправка</div></div>
+</section>
+
 <div class="toolbar">
-  <div class="muted small" id="sendline"></div>
-  <form method="post" action="{{ url_for('send_cancel') }}" id="cancelform" style="margin:0;display:none">
-    <button type="submit" class="danger">⛔ Отменить рассылку</button>
-  </form>
+  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+    <select id="fKind"><option value="">Все рассылки</option>
+      {% for k in kinds %}<option>{{ k }}</option>{% endfor %}</select>
+    <input type="search" id="fText" placeholder="Поиск: адресат, почта, тема…" class="email" style="width:250px" autocomplete="off">
+    <label class="small" style="display:flex;gap:5px;align-items:center;color:#6b7280"><input type="checkbox" id="fErr"> только ошибки</label>
+  </div>
+  <div style="display:flex;gap:10px;align-items:center">
+    <div class="muted small" id="sendline"></div>
+    <form method="post" action="{{ url_for('send_cancel') }}" id="cancelform" style="margin:0;display:none">
+      <button type="submit" class="danger">⛔ Отменить рассылку</button>
+    </form>
+  </div>
 </div>
-<table>
-  <thead><tr><th>Время</th><th>Адресат</th><th>Почта</th><th>Кол-во</th><th>Статус</th></tr></thead>
+
+<table id="logtbl">
+  <thead><tr><th>Время</th><th>Рассылка</th><th>Адресат</th><th>Почта</th><th>Тема</th><th>Период</th><th>Кол-во</th><th>Статус</th><th>Запустил</th></tr></thead>
   <tbody id="sendlog">
   {% for l in log %}
-  <tr><td>{{ l.ts }}</td><td>{{ l.vrach }}</td><td>{{ l.email }}</td>
-      <td class="r">{{ l.cnt }}</td><td>{{ l.status }}</td></tr>
-  {% else %}<tr><td colspan="5" class="empty">пока пусто</td></tr>{% endfor %}
+  {% set st = l.status or '' %}
+  <tr>
+    <td class="small" style="white-space:nowrap">{{ (l.ts or '')|replace('T', ' ') }}</td>
+    <td>{{ l.kind or '—' }}</td>
+    <td style="text-align:left">{{ l.vrach }}</td>
+    <td class="small">{{ l.email }}</td>
+    <td class="small" style="text-align:left">{{ l.subject or '—' }}</td>
+    <td class="small">{{ l.period or '—' }}</td>
+    <td class="r">{{ l.cnt }}</td>
+    <td><span class="pill {{ 'ok' if st.startswith('отправлено') else ('warn' if st.startswith('dryrun') else 'bad') }}">{{ st }}</span></td>
+    <td class="small">{{ l.by_user or '—' }}</td>
+  </tr>
+  {% else %}<tr><td colspan="9" class="empty">пока пусто</td></tr>{% endfor %}
   </tbody>
 </table>
+
+<script>
+(function(){
+  var kind=document.getElementById('fKind'), txt=document.getElementById('fText'),
+      err=document.getElementById('fErr'), tb=document.getElementById('sendlog');
+  function apply(){
+    var k=(kind.value||'').toLowerCase(), q=(txt.value||'').trim().toLowerCase(), e=err.checked;
+    [].slice.call(tb.rows).forEach(function(r){
+      if(r.cells.length<9) return;
+      var rk=(r.cells[1].textContent||'').trim().toLowerCase(),
+          hay=(r.cells[2].textContent+' '+r.cells[3].textContent+' '+r.cells[4].textContent).toLowerCase(),
+          st=(r.cells[7].textContent||'').trim();
+      var bad=!(st.indexOf('отправлено')===0||st.indexOf('dryrun')===0);
+      r.style.display=((!k||rk===k)&&(!q||hay.indexOf(q)>=0)&&(!e||bad))?'':'none';
+    });
+  }
+  [kind,txt,err].forEach(function(el){ el.addEventListener('input', apply); el.addEventListener('change', apply); });
+  new MutationObserver(apply).observe(tb, {childList:true});   // фильтр переживает автообновление
+})();
+</script>
 {% endblock %}

@@ -1,0 +1,4 @@
+<div class="subtabs"><b>Журнал</b> ·
+  {% if log_tab == 'sends' %}<b>Рассылки</b>{% else %}<a href="{{ url_for('send_log_page') }}">Рассылки</a>{% endif %} ·
+  {% if log_tab == 'ops' %}<b>Операции</b>{% else %}<a href="{{ url_for('ops_log_page') }}">Операции</a>{% endif %}
+</div>

@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block body %}
+{% set log_tab = 'ops' %}{% include "_log_tabs.html" %}
+<h1>Журнал операций</h1>
+<p class="muted">Действия в менеджере: загрузки отчётов, переключения выгрузок, изменения настроек и почт,
+запуски рассылок — кто и когда. Последние 300 записей.</p>
+
+<div class="toolbar">
+  <input type="search" id="oSearch" placeholder="Поиск: пользователь, действие, детали…" class="email" style="width:320px" autocomplete="off">
+  <span class="muted small">записей: {{ rows|length }}</span>
+</div>
+
+<table id="opstbl">
+  <thead><tr><th>Время</th><th>Пользователь</th><th>Действие</th><th>Детали</th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+  <tr>
+    <td class="small" style="white-space:nowrap">{{ (r.ts or '')|replace('T', ' ') }}</td>
+    <td>{{ r.user }}</td>
+    <td style="white-space:nowrap"><b>{{ r.action }}</b></td>
+    <td class="small" style="text-align:left">{{ r.details }}</td>
+  </tr>
+  {% else %}<tr><td colspan="4" class="empty">пока пусто — операции начнут записываться с этого обновления</td></tr>{% endfor %}
+  </tbody>
+</table>
+
+<script>
+(function(){
+  var s=document.getElementById('oSearch'), tb=document.querySelector('#opstbl tbody');
+  s.addEventListener('input', function(){
+    var q=(s.value||'').trim().toLowerCase();
+    [].slice.call(tb.rows).forEach(function(r){
+      if(r.cells.length<4) return;
+      r.style.display=(!q||r.textContent.toLowerCase().indexOf(q)>=0)?'':'none';
+    });
+  });
+})();
+</script>
+{% endblock %}

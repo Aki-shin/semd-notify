@@ -13,7 +13,7 @@ import time
 import zlib
 from collections import Counter
 from flask import (Flask, request, render_template, redirect, url_for,
-                   flash, send_from_directory, send_file)
+                   flash, send_from_directory, send_file, has_request_context)
 
 
 def _split_emails(raw):
@@ -155,6 +155,22 @@ def current_user():
     return {"login": login or "—", "name": name, "initials": initials}
 
 
+def _acting_user():
+    """Кто выполняет действие (для журналов). Вне запроса (фоновый воркер) — пусто."""
+    if has_request_context():
+        u = current_user()
+        return u["name"] or (u["login"] if u["login"] != "—" else "")
+    return ""
+
+
+def audit(action, details=""):
+    """Журнал операций менеджера: кто и что сделал. Никогда не роняет обработчик."""
+    try:
+        storage.log_op(_acting_user(), action, details)
+    except Exception:
+        pass
+
+
 @app.context_processor
 def inject():
     return {"user": current_user(), "rtype_ru": RTYPE_RU,
@@ -216,6 +232,8 @@ def upload():
                 storage.save_period_file(batch_period, res["type"], fn, raw)
                 ok.append(f"{fn} → {RTYPE_RU[res['type']]} ({len(res['records'])} записей)")
             appconfig.set("active_period", batch_period)
+            audit("Загрузка отчётов", f"период «{batch_period}»; файлов: {len(parsed)} — "
+                  + ", ".join(fn for _, fn, _ in parsed))
         if ok:
             flash("Загружено: " + "; ".join(ok), "ok")
         if skipped:
@@ -282,20 +300,27 @@ def reports_config():
         storage.set_report_comment(r["key"], comment)
         saved += 1
     flash(f"Комментарии отчётов сохранены ({saved}).", "ok")
+    audit("Комментарии отчётов", f"обновлено: {saved}")
     return redirect(url_for("upload"))
 
 
 @app.route("/reports/tag/add", methods=["POST"])
 def reports_tag_add():
-    storage.report_tag_add((request.form.get("rtype") or "").strip(),
-                           request.form.get("tag") or "")
+    rtype = (request.form.get("rtype") or "").strip()
+    tag = (request.form.get("tag") or "").strip()
+    storage.report_tag_add(rtype, tag)
+    if rtype and tag:
+        audit("Теги отчётов", f"+ «{tag}» → {RTYPE_RU.get(rtype, rtype)}")
     return redirect(url_for("upload"))
 
 
 @app.route("/reports/tag/remove", methods=["POST"])
 def reports_tag_remove():
-    storage.report_tag_remove((request.form.get("rtype") or "").strip(),
-                              (request.form.get("tag") or "").strip())
+    rtype = (request.form.get("rtype") or "").strip()
+    tag = (request.form.get("tag") or "").strip()
+    storage.report_tag_remove(rtype, tag)
+    if rtype and tag:
+        audit("Теги отчётов", f"− «{tag}» из {RTYPE_RU.get(rtype, rtype)}")
     return redirect(url_for("upload"))
 
 
@@ -306,9 +331,11 @@ def reset():
         storage.delete_period(active)
         flash(f"Отчёты периода «{active}» сброшены (удалены, в т.ч. из истории). "
               "Почты врачей/зав. отделениями и настройки сохранены.", "ok")
+        audit("Сброс отчётов", f"период «{active}» удалён (в т.ч. из истории)")
     else:
         storage.reset_reports()
         flash("Рабочие данные очищены. Почты и настройки сохранены.", "ok")
+        audit("Сброс отчётов", "рабочие данные очищены")
     return redirect(url_for("upload"))
 
 
@@ -317,6 +344,7 @@ def period_new():
     storage.new_period()
     flash("Начата новая выгрузка — загрузите отчёты нового периода. "
           "Прежняя выгрузка остаётся в истории (можно вернуться).", "ok")
+    audit("Новая выгрузка", "рабочие данные очищены, прежняя выгрузка в истории")
     return redirect(url_for("upload"))
 
 
@@ -326,6 +354,7 @@ def period_delete_report():
     active = appconfig.get("active_period", "")
     storage.delete_report(active, rtype)
     flash(f"Отчёт «{RTYPE_RU.get(rtype, rtype)}» удалён из периода.", "ok")
+    audit("Удаление отчёта", f"«{RTYPE_RU.get(rtype, rtype)}» из выгрузки «{active}»")
     return redirect(url_for("upload"))
 
 
@@ -335,6 +364,7 @@ def period_switch():
     n = storage.switch_period(period)
     if n:
         flash(f"Переключено на период «{period}» (загружено отчётов: {n}).", "ok")
+        audit("Переключение выгрузки", f"→ «{period}» ({n} отч.)")
     else:
         flash(f"Для периода «{period}» нет сохранённых отчётов.", "warn")
     return redirect(request.referrer or url_for("upload"))
@@ -346,6 +376,7 @@ def period_delete():
     if period:
         storage.delete_period(period)
         flash(f"Выгрузка «{period}» удалена из истории.", "ok")
+        audit("Удаление выгрузки", f"«{period}» (из истории)")
     return redirect(request.referrer or url_for("upload"))
 
 
@@ -355,7 +386,8 @@ def reprocess():
     period = appconfig.get("active_period", "")
     if not period:
         flash("Нет активного периода. Сначала загрузите отчёты.", "warn")
-        return redirect(url_for("upload"))
+        audit("Переобработка", f"выгрузка «{period}»: {n} отч.")
+    return redirect(url_for("upload"))
     n = storage.switch_period(period)
     flash(f"Переобработано отчётов за «{period}»: {n} (сохранённые файлы разобраны заново).",
           "ok" if n else "warn")
@@ -403,7 +435,9 @@ def _send_worker():
                                  "ts": time.strftime("%H:%M:%S")})
 
         def on_result(it, ok, msg):
-            storage.log_send(it["log_vrach"], it.get("to", ""), it["cnt"], msg)
+            storage.log_send(it["log_vrach"], it.get("to", ""), it["cnt"], msg,
+                             kind=it.get("kind", ""), subject=it.get("subject", ""),
+                             period=it.get("period", ""), by_user=job.get("by", ""))
             with _send_lock:
                 _send_status["done"] += 1
                 _send_status["ok" if ok else "failed"] += 1
@@ -430,7 +464,7 @@ def _start_send_worker():
 def _dispatch_batch(items, label):
     """Ставит пачку в очередь фоновой рассылки (один воркер обрабатывает по очереди)."""
     _start_send_worker()
-    _send_q.put({"items": items, "label": label})
+    _send_q.put({"items": items, "label": label, "by": _acting_user()})
     with _send_lock:
         _send_status["queued"] = _send_q.qsize() + (1 if _send_status["active"] else 0)
 
@@ -460,6 +494,7 @@ def send_cancel():
     if active or drained:
         flash(f"Рассылка отменяется. Снято из очереди: {drained}."
               + (" Текущая пачка остановится." if active else ""), "warn")
+        audit("Отмена рассылки", f"снято из очереди: {drained}")
     else:
         flash("Активной рассылки нет.", "warn")
     return redirect(request.referrer or url_for("doctors"))
@@ -481,13 +516,16 @@ def doctors_send():
         email = (request.form.get(f"email__{vrach}") or "").strip()
         if not email:
             noaddr += 1
-            storage.log_send(vrach, "", len(debts), "нет адреса")
+            storage.log_send(vrach, "", len(debts), "нет адреса",
+                             kind="Долги врачам", period=rep, by_user=_acting_user())
             continue
         subj = f"Неподписанные документы РЭМД: {len(debts)} шт." + (f" (период {rep})" if rep else "")
         items.append({"to": email, "log_vrach": vrach, "cnt": len(debts), "subject": subj,
+                      "kind": "Долги врачам", "period": rep,
                       "html": mailer.build_debt_html(vrach, debts, rep, cust)})
     if items:
         _dispatch_batch(items, "doctors")
+        audit("Запуск рассылки", f"Долги врачам: {len(items)} писем")
     dry = " (режим DRYRUN — реально не слалось)" if mailer.is_dryrun() else ""
     flash(f"Запущена пакетная рассылка: {len(items)} писем в фоне (с задержкой против спама)."
           + (f" Без адреса: {noaddr}." if noaddr else "") + " Результат — в журнале ниже." + dry,
@@ -500,6 +538,7 @@ def doctors_save_emails():
     items = [(k[len("email__"):], v) for k, v in request.form.items() if k.startswith("email__")]
     n = storage.bulk_set_doctor_emails(items) if items else 0
     flash(f"Сохранены почты врачей ({n}).", "ok" if n else "warn")
+    audit("Почты врачей", f"сохранено: {n}")
     return redirect(url_for("doctors"))
 
 
@@ -534,13 +573,16 @@ def departments_send():
         emails = _split_emails(request.form.get(f"email__{podr}"))
         if not emails:
             noaddr += 1
-            storage.log_send(f"[отд.] {podr}", "", cnt, "нет адреса")
+            storage.log_send(f"[отд.] {podr}", "", cnt, "нет адреса",
+                             kind="Сводки заведующим", period=rep, by_user=_acting_user())
             continue
         subj = f"Неподписанные документы по подразделению: {cnt} шт." + (f" (период {rep})" if rep else "")
         items.append({"to": ", ".join(emails), "log_vrach": f"[отд.] {podr}", "cnt": cnt, "subject": subj,
+                      "kind": "Сводки заведующим", "period": rep,
                       "html": mailer.build_dept_html(podr, d["vrachi"], d["nepodp"], rep_period=rep, custom=cust)})
     if items:
         _dispatch_batch(items, "depts")
+        audit("Запуск рассылки", f"Сводки заведующим: {len(items)} писем")
     dry = " (DRYRUN)" if mailer.is_dryrun() else ""
     flash(f"Запущена пакетная рассылка: {len(items)} писем в фоне."
           + (f" Без адреса: {noaddr}." if noaddr else "") + " Результат — в журнале." + dry,
@@ -563,7 +605,9 @@ def departments_report_send():
     subj = "Сводный отчёт по подписанию СЭМД в разрезе подразделений" + (f" — период {rep}" if rep else "")
     to = ", ".join(r["email"] for r in resp)
     ok, msg = mailer.send(to, subj, html)
-    storage.log_send("[отделения-свод]", to, len(depts), msg)
+    storage.log_send("[отделения-свод]", to, len(depts), msg, kind="Свод по подразделениям",
+                     subject=subj, period=rep, by_user=_acting_user())
+    audit("Отправка отчёта", f"Свод по подразделениям → {to}: {msg}")
     dry = " (DRYRUN)" if mailer.is_dryrun() else ""
     flash(f"Сводный отчёт по подразделениям ({to}): {msg}.{dry}", "ok" if ok else "warn")
     return redirect(url_for("departments"))
@@ -585,7 +629,9 @@ def report_send():
     subj = "Отчёт по проблемам РЭМД (ответственному за исправление)" + (f" — период {rep}" if rep else "")
     to = ", ".join(r["email"] for r in resp)
     ok, msg = mailer.send(to, subj, html)
-    storage.log_send("[отчёт] ошибки РЭМД", to, len(data["unassigned"]), msg)
+    storage.log_send("[отчёт] ошибки РЭМД", to, len(data["unassigned"]), msg, kind="Ошибки РЭМД",
+                     subject=subj, period=rep, by_user=_acting_user())
+    audit("Отправка отчёта", f"Ошибки РЭМД → {to}: {msg}")
     dry = " (DRYRUN)" if mailer.is_dryrun() else ""
     flash(f"Отчёт об ошибках ({to}): {msg}.{dry}", "ok" if ok else "warn")
     return redirect(request.referrer or url_for("errors"))
@@ -620,7 +666,9 @@ def fap_report_send():
     subj = "Отчёт по работе ФАП в ЭМК" + (f" — период {rep}" if rep else "")
     to = ", ".join(r["email"] for r in resp)
     ok, msg = mailer.send(to, subj, html)
-    storage.log_send("[ФАП-отчёт]", to, s.get("n", 0), msg)
+    storage.log_send("[ФАП-отчёт]", to, s.get("n", 0), msg, kind="Отчёт по ФАП",
+                     subject=subj, period=rep, by_user=_acting_user())
+    audit("Отправка отчёта", f"Отчёт по ФАП → {to}: {msg}")
     dry = " (DRYRUN)" if mailer.is_dryrun() else ""
     flash(f"Отчёт по ФАП ({to}): {msg}.{dry}", "ok" if ok else "warn")
     return redirect(url_for("fap"))
@@ -654,7 +702,9 @@ def max_report_send():
     subj = "Сводный отчёт: ТМК через чат-бот MAX" + (f" — период {rep}" if rep else "")
     to = ", ".join(r["email"] for r in resp)
     ok, msg = mailer.send(to, subj, html)
-    storage.log_send("[MAX-отчёт]", to, totals.get("n_doctors", 0), msg)
+    storage.log_send("[MAX-отчёт]", to, totals.get("n_doctors", 0), msg, kind="Отчёт MAX",
+                     subject=subj, period=rep, by_user=_acting_user())
+    audit("Отправка отчёта", f"Отчёт MAX → {to}: {msg}")
     dry = " (DRYRUN)" if mailer.is_dryrun() else ""
     flash(f"Отчёт MAX ({to}): {msg}.{dry}", "ok" if ok else "warn")
     return redirect(url_for("max_page"))
@@ -685,7 +735,9 @@ def xray_report_send():
     subj = "Сводный отчёт: обработка лучевых исследований ИИ" + (f" — период {rep}" if rep else "")
     to = ", ".join(r["email"] for r in resp)
     ok, msg = mailer.send(to, subj, html)
-    storage.log_send("[Рентген-отчёт]", to, totals.get("total", 0), msg)
+    storage.log_send("[Рентген-отчёт]", to, totals.get("total", 0), msg, kind="Отчёт по рентгену",
+                     subject=subj, period=rep, by_user=_acting_user())
+    audit("Отправка отчёта", f"Отчёт по рентгену → {to}: {msg}")
     dry = " (DRYRUN)" if mailer.is_dryrun() else ""
     flash(f"Отчёт по рентгену ({to}): {msg}.{dry}", "ok" if ok else "warn")
     return redirect(url_for("xray"))
@@ -724,6 +776,7 @@ def koiki_plan_save():
                 storage.set_koiki_plan(name, v or 0)
             saved += 1
     flash(f"Годовой план госпитализаций сохранён ({saved} строк).", "ok")
+    audit("План госпитализаций", f"строк: {saved}")
     return redirect(url_for("koiki_plan"))
 
 
@@ -736,6 +789,7 @@ def koiki_group_create():
         return redirect(url_for("koiki_plan"))
     storage.koiki_group_create(name, picks)
     flash(f"Отделения объединены в группу «{name}» ({len(picks)}). План теперь считается по группе.", "ok")
+    audit("Группа отделений", f"создана «{name}»: {len(picks)} отделений")
     return redirect(url_for("koiki_plan"))
 
 
@@ -744,6 +798,7 @@ def koiki_group_disband():
     name = (request.form.get("grp") or "").strip()
     if name:
         storage.koiki_group_disband(name)
+        audit("Группа отделений", f"расформирована «{name}»")
         flash(f"Группа «{name}» разъединена — отделения снова считаются по отдельности.", "ok")
     return redirect(url_for("koiki_plan"))
 
@@ -759,6 +814,7 @@ def koiki_save_map():
         if od in plan_items:
             storage.set_koiki_plan(od, plan_items.get(od, 0))
     flash(f"Сохранено по отделениям: {len(ods)} (ответственные, почта, план).", "ok" if ods else "warn")
+    audit("Стационары: карта отделений", f"сохранено: {len(ods)} (ответственные, почта, план)")
     return redirect(url_for("koiki"))
 
 
@@ -793,9 +849,11 @@ def koiki_send():
         subj = "Занятость коек по отделениям" + (f" (период {rep})" if rep else "")
         items.append({"to": g["email"], "log_vrach": f"[стационары] {g['resp'] or g['email']}",
                       "cnt": len(g["wards"]), "subject": subj,
+                      "kind": "Стационары ответственным", "period": rep,
                       "html": mailer.build_koiki_resp_html(g["resp"], g["wards"], days, rep, cust, cum_vyp)})
     if items:
         _dispatch_batch(items, "koiki")
+        audit("Запуск рассылки", f"Стационары ответственным: {len(items)} писем")
     dry = " (DRYRUN)" if mailer.is_dryrun() else ""
     flash(f"Запущена рассылка: {len(items)} писем ({len(picked)} отд.)."
           + (f" Без почты пропущено: {noaddr}." if noaddr else "") + dry,
@@ -819,7 +877,9 @@ def koiki_report_send():
     subj = "Сводный отчёт: занятость коечного фонда" + (f" — период {rep}" if rep else "")
     to = ", ".join(r["email"] for r in resp)
     ok, msg = mailer.send(to, subj, html)
-    storage.log_send("[стационары-свод]", to, len(wards), msg)
+    storage.log_send("[стационары-свод]", to, len(wards), msg, kind="Свод по стационарам",
+                     subject=subj, period=rep, by_user=_acting_user())
+    audit("Отправка отчёта", f"Свод по стационарам → {to}: {msg}")
     dry = " (DRYRUN)" if mailer.is_dryrun() else ""
     flash(f"Сводный отчёт по стационарам ({to}): {msg}.{dry}", "ok" if ok else "warn")
     return redirect(url_for("koiki"))
@@ -844,14 +904,15 @@ def send_all():
             _dispatch_batch(items, label)
             queued.append(f"{title} — {len(items)}")
 
-    def report_to(kind, title, cnt, subject, html):
+    def report_to(kind, title, cnt, subject, html, period=""):
         """Сводный отчёт ответственным (одним письмом) через общую очередь."""
         resp = storage.resp_list(kind)
         if not resp:
             skipped.append(f"{title}: нет получателей")
             return
         to = ", ".join(r["email"] for r in resp)
-        q([{"to": to, "log_vrach": f"[{title}]", "cnt": cnt, "subject": subject, "html": html}],
+        q([{"to": to, "log_vrach": f"[{title}]", "cnt": cnt, "subject": subject,
+            "kind": title, "period": period, "html": html}],
           kind, title)
 
     # Долги врачам — каждому его список неподписанных (по сохранённым почтам)
@@ -868,8 +929,9 @@ def send_all():
                 continue
             subj = f"Неподписанные документы РЭМД: {len(debts)} шт." + (f" (период {rep})" if rep else "")
             items.append({"to": d["email"], "log_vrach": d["vrach"], "cnt": len(debts),
-                          "subject": subj, "html": mailer.build_debt_html(d["vrach"], debts, rep, cust)})
-        q(items, "doctors", "долги врачам")
+                          "subject": subj, "kind": "Долги врачам", "period": rep,
+                          "html": mailer.build_debt_html(d["vrach"], debts, rep, cust)})
+        q(items, "doctors", "Долги врачам")
         if noaddr:
             skipped.append(f"врачи без почты: {noaddr}")
 
@@ -890,16 +952,17 @@ def send_all():
                     + (f" (период {rep})" if rep else ""))
             items.append({"to": ", ".join(emails), "log_vrach": f"[отд.] {dpt['podr']}",
                           "cnt": dpt["nepodp"], "subject": subj,
+                          "kind": "Сводки заведующим", "period": rep,
                           "html": mailer.build_dept_html(dpt["podr"], dpt["vrachi"], dpt["nepodp"],
                                                          rep_period=rep, custom=cust)})
-        q(items, "depts", "сводки заведующим")
+        q(items, "depts", "Сводки заведующим")
         if noaddr:
             skipped.append(f"отделения без почты: {noaddr}")
         if depts:
-            report_to("dept", "свод по подразделениям", len(depts),
+            report_to("dept", "Свод по подразделениям", len(depts),
                       "Сводный отчёт по подписанию СЭМД в разрезе подразделений"
                       + (f" — период {rep}" if rep else ""),
-                      mailer.build_dept_report_html(depts, rep, cust))
+                      mailer.build_dept_report_html(depts, rep, cust), period=rep)
 
     # Ошибки РЭМД — ответственному за исправление
     if {"flk", "docerr"} & loaded:
@@ -907,20 +970,20 @@ def send_all():
         data = {"funnel": storage.funnel(), "errors": storage.errors_summary()["by_code"],
                 "unassigned": storage.unassigned_summary(), "docerr": storage.docerr_list(),
                 "period": rep}
-        report_to("err", "ошибки РЭМД", len(data["unassigned"]),
+        report_to("err", "Ошибки РЭМД", len(data["unassigned"]),
                   "Отчёт по проблемам РЭМД (ответственному за исправление)"
                   + (f" — период {rep}" if rep else ""),
-                  mailer.build_report_html(data, appconfig.get("CUSTOM_ERR", "")))
+                  mailer.build_report_html(data, appconfig.get("CUSTOM_ERR", "")), period=rep)
 
     # ФАП — ответственному
     if "fap" in loaded:
         s = storage.fap_summary()
         if s:
             rep = storage.report_period("fap")
-            report_to("fap", "отчёт по ФАП", s.get("n", 0),
+            report_to("fap", "Отчёт по ФАП", s.get("n", 0),
                       "Отчёт по работе ФАП в ЭМК" + (f" — период {rep}" if rep else ""),
                       mailer.build_fap_report_html(s, storage.fap_list(), rep,
-                                                   appconfig.get("CUSTOM_FAP", "")))
+                                                   appconfig.get("CUSTOM_FAP", "")), period=rep)
 
     # Стационары: ответственным по отделениям (по сохранённым почтам) + сводный
     if "koiki" in loaded:
@@ -942,37 +1005,39 @@ def send_all():
         subj = "Занятость коек по отделениям" + (f" (период {rep})" if rep else "")
         items = [{"to": g["email"], "log_vrach": f"[стационары] {g['resp'] or g['email']}",
                   "cnt": len(g["wards"]), "subject": subj,
+                  "kind": "Стационары ответственным", "period": rep,
                   "html": mailer.build_koiki_resp_html(g["resp"], g["wards"], days, rep, cust, cum_vyp)}
                  for g in by_mail.values()]
-        q(items, "koiki", "стационары ответственным")
+        q(items, "koiki", "Стационары ответственным")
         if noaddr:
             skipped.append(f"отделения (койки) без почты: {noaddr}")
         if wards:
-            report_to("koiki", "свод по стационарам", len(wards),
+            report_to("koiki", "Свод по стационарам", len(wards),
                       "Сводный отчёт: занятость коечного фонда" + (f" — период {rep}" if rep else ""),
-                      mailer.build_koiki_overall_html(wards, storage.koiki_totals(), rep, cust, _cum))
+                      mailer.build_koiki_overall_html(wards, storage.koiki_totals(), rep, cust, _cum),
+                      period=rep)
 
     # MAX — ответственному
     if "max" in loaded:
         totals = storage.max_totals()
         if totals:
             rep = storage.report_period("max")
-            report_to("max", "отчёт MAX", totals.get("n_doctors", 0),
+            report_to("max", "Отчёт MAX", totals.get("n_doctors", 0),
                       "Сводный отчёт: ТМК через чат-бот MAX" + (f" — период {rep}" if rep else ""),
                       mailer.build_max_report_html(totals, storage.max_by_doctor(),
                                                    storage.max_by_purpose(), rep,
-                                                   appconfig.get("CUSTOM_MAX", "")))
+                                                   appconfig.get("CUSTOM_MAX", "")), period=rep)
 
     # Рентген — ответственному
     if "xray" in loaded:
         totals = storage.xray_totals()
         if totals:
             rep = storage.report_period("xray")
-            report_to("xray", "отчёт по рентгену", totals.get("total", 0),
+            report_to("xray", "Отчёт по рентгену", totals.get("total", 0),
                       "Сводный отчёт: обработка лучевых исследований ИИ"
                       + (f" — период {rep}" if rep else ""),
                       mailer.build_xray_report_html(totals, storage.xray_list(), rep,
-                                                    appconfig.get("CUSTOM_XRAY", "")))
+                                                    appconfig.get("CUSTOM_XRAY", "")), period=rep)
 
     dry = " (DRYRUN — письма не отправляются)" if mailer.is_dryrun() else ""
     if queued:
@@ -982,6 +1047,8 @@ def send_all():
         flash("Ничего не отправлено: по загруженным отчётам нет адресатов/получателей." + dry, "warn")
     if skipped:
         flash("Пропущено: " + "; ".join(skipped) + ".", "warn")
+    audit("Запуск «Разослать всё»",
+          ("в очередь: " + "; ".join(queued)) if queued else "ничего не поставлено")
     return redirect(url_for("upload"))
 
 
@@ -993,6 +1060,8 @@ def resp_add():
     for email in _split_emails(request.form.get("email")):
         storage.resp_add(report, email, name)
         added += 1
+    if added:
+        audit("Получатели отчёта", f"{report}: добавлено {added}")
     flash(f"Добавлено получателей: {added}." if added else "Укажите e-mail получателя.",
           "ok" if added else "warn")
     return redirect(request.referrer or url_for("index"))
@@ -1005,12 +1074,20 @@ def resp_remove():
     if report and email:
         storage.resp_remove(report, email)
         flash("Получатель удалён.", "ok")
+        audit("Получатели отчёта", f"{report}: удалён {email}")
     return redirect(request.referrer or url_for("index"))
 
 
 @app.route("/log")
 def send_log_page():
-    return render_template("log.html", log=storage.send_log(200))
+    rows = storage.send_log(200)
+    kinds = sorted({r["kind"] for r in rows if r.get("kind")})
+    return render_template("log.html", log=rows, kinds=kinds, stats=storage.send_log_stats())
+
+
+@app.route("/log/ops")
+def ops_log_page():
+    return render_template("log_ops.html", rows=storage.ops_log_list(300))
 
 
 @app.route("/users")
@@ -1058,6 +1135,7 @@ def users_eisz_upload():
             return redirect(url_for("users_eisz"))
         storage.set_eisz_users(recs)
         flash(f"Загружена выгрузка ЕИСЗ ПК: {len(recs)} записей (рабочих мест).", "ok")
+        audit("Загрузка выгрузки ЕИСЗ", f"записей: {len(recs)}")
     except Exception as e:
         flash(f"Ошибка разбора выгрузки: {e}", "warn")
     return redirect(url_for("users_eisz"))
@@ -1154,6 +1232,7 @@ def users_sync():
         grp = appconfig.get("IPA_GROUP", "")
         src = f" (из группы «{grp}»)" if grp else ""
         flash(f"FreeIPA{src}: загружено {loaded} учёток, сопоставлено врачам {matched}.", "ok")
+        audit("Синхронизация FreeIPA", f"загружено {loaded}, сопоставлено {matched}")
     except Exception as e:
         flash(f"FreeIPA ошибка: {e}", "warn")
     return redirect(url_for("users_page"))
@@ -1170,6 +1249,7 @@ def users_save_ipa():
     if pw:
         appconfig.set("IPA_BIND_PW", pw)
     flash("Настройки интеграции FreeIPA сохранены.", "ok")
+    audit("Настройки FreeIPA", "обновлены")
     return redirect(url_for("users_integration"))
 
 
@@ -1180,6 +1260,7 @@ def custom_save():
     if key in CUSTOM_KEYS:
         appconfig.set(key, (request.form.get("value") or "").strip())
         flash("Текст письма сохранён.", "ok")
+        audit("Текст письма", key)
     else:
         flash("Неизвестный тип письма.", "warn")
     return redirect(request.form.get("back") or request.referrer or url_for("index"))
@@ -1194,6 +1275,7 @@ def departments_save_emails():
             storage.set_dept_email(k[len("email__"):], (v or "").strip())
             saved += 1
     flash(f"Сохранены почты отделений ({saved}).", "ok" if saved else "warn")
+    audit("Почты заведующих", f"сохранено: {saved}")
     return redirect(url_for("departments"))
 
 
@@ -1210,6 +1292,7 @@ def settings():
             if pw:  # пустое поле — не перезаписываем сохранённый пароль
                 appconfig.set("SMTP_PASS", pw)
             flash("Настройки почты сохранены.", "ok")
+            audit("Настройки SMTP", "обновлены")
         return redirect(url_for("settings"))
 
     smtp = {k: appconfig.get(k, "") for k in

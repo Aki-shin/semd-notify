@@ -164,10 +164,15 @@
       if(line) line.textContent = active ? '— идёт отправка: '+s.done+'/'+s.total+' (ошибок '+s.failed+')'+(s.queued>0?', в очереди '+s.queued:'') : '';
       var cf=document.getElementById('cancelform'); if(cf) cf.style.display = active ? '' : 'none';
       var tb=document.getElementById('sendlog');
-      if(tb && s.log) tb.innerHTML = s.log.length ? s.log.map(function(l){
-        return '<tr><td>'+esc(l.ts)+'</td><td>'+esc(l.vrach)+'</td><td>'+esc(l.email)
-          +'</td><td class="r">'+esc(l.cnt)+'</td><td>'+esc(l.status)+'</td></tr>'; }).join('')
-        : '<tr><td colspan="5" class="empty">пока пусто</td></tr>';
+      if(tb && s.log && active) tb.innerHTML = s.log.length ? s.log.map(function(l){
+        var st=String(l.status||''),
+            cls=st.indexOf('отправлено')===0?'ok':(st.indexOf('dryrun')===0?'warn':'bad');
+        return '<tr><td class="small">'+esc(String(l.ts||'').replace('T',' '))+'</td><td>'+esc(l.kind||'—')
+          +'</td><td style="text-align:left">'+esc(l.vrach)+'</td><td class="small">'+esc(l.email)
+          +'</td><td class="small" style="text-align:left">'+esc(l.subject||'—')+'</td><td class="small">'+esc(l.period||'—')
+          +'</td><td class="r">'+esc(l.cnt)+'</td><td><span class="pill '+cls+'">'+esc(st)
+          +'</span></td><td class="small">'+esc(l.by_user||'—')+'</td></tr>'; }).join('')
+        : '<tr><td colspan="9" class="empty">пока пусто</td></tr>';
     }).catch(function(){});
   }
   setInterval(poll, 2500); poll();

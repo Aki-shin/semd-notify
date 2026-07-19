@@ -38,6 +38,7 @@ def init():
             stavka TEXT, start TEXT, endwork TEXT);
         CREATE TABLE IF NOT EXISTS send_log(
             ts TEXT, vrach TEXT, email TEXT, cnt INTEGER, status TEXT);
+        CREATE TABLE IF NOT EXISTS ops_log(ts TEXT, user TEXT, action TEXT, details TEXT);
         CREATE TABLE IF NOT EXISTS dept_map(podr TEXT PRIMARY KEY, email TEXT);
         CREATE TABLE IF NOT EXISTS notrans(k TEXT PRIMARY KEY, v INTEGER);
         CREATE TABLE IF NOT EXISTS config(k TEXT PRIMARY KEY, v TEXT);
@@ -82,6 +83,11 @@ def init():
         kcols = {r["name"] for r in c.execute("PRAGMA table_info(koiki)")}
         if "pered" not in kcols:
             c.execute("ALTER TABLE koiki ADD COLUMN pered INTEGER DEFAULT 0")
+        # миграция журнала рассылок: тип, тема, период, кто запустил
+        slcols = {r["name"] for r in c.execute("PRAGMA table_info(send_log)")}
+        for col in ("kind", "subject", "period", "by_user"):
+            if col not in slcols:
+                c.execute(f"ALTER TABLE send_log ADD COLUMN {col} TEXT DEFAULT ''")
 
 
 def cfg_get(key):
@@ -1083,16 +1089,49 @@ def bulk_set_doctor_emails(items):
     return len(pairs)
 
 
-def log_send(vrach, email, cnt, status):
+def log_send(vrach, email, cnt, status, kind="", subject="", period="", by_user=""):
     with _conn() as c:
-        c.execute("INSERT INTO send_log VALUES(?,?,?,?,?)",
-                  (datetime.datetime.now().isoformat(timespec="seconds"), vrach, email, cnt, status))
+        c.execute("INSERT INTO send_log(ts,vrach,email,cnt,status,kind,subject,period,by_user) "
+                  "VALUES(?,?,?,?,?,?,?,?,?)",
+                  (datetime.datetime.now().isoformat(timespec="seconds"), vrach, email, cnt, status,
+                   kind, subject, period, by_user))
 
 
 def send_log(limit=100):
     with _conn() as c:
         return [dict(r) for r in c.execute(
             "SELECT * FROM send_log ORDER BY ts DESC LIMIT ?", (limit,))]
+
+
+def send_log_stats():
+    """Карточки журнала: сегодня / ошибок сегодня / всего / последняя отправка."""
+    init()
+    today = datetime.date.today().isoformat()
+    bad = "status LIKE 'ошибка%' OR status IN ('SMTP не настроен','нет адреса')"
+    with _conn() as c:
+        r = c.execute(f"SELECT COUNT(*) n, SUM(CASE WHEN {bad} THEN 1 ELSE 0 END) err "
+                      "FROM send_log WHERE ts LIKE ?", (today + "%",)).fetchone()
+        total = c.execute("SELECT COUNT(*) n FROM send_log").fetchone()["n"]
+        last = c.execute("SELECT MAX(ts) t FROM send_log").fetchone()["t"]
+    return {"today": r["n"] or 0, "today_err": r["err"] or 0, "total": total,
+            "last": _ts_human(last) if last else ""}
+
+
+# --- Журнал операций: кто и что сделал в менеджере ---
+
+def log_op(user, action, details=""):
+    init()
+    with _conn() as c:
+        c.execute("INSERT INTO ops_log VALUES(?,?,?,?)",
+                  (datetime.datetime.now().isoformat(timespec="seconds"),
+                   user or "—", action, (details or "")[:500]))
+
+
+def ops_log_list(limit=300):
+    init()
+    with _conn() as c:
+        return [dict(r) for r in c.execute(
+            "SELECT * FROM ops_log ORDER BY ts DESC LIMIT ?", (limit,))]
 
 
 def _norm(fio):
