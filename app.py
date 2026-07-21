@@ -70,9 +70,10 @@ REPORTS_INFO = [
      "section": "Врачи/долги (рассылка)"},
     {"key": "state",
      "title": "РЭМД. Состояние по ЭМД",
-     "gives": "ПЕРВИЧКА (еженед.): все подписанные МО документы, созданные за период, — вид, врач, "
-              "подразделение, статус, даты, дни до подписи/регистрации, попытки. Скелет витрины ЭМД: "
-              "из неё считаются статусы, виды, SLA за любой период. ПДн пациентов не сохраняются.",
+     "gives": "ПЕРВИЧКА (еженед.): все подписанные МО документы, созданные за период, — пациент, вид, "
+              "врач, подразделение, статус, даты, дни до подписи/регистрации, попытки. Скелет витрины "
+              "ЭМД: статусы, виды, SLA за любой период. Полная детализация в менеджере; "
+              "ПДн пациентов не включаются в почтовые рассылки.",
      "section": "ЭМД → Аналитика",
      "note": "Выгружать еженедельно (лимит выгрузки 50 000 строк). Фильтр — по дате документа."},
     {"key": "detail",
@@ -602,9 +603,21 @@ def emd_analytics():
         ]
     dfrom = (request.args.get("from") or "").strip()
     dto = (request.args.get("to") or "").strip()
+    # подписной контур: «в разрезе врачей» (подписано врачом) против витрины (подписано МО)
+    sign = None
+    vper = storage.report_period("vrachi")
+    m = re.findall(r"(\d{2})\.(\d{2})\.(\d{4})", vper or "")
+    if len(m) >= 2:
+        f1 = f"{m[0][2]}-{m[0][1]}-{m[0][0]}"
+        t1 = f"{m[1][2]}-{m[1][1]}-{m[1][0]}"
+        vt = storage.vrachi_totals()
+        mo = storage.emd_summary(f1, t1)["totals"]["n"]
+        sign = dict(vt, period=vper, mo=mo, wait=max(0, vt["podp"] - mo))
     return render_template("emd.html",
                            s=storage.emd_summary(dfrom, dto),
                            cov=storage.emd_coverage(),
+                           errdocs=storage.emd_error_docs(dfrom, dto),
+                           sign=sign,
                            bounds=bounds, presets=presets,
                            dfrom=dfrom, dto=dto)
 

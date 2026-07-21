@@ -81,6 +81,8 @@ def init():
             err_text TEXT DEFAULT '', attempts INTEGER DEFAULT 0, fmt TEXT DEFAULT '',
             days_to_sign REAL, days_to_reg REAL, src_week TEXT DEFAULT '',
             updated_at TEXT DEFAULT '',
+            patient TEXT DEFAULT '', birth TEXT DEFAULT '', snils TEXT DEFAULT '',
+            attach_mo TEXT DEFAULT '', uch_type TEXT DEFAULT '', uch_num TEXT DEFAULT '',
             PRIMARY KEY(regnum, version));
         CREATE INDEX IF NOT EXISTS idx_emd_created ON emd_docs(d_created);
         CREATE INDEX IF NOT EXISTS idx_emd_status ON emd_docs(status);
@@ -102,6 +104,11 @@ def init():
         for col in ("kind", "subject", "period", "by_user"):
             if col not in slcols:
                 c.execute(f"ALTER TABLE send_log ADD COLUMN {col} TEXT DEFAULT ''")
+        # миграция витрины: пациентские поля (полная информация в менеджере)
+        emcols = {r["name"] for r in c.execute("PRAGMA table_info(emd_docs)")}
+        for col in ("patient", "birth", "snils", "attach_mo", "uch_type", "uch_num"):
+            if col not in emcols:
+                c.execute(f"ALTER TABLE emd_docs ADD COLUMN {col} TEXT DEFAULT ''")
         # миграция истории файлов: флаг сжатия (большие выгрузки храним в zlib)
         pfcols = {r["name"] for r in c.execute("PRAGMA table_info(period_files)")}
         if "compressed" not in pfcols:
@@ -138,11 +145,15 @@ def emd_upsert_state(records, c):
     c.executemany("""
         INSERT INTO emd_docs(regnum,version,vid,status,vrach,podr,oid,
             d_created,d_signed,d_registered,remd_num,err_code,err_text,
-            attempts,fmt,days_to_sign,days_to_reg,src_week,updated_at)
+            attempts,fmt,days_to_sign,days_to_reg,src_week,updated_at,
+            patient,birth,snils,attach_mo,uch_type,uch_num)
         VALUES(:regnum,:version,:vid,:status,:vrach,:podr,:oid,
             :d_created,:d_signed,:d_registered,:remd_num,:err_code,:err_text,
-            :attempts,:fmt,:days_to_sign,:days_to_reg,:src_week,:updated_at)
+            :attempts,:fmt,:days_to_sign,:days_to_reg,:src_week,:updated_at,
+            :patient,:birth,:snils,:attach_mo,:uch_type,:uch_num)
         ON CONFLICT(regnum, version) DO UPDATE SET
+            patient=excluded.patient, birth=excluded.birth, snils=excluded.snils,
+            attach_mo=excluded.attach_mo, uch_type=excluded.uch_type, uch_num=excluded.uch_num,
             vid=excluded.vid, status=excluded.status, vrach=excluded.vrach,
             podr=excluded.podr, oid=excluded.oid, d_created=excluded.d_created,
             d_signed=excluded.d_signed, d_registered=excluded.d_registered,
@@ -241,6 +252,27 @@ def emd_summary(dfrom="", dto=""):
             if v is None and k != "sample":
                 x[k] = 0
     return {"totals": t, "by_vid": by_vid, "errors": errors, "by_podr": by_podr}
+
+
+def emd_error_docs(dfrom="", dto="", limit=60):
+    """Документы с ошибками за период — детально (пациент, врач, код, текст).
+    Полная информация для работы в менеджере; в письма эти поля не включаются."""
+    init()
+    W, args = _emd_where(dfrom, dto)
+    with _conn() as c:
+        return [dict(r) for r in c.execute(f"""
+            SELECT d_created, vid, patient, birth, snils, vrach, podr,
+                   err_code, err_text, attempts
+            FROM emd_docs {W} AND {_ERR}
+            ORDER BY d_created DESC, regnum DESC LIMIT ?""", args + [limit])]
+
+
+def vrachi_totals():
+    """Итог подписного контура из отчёта «в разрезе врачей» (текущая выгрузка)."""
+    init()
+    with _conn() as c:
+        r = c.execute("SELECT SUM(sform) s, SUM(podp) p, SUM(nepodp) np FROM vrachi").fetchone()
+    return {"sform": r["s"] or 0, "podp": r["p"] or 0, "nepodp": r["np"] or 0}
 
 
 def emd_coverage():

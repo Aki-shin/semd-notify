@@ -5,7 +5,8 @@
 <p class="muted">Считается из накопленной первички («РЭМД. Состояние по ЭМД» + «Детализация отправки»):
 любой период — без новых выгрузок из ЕИСЗ. Витрина сквозная, недельные загрузки складываются;
 «Детализация» события прошлых недель обновляет задним числом. Охват — документы, подписанные МО
-(неподписанные — на вкладке «Врачи / долги»).</p>
+(неподписанные — на вкладке «Врачи / долги»). В менеджере — полная информация, включая пациентов;
+в почтовые рассылки ПДн пациентов не включаются.</p>
 
 {% if not bounds.n %}
 <div class="alert">Витрина пуста. Загрузите на «Загрузке» еженедельные выгрузки
@@ -33,6 +34,19 @@
   <div class="card"><div class="num">{{ T.ready + T.sent }}</div><div class="lbl">В работе (готово + отправлено)</div></div>
   <div class="card"><div class="num">{{ T.sla_reg if T.sla_reg is not none else '—' }}</div><div class="lbl">Ср. дней до регистрации</div></div>
 </section>
+
+{% if sign %}
+<h2>Подписной контур <span class="small muted">— сверка с отчётом «в разрезе врачей» ({{ sign.period }})</span></h2>
+<section class="cards" style="grid-template-columns:repeat(4,1fr)">
+  <div class="card"><div class="num">{{ sign.sform }}</div><div class="lbl">Сформировано (по врачам)</div></div>
+  <div class="card"><div class="num">{{ sign.podp }}</div><div class="lbl">Подписано врачом</div></div>
+  <div class="card {{ 'bad' if sign.wait > 50 }}"><div class="num">{{ sign.wait }}</div><div class="lbl">Ждёт подписи МО (оценка)</div></div>
+  <div class="card {{ 'bad' if sign.nepodp }}"><div class="num">{{ sign.nepodp }}</div><div class="lbl">Не подписано врачом</div></div>
+</section>
+<p class="muted small" style="margin:4px 0 14px">«Ждёт подписи МО» = подписано врачом ({{ sign.podp }}) − подписано МО в витрине
+за те же даты ({{ sign.mo }}). Оценка: методики выгрузок различаются, прослойка обычно рассасывается за 1–2 дня —
+устойчиво большое число означает затор на подписи организации.</p>
+{% endif %}
 
 <h2>Покрытие витрины по неделям <span class="small muted">— по дате создания документа</span></h2>
 <div class="tagbar">
@@ -84,6 +98,28 @@
   </tr>
   {% else %}<tr><td colspan="4" class="empty">ошибок за период нет 🎉</td></tr>{% endfor %}
 </table>
+
+<h2>Документы с ошибками — детально <span class="small muted">— последние {{ errdocs|length }} за период; полная информация (в письма не попадает)</span></h2>
+<div class="fullbleed" style="overflow-x:auto">
+<table>
+  <tr><th>Создан</th><th>Вид документа</th><th>Пациент</th><th>Дата рожд.</th><th>СНИЛС</th>
+      <th>Врач</th><th>Подразделение</th><th>Код ошибки</th><th>Сообщение</th><th>Попыток</th></tr>
+  {% for d in errdocs %}
+  <tr>
+    <td class="small" style="white-space:nowrap">{{ d.d_created or '—' }}</td>
+    <td style="text-align:left">{{ d.vid }}</td>
+    <td style="text-align:left;white-space:nowrap">{{ d.patient or '—' }}</td>
+    <td class="small">{{ d.birth or '—' }}</td>
+    <td class="small" style="white-space:nowrap">{{ d.snils or '—' }}</td>
+    <td style="text-align:left;white-space:nowrap">{{ d.vrach or '—' }}</td>
+    <td class="small" style="text-align:left">{{ d.podr or '—' }}</td>
+    <td class="small" style="text-align:left"><code>{{ d.err_code }}</code></td>
+    <td class="small" style="text-align:left">{{ (d.err_text or '')[:160] }}{% if d.err_text and d.err_text|length > 160 %}…{% endif %}</td>
+    <td class="r">{{ d.attempts }}</td>
+  </tr>
+  {% else %}<tr><td colspan="10" class="empty">ошибок за период нет</td></tr>{% endfor %}
+</table>
+</div>
 
 {% endif %}
 {% endblock %}
