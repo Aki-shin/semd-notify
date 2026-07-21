@@ -1,9 +1,25 @@
 {% extends "base.html" %}
 {% block body %}
-<h1>Ошибки ФЛК / регистрации в РЭМД</h1>
+{% set emd_tab = 'errors' %}{% include "_emd_tabs.html" %}
+<h1>Ошибки регистрации в РЭМД</h1>
 <p class="muted">Это причины, по которым подписанные документы не попадают в реестр.
 Массовый <code>OBJECT_NOT_FOUND</code> / «подразделение не найдено» = проблема маппинга подразделений
 (часто после реорганизации) — чинится сверкой OID в ФРМО, а не врачами.</p>
+
+{% if vit and vit.errors %}
+<h2>Из витрины первички <span class="small muted">— последние 4 недели; конкретные документы — на <a href="{{ url_for('emd_analytics') }}">Аналитике</a></span></h2>
+<table>
+  <tr><th>Код ошибки</th><th>Тип</th><th>Пример сообщения</th><th>Док-в</th></tr>
+  {% for er in vit.errors %}
+  <tr>
+    <td style="text-align:left;white-space:nowrap"><code>{{ er.err_code }}</code></td>
+    <td style="text-align:left">{{ er.err_type or '—' }}</td>
+    <td style="text-align:left" class="small">{{ (er.sample or '')[:180] }}{% if er.sample and er.sample|length > 180 %}…{% endif %}</td>
+    <td class="r">{{ er.n }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% endif %}
 
 {% set report = 'err' %}
 {% set send_action = url_for('report_send') %}
@@ -14,7 +30,7 @@
 
 <div class="cols">
   <div>
-    <h2>По кодам ошибок</h2>
+    <h2>По кодам ошибок <span class="small muted">— из отчёта ФЛК (переходный период)</span></h2>
     <table>
       <tr><th>Код</th><th>Кол-во</th></tr>
       {% for c in e.by_code %}<tr><td>{{ c.code }}</td><td class="r">{{ c.c }}</td></tr>

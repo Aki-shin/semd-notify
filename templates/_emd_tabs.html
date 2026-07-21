@@ -1,5 +1,6 @@
 <div class="subtabs"><b>ЭМД</b> ·
   {% if emd_tab == 'analytics' %}<b>Аналитика</b>{% else %}<a href="{{ url_for('emd_analytics') }}">Аналитика</a>{% endif %} ·
   {% if emd_tab == 'doctors' %}<b>Врачи / долги</b>{% else %}<a href="{{ url_for('doctors') }}">Врачи / долги</a>{% endif %} ·
-  {% if emd_tab == 'departments' %}<b>Отделения</b>{% else %}<a href="{{ url_for('departments') }}">Отделения</a>{% endif %}
+  {% if emd_tab == 'departments' %}<b>Отделения</b>{% else %}<a href="{{ url_for('departments') }}">Отделения</a>{% endif %} ·
+  {% if emd_tab == 'errors' %}<b>Ошибки</b>{% else %}<a href="{{ url_for('errors') }}">Ошибки</a>{% endif %}
 </div>

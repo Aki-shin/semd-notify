@@ -712,10 +712,17 @@ def report_send():
 
 @app.route("/errors")
 def errors():
+    import datetime as _dt
+    vit = None
+    b = storage.emd_bounds()
+    if b["hi"]:
+        dfrom = (_dt.date.fromisoformat(b["hi"]) - _dt.timedelta(days=27)).isoformat()
+        vit = storage.emd_summary(dfrom, b["hi"])
     return render_template("errors.html", e=storage.errors_summary(),
                            unassigned=storage.unassigned_summary(),
                            docerr=storage.docerr_list(),
-                           resp=storage.resp_list("err"))
+                           resp=storage.resp_list("err"),
+                           vit=vit)
 
 
 @app.route("/fap")
