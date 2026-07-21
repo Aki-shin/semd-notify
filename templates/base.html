@@ -31,6 +31,7 @@
       {% set p = request.path %}
       {% set icons = {
         'dashboard': '<rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/>',
+        'chart': '<path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/>',
         'upload': '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m17 8-5-5-5 5"/><path d="M12 3v12"/>',
         'filetext': '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/>',
         'cross': '<path d="M11 2a2 2 0 0 0-2 2v5H4a2 2 0 0 0-2 2v2c0 1.1.9 2 2 2h5v5c0 1.1.9 2 2 2h2a2 2 0 0 0 2-2v-5h5a2 2 0 0 0 2-2v-2a2 2 0 0 0-2-2h-5V4a2 2 0 0 0-2-2Z"/>',
@@ -41,23 +42,36 @@
         'users': '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
         'settings': '<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>'
       } %}
-      {% set nav = [
-        ('index', '/', 'dashboard', 'Дашборд', []),
-        ('upload', '/upload', 'upload', 'Загрузка', []),
-        ('doctors', '/doctors', 'filetext', 'ЭМД', ['/doctor', '/departments', '/emd', '/errors']),
-        ('fap', '/fap', 'cross', 'ФАП', []),
-        ('koiki', '/koiki', 'bed', 'Стационары', []),
-        ('max_page', '/max', 'chat', 'MAX', []),
-        ('xray', '/xray', 'scan', 'Рентген', []),
-        ('send_log_page', '/log', 'clipboard', 'Журнал', []),
-        ('users_page', '/users', 'users', 'Сотрудники', []),
-        ('settings', '/settings', 'settings', 'Настройки', []),
-      ] %}
-      {% for ep, b, ico, label, extra in nav %}
+      {% macro navlink(ep, b, ico, label, extra, sub=false) -%}
         {% set ns = namespace(on = (p == b) if b == '/' else (p == b or p.startswith(b + '/'))) %}
         {% for x in extra %}{% if p == x or p.startswith(x + '/') %}{% set ns.on = true %}{% endif %}{% endfor %}
-        <a href="{{ url_for(ep) }}" class="{{ 'active' if ns.on }}" title="{{ label }}"><span class="ic"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{{ icons[ico]|safe }}</svg></span><span class="lbl">{{ label }}</span></a>
+        <a href="{{ url_for(ep) }}" class="{{ 'active' if ns.on }}{{ ' sub' if sub }}" title="{{ label }}"><span class="ic"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{{ icons[ico]|safe }}</svg></span><span class="lbl">{{ label }}</span></a>
+      {%- endmacro %}
+      {% set stats = [
+        ('doctors', '/doctors', 'filetext', 'ЭМД', ['/doctor', '/departments', '/emd', '/errors']),
+        ('koiki', '/koiki', 'bed', 'Стационары', []),
+        ('fap', '/fap', 'cross', 'ФАП', []),
+        ('max_page', '/max', 'chat', 'MAX', []),
+        ('xray', '/xray', 'scan', 'Рентген', []),
+      ] %}
+      {% set gns = namespace(inside=false) %}
+      {% for ep, b, ico, label, extra in stats %}
+        {% if p == b or p.startswith(b + '/') %}{% set gns.inside = true %}{% endif %}
+        {% for x in extra %}{% if p == x or p.startswith(x + '/') %}{% set gns.inside = true %}{% endif %}{% endfor %}
       {% endfor %}
+      {{ navlink('index', '/', 'dashboard', 'Дашборд', []) }}
+      {{ navlink('upload', '/upload', 'upload', 'Загрузка', []) }}
+      <button type="button" class="nav-group{{ ' inside' if gns.inside }}" data-group="stats" title="Статистика">
+        <span class="ic"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{{ icons['chart']|safe }}</svg></span>
+        <span class="lbl">Статистика</span>
+        <span class="chev lbl"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span>
+      </button>
+      <div class="nav-sub" data-sub="stats">
+        {% for ep, b, ico, label, extra in stats %}{{ navlink(ep, b, ico, label, extra, sub=true) }}{% endfor %}
+      </div>
+      {{ navlink('send_log_page', '/log', 'clipboard', 'Журнал', []) }}
+      {{ navlink('users_page', '/users', 'users', 'Сотрудники', []) }}
+      {{ navlink('settings', '/settings', 'settings', 'Настройки', []) }}
     </nav>
     <div class="side-foot">
       {% if not smtp_ok or smtp_dry %}
@@ -194,6 +208,23 @@
   menu.addEventListener('click', function(e){ e.stopPropagation(); });
   if(search) search.addEventListener('input', filter);
   document.addEventListener('click', function(){ menu.hidden=true; sw.classList.remove('open'); });
+})();
+(function(){
+  document.querySelectorAll('.nav-group').forEach(function(btn){
+    var key='navgrp.'+btn.dataset.group,
+        sub=document.querySelector('.nav-sub[data-sub="'+btn.dataset.group+'"]');
+    if(!sub) return;
+    var saved=null;
+    try { saved=localStorage.getItem(key); } catch(e){}
+    var open = btn.classList.contains('inside') || (saved===null ? true : saved==='1');
+    function apply(){ btn.classList.toggle('open', open); sub.classList.toggle('open', open); }
+    apply();
+    btn.addEventListener('click', function(){
+      open=!open;
+      try { localStorage.setItem(key, open?'1':'0'); } catch(e){}
+      apply();
+    });
+  });
 })();
 (function(){
   var b=document.getElementById('toTop'); if(!b) return;
