@@ -686,24 +686,56 @@ def departments_report_send():
     return redirect(url_for("departments"))
 
 
+def _emd_err_window():
+    """Окно сводки об ошибках из витрины: последние 4 недели по дате создания.
+    Возвращает (dfrom, dto, подпись окна) либо (None, None, None), если витрина пуста."""
+    b = storage.emd_bounds()
+    if not b["n"]:
+        return None, None, None
+    import datetime as _dt
+    hi = _dt.date.fromisoformat(b["hi"])
+    lo = hi - _dt.timedelta(days=27)
+    return lo.isoformat(), b["hi"], f"{lo.strftime('%d.%m.%Y')} — {hi.strftime('%d.%m.%Y')}"
+
+
+def _emd_err_letter():
+    """(subject, html, cnt, период) письма об ошибках из витрины."""
+    dfrom, dto, label = _emd_err_window()
+    if not label:
+        return None
+    s = storage.emd_summary(dfrom, dto)
+    html = mailer.build_emd_err_report_html(
+        label, s["totals"], s["errors"], s["by_podr"],
+        storage.emd_err_by_vrach(dfrom, dto), appconfig.get("CUSTOM_ERR", ""))
+    subj = f"Ошибки регистрации ЭМД в РЭМД — сводка за 4 недели ({label})"
+    return subj, html, s["totals"]["err"], label
+
+
 @app.route("/report/send", methods=["POST"])
 def report_send():
     resp = storage.resp_list("err")
     if not resp:
         flash("Не заданы получатели отчёта об ошибках — добавьте на странице «Ошибки».", "warn")
         return redirect(request.referrer or url_for("errors"))
-    rep = storage.report_period("vrachi")
-    data = {"funnel": storage.funnel(),
-            "errors": storage.errors_summary()["by_code"],
-            "unassigned": storage.unassigned_summary(),
-            "docerr": storage.docerr_list(),
-            "period": rep}
-    html = mailer.build_report_html(data, appconfig.get("CUSTOM_ERR", ""))
-    subj = "Отчёт по проблемам РЭМД (ответственному за исправление)" + (f" — период {rep}" if rep else "")
     to = ", ".join(r["email"] for r in resp)
-    ok, msg = mailer.send(to, subj, html)
-    storage.log_send("[отчёт] ошибки РЭМД", to, len(data["unassigned"]), msg, kind="Ошибки РЭМД",
-                     subject=subj, period=rep, by_user=_acting_user())
+    letter = _emd_err_letter()
+    if letter:  # основной путь: сводка из витрины первички
+        subj, html, cnt, label = letter
+        ok, msg = mailer.send(to, subj, html)
+        storage.log_send("[отчёт] ошибки РЭМД", to, cnt, msg, kind="Ошибки РЭМД",
+                         subject=subj, period=label, by_user=_acting_user())
+    else:  # витрина пуста — старый отчёт из ФЛК/docerr (переходный период)
+        rep = storage.report_period("vrachi")
+        data = {"funnel": storage.funnel(),
+                "errors": storage.errors_summary()["by_code"],
+                "unassigned": storage.unassigned_summary(),
+                "docerr": storage.docerr_list(),
+                "period": rep}
+        html = mailer.build_report_html(data, appconfig.get("CUSTOM_ERR", ""))
+        subj = "Отчёт по проблемам РЭМД (ответственному за исправление)" + (f" — период {rep}" if rep else "")
+        ok, msg = mailer.send(to, subj, html)
+        storage.log_send("[отчёт] ошибки РЭМД", to, len(data["unassigned"]), msg, kind="Ошибки РЭМД",
+                         subject=subj, period=rep, by_user=_acting_user())
     audit("Отправка отчёта", f"Ошибки РЭМД → {to}: {msg}")
     dry = " (DRYRUN)" if mailer.is_dryrun() else ""
     flash(f"Отчёт об ошибках ({to}): {msg}.{dry}", "ok" if ok else "warn")
@@ -1044,8 +1076,12 @@ def send_all():
                       + (f" — период {rep}" if rep else ""),
                       mailer.build_dept_report_html(depts, rep, cust), period=rep)
 
-    # Ошибки РЭМД — ответственному за исправление
-    if {"flk", "docerr"} & loaded:
+    # Ошибки РЭМД — ответственному: из витрины (если наполнена), иначе старый ФЛК-отчёт
+    letter = _emd_err_letter() if {"detail", "state", "flk", "docerr"} & loaded else None
+    if letter:
+        subj, html_err, cnt, label = letter
+        report_to("err", "Ошибки РЭМД", cnt, subj, html_err, period=label)
+    elif {"flk", "docerr"} & loaded:
         rep = storage.report_period("vrachi")
         data = {"funnel": storage.funnel(), "errors": storage.errors_summary()["by_code"],
                 "unassigned": storage.unassigned_summary(), "docerr": storage.docerr_list(),

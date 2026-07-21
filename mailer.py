@@ -188,6 +188,52 @@ def build_report_html(data, custom=""):
 </body></html>"""
 
 
+def build_emd_err_report_html(win_label, totals, errors, by_podr, by_vrach, custom=""):
+    """Отчёт ответственному об ошибках регистрации ЭМД — из витрины первички.
+    Без ПДн пациентов (политика: полные данные — только в менеджере); конкретные
+    документы с пациентами — на странице «ЭМД → Аналитика»."""
+    err_rows = "".join(
+        f"<tr><td><code>{html.escape(e['err_code'])}</code></td>"
+        f"<td>{html.escape(e['err_type'] or '—')}</td>"
+        f"<td style='font-size:12px;color:#555'>{html.escape((e['sample'] or '')[:160])}</td>"
+        f"<td style='text-align:right'><b>{e['n']}</b></td></tr>"
+        for e in errors[:20]
+    ) or "<tr><td colspan='4'>ошибок за период нет</td></tr>"
+    podr_rows = "".join(
+        f"<tr><td>{html.escape(p['podr'] or '—')}</td><td style='text-align:right'>{p['err']}</td></tr>"
+        for p in by_podr if p.get("err")
+    ) or "<tr><td colspan='2'>нет</td></tr>"
+    vr_rows = "".join(
+        f"<tr><td>{html.escape(v['v'])}</td><td style='text-align:right'>{v['n']}</td></tr>"
+        for v in by_vrach
+    ) or "<tr><td colspan='2'>нет</td></tr>"
+    share = round(100 * totals["err"] / totals["n"], 1) if totals["n"] else 0
+    return f"""<html><body style="font-family:Arial,sans-serif;font-size:14px;color:#222">
+<p>Сводка по <b>ошибкам регистрации ЭМД в РЭМД</b> за период <b>{win_label}</b>
+(по витрине первички; конкретные документы и пациенты — в системе, страница «ЭМД → Аналитика»).</p>
+<p>Документов, подписанных МО: <b>{totals['n']}</b> · зарегистрировано: {totals['reg']} ·
+<b style="color:#b91c1c">с ошибкой: {totals['err']}</b> ({share}%) ·
+в работе: {totals['ready'] + totals['sent']}.</p>
+<h3>Ошибки по кодам</h3>
+<table border="1" cellspacing="0" cellpadding="5" style="border-collapse:collapse;font-size:13px">
+<tr style="background:#eef"><th>Код</th><th>Тип</th><th>Пример сообщения</th><th>Док-в</th></tr>
+{err_rows}
+</table>
+<h3>По подразделениям</h3>
+<table border="1" cellspacing="0" cellpadding="5" style="border-collapse:collapse;font-size:13px">
+<tr style="background:#eef"><th>Подразделение</th><th>Ошибок</th></tr>
+{podr_rows}
+</table>
+<h3>По врачам (топ)</h3>
+<table border="1" cellspacing="0" cellpadding="5" style="border-collapse:collapse;font-size:13px">
+<tr style="background:#eef"><th>Врач</th><th>Ошибок</th></tr>
+{vr_rows}
+</table>
+{_custom_block(custom)}
+<p style="color:#666;font-size:12px">Сформировано автоматически системой мониторинга СЭМД (витрина первички РЭМД).</p>
+</body></html>"""
+
+
 def build_fap_report_html(s, rows, rep_period="", custom=""):
     """Полная статистика работы фельдшеров ФАП в ЭМК — ответственному за ФАП."""
     def td(v):

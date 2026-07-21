@@ -267,6 +267,18 @@ def emd_error_docs(dfrom="", dto="", limit=60):
             ORDER BY d_created DESC, regnum DESC LIMIT ?""", args + [limit])]
 
 
+def emd_err_by_vrach(dfrom="", dto="", limit=15):
+    """Топ врачей по документам с ошибками (за период) — для письма ответственному."""
+    init()
+    W, args = _emd_where(dfrom, dto)
+    with _conn() as c:
+        return [dict(r) for r in c.execute(f"""
+            SELECT CASE WHEN vrach='' THEN '(врач не указан в выгрузке)' ELSE vrach END v,
+                   COUNT(*) n
+            FROM emd_docs {W} AND {_ERR}
+            GROUP BY v ORDER BY n DESC LIMIT ?""", args + [limit])]
+
+
 def vrachi_totals():
     """Итог подписного контура из отчёта «в разрезе врачей» (текущая выгрузка)."""
     init()
