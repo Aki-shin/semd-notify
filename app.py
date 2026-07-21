@@ -1397,7 +1397,16 @@ def departments_save_emails():
 
 @app.route("/settings", methods=["GET", "POST"])
 def settings():
+    import mcp_server as mcp
     if request.method == "POST":
+        if request.form.get("action") == "save_mcp":
+            import json as _json
+            off = [t["name"] for t in mcp.tools_meta()
+                   if request.form.get(f"mcp__{t['name']}") != "on"]
+            storage.cfg_set(mcp.CFG_OFF, _json.dumps(off, ensure_ascii=False))
+            flash(f"Набор MCP-инструментов сохранён (выключено: {len(off)}).", "ok")
+            audit("Настройки MCP", f"выключены: {', '.join(off) if off else 'ничего'}")
+            return redirect(url_for("settings"))
         if request.form.get("action") == "save_smtp":
             for k in ("SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_FROM", "SMTP_FROM_NAME",
                       "SMTP_BATCH_DELAY", "SMTP_BATCH_SIZE", "SMTP_BATCH_PAUSE"):
@@ -1419,7 +1428,8 @@ def settings():
     smtp["SMTP_BATCH_DELAY"] = appconfig.get("SMTP_BATCH_DELAY", "2")
     smtp["SMTP_BATCH_SIZE"] = appconfig.get("SMTP_BATCH_SIZE", "25")
     smtp["SMTP_BATCH_PAUSE"] = appconfig.get("SMTP_BATCH_PAUSE", "30")
-    return render_template("settings.html", smtp=smtp)
+    return render_template("settings.html", smtp=smtp,
+                           mcp_tools=mcp.tools_meta(), mcp_kind_ru=mcp.KIND_RU)
 
 
 @app.route("/healthz")

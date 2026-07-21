@@ -1,20 +1,26 @@
 # -*- coding: utf-8 -*-
 """
-MCP-сервер Центра Цифровизации: доступ ИИ-ассистентов к витрине и сводкам.
+MCP-сервер Центра Цифровизации: доступ ИИ-ассистентов к витрине и действиям.
 
-Шина контекста для нейронки: инструменты сгруппированы по доменам (emd_*, koiki_*,
-staff_* …); будущие модули (бухгалтерия, ЭДО, админ-утилиты) добавляют свои
-инструменты в TOOLS — клиент обнаруживает их сам через tools/list.
+Шина контекста и действий: инструменты сгруппированы по видам —
+  чтение (read)   : сводки, детализация, журналы;
+  изменение (write): тексты писем, теги/комментарии, получатели, почты, планы;
+  отправка (send) : сводные отчёты ответственным (по умолчанию ВЫКЛЮЧЕНЫ).
+Будущие модули (бухгалтерия, ЭДО, админ-утилиты) добавляют свои инструменты в TOOLS —
+клиент обнаруживает их сам через tools/list.
+
+Набор доступных инструментов управляется со страницы «Настройки» (раздел
+«MCP-инструменты»): выключенные не видны в tools/list и отклоняются в tools/call.
+Конфиг читается из БД на каждый запрос — изменения применяются сразу.
 
 Транспорт — stdio (JSON-RPC 2.0, MCP 2024-11-05), запускается клиентом:
     python mcp_server.py
 Подключение (пример для Claude Code):
     claude mcp add centr -- python C:/путь/до/semd-notify/mcp_server.py
 
-Данные: read-only, каждый вызов пишется в журнал операций (страница «Журнал →
-Операции»). Маска ПДн: у пациентов срезаются прямые идентификаторы — ФИО и СНИЛС
-(PATIENT_MASK); остальное отдаётся полностью. Врачи и сотрудники — служебный
-контекст, не маскируются.
+Маска ПДн: у пациентов всегда срезаются прямые идентификаторы — ФИО и СНИЛС
+(PATIENT_MASK); врачи и сотрудники — служебный контекст, не маскируются.
+Каждый вызов пишется в журнал операций («Журнал → Операции»).
 """
 import datetime
 import json
@@ -22,11 +28,26 @@ import re
 import sys
 
 import storage
+import appconfig
 
 PROTOCOL = "2024-11-05"
-SERVER_INFO = {"name": "centr-cifrovizacii", "version": "1.0"}
+SERVER_INFO = {"name": "centr-cifrovizacii", "version": "2.0"}
 # Прямые идентификаторы пациента: всегда вырезаются из ответов инструментов.
 PATIENT_MASK = ("patient", "snils")
+# Ключ конфига: JSON-список выключенных инструментов (правится в «Настройках»).
+CFG_OFF = "MCP_TOOLS_OFF"
+
+# Тексты писем, которые разрешено редактировать ассистенту (ключ -> подпись).
+LETTER_KEYS = {
+    "CUSTOM_DEBT": "письмо врачу о неподписанных документах",
+    "CUSTOM_DEPT": "сводка заведующему отделением",
+    "CUSTOM_ERR": "отчёт ответственному за ошибки РЭМД",
+    "CUSTOM_FAP": "отчёт по ФАП",
+    "CUSTOM_KOIKI": "отчёты по стационарам",
+    "CUSTOM_MAX": "отчёт MAX",
+    "CUSTOM_XRAY": "отчёт по рентгену",
+}
+RESP_KINDS = ("dept", "err", "fap", "koiki", "max", "xray")
 
 
 def _mask(rows):
@@ -41,7 +62,7 @@ def _period_args(a):
     return (a.get("date_from") or "", a.get("date_to") or "")
 
 
-# ---------- инструменты: ЭМД (витрина первички) ----------
+# ================= ЧТЕНИЕ =================
 
 def emd_summary(a):
     """Сводка ЭМД за период: итоги, по видам, ошибки по кодам, по подразделениям."""
@@ -83,8 +104,6 @@ def emd_doctors_debts(a):
     docs = storage.doctors(a.get("order") or "nepodp")
     return docs[: int(a.get("limit") or 30)]
 
-
-# ---------- инструменты: остальные домены ----------
 
 def koiki_summary(a):
     """Стационары: занятость коечного фонда — итоги и отделения (с группами)."""
@@ -134,6 +153,185 @@ def ops_log_recent(a):
     return storage.ops_log_list(int(a.get("limit") or 30))
 
 
+def letter_text_get(a):
+    """Текущий произвольный текст письма по ключу (см. letter_text_set)."""
+    key = (a.get("key") or "").strip()
+    if key not in LETTER_KEYS:
+        raise ValueError(f"неизвестный ключ; допустимые: {', '.join(LETTER_KEYS)}")
+    return {"key": key, "purpose": LETTER_KEYS[key], "text": appconfig.get(key, "")}
+
+
+# ================= ИЗМЕНЕНИЕ =================
+
+def letter_text_set(a):
+    """Задать произвольный текст письма (блок оператора в рассылке). Ключи:
+    CUSTOM_DEBT (долги врачу), CUSTOM_DEPT (заведующему), CUSTOM_ERR (ошибки РЭМД),
+    CUSTOM_FAP, CUSTOM_KOIKI, CUSTOM_MAX, CUSTOM_XRAY. Пустой text очищает блок."""
+    key = (a.get("key") or "").strip()
+    if key not in LETTER_KEYS:
+        raise ValueError(f"неизвестный ключ; допустимые: {', '.join(LETTER_KEYS)}")
+    text = (a.get("text") or "").strip()
+    appconfig.set(key, text)
+    return {"ok": True, "key": key, "purpose": LETTER_KEYS[key], "length": len(text)}
+
+
+def report_comment_set(a):
+    """Комментарий к отчёту на странице «Загрузка» (rtype — ключ отчёта)."""
+    rtype = (a.get("rtype") or "").strip()
+    storage.set_report_comment(rtype, a.get("comment") or "")
+    return {"ok": True, "rtype": rtype}
+
+
+def report_tag_add(a):
+    """Добавить тег отчёту (классификация на «Загрузке»)."""
+    storage.report_tag_add((a.get("rtype") or "").strip(), a.get("tag") or "")
+    return {"ok": True}
+
+
+def report_tag_remove(a):
+    """Убрать тег у отчёта."""
+    storage.report_tag_remove((a.get("rtype") or "").strip(), (a.get("tag") or "").strip())
+    return {"ok": True}
+
+
+def responsible_add(a):
+    """Добавить получателя сводного отчёта. report: dept | err | fap | koiki | max | xray."""
+    report = (a.get("report") or "").strip()
+    if report not in RESP_KINDS:
+        raise ValueError(f"report должен быть одним из: {', '.join(RESP_KINDS)}")
+    email = (a.get("email") or "").strip()
+    if not email or "@" not in email:
+        raise ValueError("нужен корректный email")
+    storage.resp_add(report, email, (a.get("name") or "").strip())
+    return {"ok": True, "recipients": storage.resp_list(report)}
+
+
+def responsible_remove(a):
+    """Убрать получателя сводного отчёта."""
+    report = (a.get("report") or "").strip()
+    if report not in RESP_KINDS:
+        raise ValueError(f"report должен быть одним из: {', '.join(RESP_KINDS)}")
+    storage.resp_remove(report, (a.get("email") or "").strip())
+    return {"ok": True, "recipients": storage.resp_list(report)}
+
+
+def doctor_email_set(a):
+    """Сохранить почту врача (ФИО как в отчётах)."""
+    vrach = (a.get("vrach") or "").strip()
+    email = (a.get("email") or "").strip()
+    if not vrach:
+        raise ValueError("нужно ФИО врача (vrach)")
+    n = storage.bulk_set_doctor_emails([(vrach, email)])
+    return {"ok": True, "saved": n}
+
+
+def dept_email_set(a):
+    """Сохранить почту заведующего отделением (podr — подразделение как в отчётах)."""
+    podr = (a.get("podr") or "").strip()
+    if not podr:
+        raise ValueError("нужно подразделение (podr)")
+    storage.set_dept_email(podr, (a.get("email") or "").strip())
+    return {"ok": True}
+
+
+def koiki_responsible_set(a):
+    """Стационары: ответственный и почта по отделению (otdelenie как на «Стационарах»)."""
+    od = (a.get("otdelenie") or "").strip()
+    if not od:
+        raise ValueError("нужно отделение (otdelenie)")
+    storage.set_koiki_resp(od, (a.get("resp") or "").strip(), (a.get("email") or "").strip())
+    return {"ok": True}
+
+
+def koiki_plan_set(a):
+    """Стационары: годовой план госпитализаций отделению или группе."""
+    od = (a.get("otdelenie") or "").strip()
+    if not od:
+        raise ValueError("нужно отделение или группа (otdelenie)")
+    plan = int(a.get("plan") or 0)
+    if od in set(storage.koiki_groups()):
+        storage.set_koiki_group_plan(od, plan)
+    else:
+        storage.set_koiki_plan(od, plan)
+    return {"ok": True, "otdelenie": od, "plan": plan}
+
+
+# ================= ОТПРАВКА =================
+
+def send_summary_report(a):
+    """Отправить сводный отчёт ответственным (получатели — из настроек страниц).
+    kind: err (ошибки РЭМД, из витрины) | dept | fap | koiki | max | xray.
+    Письма не содержат ПДн пациентов. Запись — в журнал рассылок."""
+    import mailer
+    kind = (a.get("kind") or "").strip()
+    if kind not in RESP_KINDS:
+        raise ValueError(f"kind должен быть одним из: {', '.join(RESP_KINDS)}")
+    resp = storage.resp_list(kind)
+    if not resp:
+        raise ValueError(f"не заданы получатели отчёта «{kind}» — добавьте на странице или через responsible_add")
+    to = ", ".join(r["email"] for r in resp)
+
+    if kind == "err":
+        import app as _app
+        letter = _app._emd_err_letter()
+        if not letter:
+            raise ValueError("витрина пуста — загрузите первички «Состояние» и «Детализация»")
+        subj, html, cnt, label = letter
+    elif kind == "dept":
+        depts = storage.dept_summary()
+        if not depts:
+            raise ValueError("отчёт «в разрезе врачей» не загружен")
+        rep = storage.report_period("vrachi")
+        html = mailer.build_dept_report_html(depts, rep, appconfig.get("CUSTOM_DEPT", ""))
+        subj = "Сводный отчёт по подписанию СЭМД в разрезе подразделений" + (f" — период {rep}" if rep else "")
+        cnt, label = len(depts), rep
+    elif kind == "fap":
+        s = storage.fap_summary()
+        if not s:
+            raise ValueError("отчёт по ФАП не загружен")
+        rep = storage.report_period("fap")
+        html = mailer.build_fap_report_html(s, storage.fap_list(), rep, appconfig.get("CUSTOM_FAP", ""))
+        subj = "Отчёт по работе ФАП в ЭМК" + (f" — период {rep}" if rep else "")
+        cnt, label = s.get("n", 0), rep
+    elif kind == "koiki":
+        wards = storage.koiki_list()
+        if not wards:
+            raise ValueError("отчёт по койкам не загружен")
+        rep = storage.report_period("koiki")
+        html = mailer.build_koiki_overall_html(wards, storage.koiki_totals(), rep,
+                                               appconfig.get("CUSTOM_KOIKI", ""), storage.koiki_cumulative())
+        subj = "Сводный отчёт: занятость коечного фонда" + (f" — период {rep}" if rep else "")
+        cnt, label = len(wards), rep
+    elif kind == "max":
+        totals = storage.max_totals()
+        if not totals:
+            raise ValueError("отчёт MAX не загружен")
+        rep = storage.report_period("max")
+        html = mailer.build_max_report_html(totals, storage.max_by_doctor(),
+                                            storage.max_by_purpose(), rep, appconfig.get("CUSTOM_MAX", ""))
+        subj = "Сводный отчёт: ТМК через чат-бот MAX" + (f" — период {rep}" if rep else "")
+        cnt, label = totals.get("n_doctors", 0), rep
+    else:  # xray
+        totals = storage.xray_totals()
+        if not totals:
+            raise ValueError("отчёт по рентгену не загружен")
+        rep = storage.report_period("xray")
+        html = mailer.build_xray_report_html(totals, storage.xray_list(), rep, appconfig.get("CUSTOM_XRAY", ""))
+        subj = "Сводный отчёт: обработка лучевых исследований ИИ" + (f" — период {rep}" if rep else "")
+        cnt, label = totals.get("total", 0), rep
+
+    ok, msg = mailer.send(to, subj, html)
+    storage.log_send(f"[MCP] сводный отчёт: {kind}", to, cnt, msg,
+                     kind={"err": "Ошибки РЭМД", "dept": "Свод по подразделениям",
+                           "fap": "Отчёт по ФАП", "koiki": "Свод по стационарам",
+                           "max": "Отчёт MAX", "xray": "Отчёт по рентгену"}[kind],
+                     subject=subj, period=label or "", by_user="MCP-ассистент")
+    return {"ok": ok, "status": msg, "to": to, "subject": subj,
+            "dryrun": mailer.is_dryrun()}
+
+
+# ================= РЕЕСТР =================
+
 _PERIOD_PROPS = {
     "date_from": {"type": "string", "description": "начало периода ГГГГ-ММ-ДД (пусто = без ограничения)"},
     "date_to": {"type": "string", "description": "конец периода ГГГГ-ММ-ДД (пусто = без ограничения)"},
@@ -141,39 +339,102 @@ _PERIOD_PROPS = {
 _LIMIT_PROP = {"limit": {"type": "integer", "description": "максимум строк"}}
 
 
-def _schema(props=None):
-    return {"type": "object", "properties": props or {}, "additionalProperties": False}
+def _schema(props=None, required=None):
+    s = {"type": "object", "properties": props or {}, "additionalProperties": False}
+    if required:
+        s["required"] = list(required)
+    return s
 
 
+# (имя, функция, схема, вид: read | write | send)
 TOOLS = [
-    ("emd_summary", emd_summary, _schema(_PERIOD_PROPS)),
-    ("emd_error_docs", emd_error_docs, _schema({**_PERIOD_PROPS, **_LIMIT_PROP})),
-    ("emd_errors_by_doctor", emd_errors_by_doctor, _schema({**_PERIOD_PROPS, **_LIMIT_PROP})),
-    ("emd_coverage", emd_coverage, _schema()),
-    ("emd_signing_gap", emd_signing_gap, _schema()),
+    ("emd_summary", emd_summary, _schema(_PERIOD_PROPS), "read"),
+    ("emd_error_docs", emd_error_docs, _schema({**_PERIOD_PROPS, **_LIMIT_PROP}), "read"),
+    ("emd_errors_by_doctor", emd_errors_by_doctor, _schema({**_PERIOD_PROPS, **_LIMIT_PROP}), "read"),
+    ("emd_coverage", emd_coverage, _schema(), "read"),
+    ("emd_signing_gap", emd_signing_gap, _schema(), "read"),
     ("emd_doctors_debts", emd_doctors_debts, _schema(
-        {"order": {"type": "string", "enum": ["nepodp", "pct", "vrach"]}, **_LIMIT_PROP})),
-    ("koiki_summary", koiki_summary, _schema()),
-    ("fap_summary", fap_summary, _schema()),
-    ("max_summary", max_summary, _schema()),
-    ("xray_summary", xray_summary, _schema()),
-    ("staff_stats", staff_stats, _schema()),
-    ("reports_status", reports_status, _schema()),
-    ("send_log_recent", send_log_recent, _schema(_LIMIT_PROP)),
-    ("ops_log_recent", ops_log_recent, _schema(_LIMIT_PROP)),
+        {"order": {"type": "string", "enum": ["nepodp", "pct", "vrach"]}, **_LIMIT_PROP}), "read"),
+    ("koiki_summary", koiki_summary, _schema(), "read"),
+    ("fap_summary", fap_summary, _schema(), "read"),
+    ("max_summary", max_summary, _schema(), "read"),
+    ("xray_summary", xray_summary, _schema(), "read"),
+    ("staff_stats", staff_stats, _schema(), "read"),
+    ("reports_status", reports_status, _schema(), "read"),
+    ("send_log_recent", send_log_recent, _schema(_LIMIT_PROP), "read"),
+    ("ops_log_recent", ops_log_recent, _schema(_LIMIT_PROP), "read"),
+    ("letter_text_get", letter_text_get, _schema(
+        {"key": {"type": "string", "enum": list(LETTER_KEYS)}}, ["key"]), "read"),
+    ("letter_text_set", letter_text_set, _schema(
+        {"key": {"type": "string", "enum": list(LETTER_KEYS)},
+         "text": {"type": "string", "description": "текст блока оператора (пусто — очистить)"}},
+        ["key", "text"]), "write"),
+    ("report_comment_set", report_comment_set, _schema(
+        {"rtype": {"type": "string"}, "comment": {"type": "string"}}, ["rtype"]), "write"),
+    ("report_tag_add", report_tag_add, _schema(
+        {"rtype": {"type": "string"}, "tag": {"type": "string"}}, ["rtype", "tag"]), "write"),
+    ("report_tag_remove", report_tag_remove, _schema(
+        {"rtype": {"type": "string"}, "tag": {"type": "string"}}, ["rtype", "tag"]), "write"),
+    ("responsible_add", responsible_add, _schema(
+        {"report": {"type": "string", "enum": list(RESP_KINDS)},
+         "email": {"type": "string"}, "name": {"type": "string"}}, ["report", "email"]), "write"),
+    ("responsible_remove", responsible_remove, _schema(
+        {"report": {"type": "string", "enum": list(RESP_KINDS)},
+         "email": {"type": "string"}}, ["report", "email"]), "write"),
+    ("doctor_email_set", doctor_email_set, _schema(
+        {"vrach": {"type": "string", "description": "ФИО врача как в отчётах"},
+         "email": {"type": "string"}}, ["vrach", "email"]), "write"),
+    ("dept_email_set", dept_email_set, _schema(
+        {"podr": {"type": "string"}, "email": {"type": "string"}}, ["podr", "email"]), "write"),
+    ("koiki_responsible_set", koiki_responsible_set, _schema(
+        {"otdelenie": {"type": "string"}, "resp": {"type": "string"},
+         "email": {"type": "string"}}, ["otdelenie"]), "write"),
+    ("koiki_plan_set", koiki_plan_set, _schema(
+        {"otdelenie": {"type": "string"}, "plan": {"type": "integer"}},
+        ["otdelenie", "plan"]), "write"),
+    ("send_summary_report", send_summary_report, _schema(
+        {"kind": {"type": "string", "enum": list(RESP_KINDS)}}, ["kind"]), "send"),
 ]
-_BY_NAME = {n: fn for n, fn, _ in TOOLS}
+_BY_NAME = {n: (fn, kind) for n, fn, _, kind in TOOLS}
+KIND_RU = {"read": "чтение", "write": "изменение", "send": "отправка"}
+
+
+def tools_meta():
+    """Метаданные для страницы «Настройки»: имя, вид, описание, выключен ли."""
+    off = disabled_set()
+    return [{"name": n, "kind": kind, "descr": (fn.__doc__ or "").strip().split("\n")[0],
+             "enabled": n not in off}
+            for n, fn, _, kind in TOOLS]
+
+
+def disabled_set():
+    """Выключенные инструменты (из настроек; по умолчанию выключена вся отправка)."""
+    raw = storage.cfg_get(CFG_OFF)
+    if raw is None:
+        return {n for n, _, _, kind in TOOLS if kind == "send"}
+    try:
+        return set(json.loads(raw))
+    except ValueError:
+        return set()
 
 
 def _tools_payload():
-    return [{"name": n, "description": (fn.__doc__ or "").strip(),
-             "inputSchema": schema} for n, fn, schema in TOOLS]
+    off = disabled_set()
+    out = []
+    for n, fn, schema, kind in TOOLS:
+        if n in off:
+            continue
+        out.append({"name": n, "description": (fn.__doc__ or "").strip(),
+                    "inputSchema": schema,
+                    "annotations": {"readOnlyHint": kind == "read",
+                                    "destructiveHint": False}})
+    return out
 
 
-def _audit(tool, args):
+def _audit(tool, args, note=""):
     try:
         storage.log_op("MCP-ассистент", "MCP: вызов инструмента",
-                       f"{tool}({json.dumps(args, ensure_ascii=False)})")
+                       f"{tool}({json.dumps(args, ensure_ascii=False)})" + (f" — {note}" if note else ""))
     except Exception:
         pass
 
@@ -190,7 +451,7 @@ def handle(req):
     if method == "initialize":
         return {"jsonrpc": "2.0", "id": rid,
                 "result": {"protocolVersion": PROTOCOL,
-                           "capabilities": {"tools": {}},
+                           "capabilities": {"tools": {"listChanged": False}},
                            "serverInfo": SERVER_INFO}}
     if method == "notifications/initialized":
         return None
@@ -202,10 +463,18 @@ def handle(req):
         params = req.get("params") or {}
         name = params.get("name", "")
         args = params.get("arguments") or {}
-        fn = _BY_NAME.get(name)
-        if not fn:
+        entry = _BY_NAME.get(name)
+        if not entry:
             return {"jsonrpc": "2.0", "id": rid,
                     "error": {"code": -32602, "message": f"неизвестный инструмент: {name}"}}
+        if name in disabled_set():
+            _audit(name, args, "ОТКЛОНЕНО: выключен в настройках")
+            return {"jsonrpc": "2.0", "id": rid,
+                    "result": {"content": [{"type": "text",
+                               "text": f"инструмент «{name}» выключен в настройках Центра "
+                                       f"(страница «Настройки» → MCP-инструменты)"}],
+                               "isError": True}}
+        fn, kind = entry
         _audit(name, args)
         try:
             data = fn(args)

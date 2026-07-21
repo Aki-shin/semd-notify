@@ -23,4 +23,27 @@
   <label>Пауза между пачками, сек <input name="SMTP_BATCH_PAUSE" value="{{ smtp.SMTP_BATCH_PAUSE or '30' }}" size="5"></label>
   <div><button type="submit">Сохранить почту</button></div>
 </form>
+
+<h2>MCP-инструменты <span class="small muted">— что разрешено ИИ-ассистенту</span></h2>
+<p class="muted small">MCP-сервер (<code>mcp_server.py</code>) даёт ассистенту инструменты трёх видов:
+<b>чтение</b> (сводки и журналы), <b>изменение</b> (тексты писем, теги, получатели, почты, планы),
+<b>отправка</b> (сводные отчёты ответственным — по умолчанию выключена).
+Выключенный инструмент не виден ассистенту и отклоняется при вызове; каждый вызов пишется
+в «Журнал → Операции». ПДн пациентов (ФИО, СНИЛС) в ответы не попадают никогда.</p>
+<form method="post" class="cfg" style="max-width:820px">
+  <input type="hidden" name="action" value="save_mcp">
+  {% for kind in ('read', 'write', 'send') %}
+  <p style="margin:10px 0 4px"><b>{{ mcp_kind_ru[kind] | capitalize }}</b></p>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:2px 18px">
+    {% for t in mcp_tools if t.kind == kind %}
+    <label class="chk" style="margin:2px 0" title="{{ t.descr }}">
+      <input type="checkbox" name="mcp__{{ t.name }}" {{ 'checked' if t.enabled }}>
+      <code style="font-size:12px">{{ t.name }}</code>
+      <span class="small muted" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ t.descr[:60] }}</span>
+    </label>
+    {% endfor %}
+  </div>
+  {% endfor %}
+  <div style="margin-top:10px"><button type="submit">Сохранить набор инструментов</button></div>
+</form>
 {% endblock %}
