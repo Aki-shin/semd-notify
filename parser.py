@@ -120,9 +120,9 @@ def _rows_xlsx(path):
         return out
 
 
-def _num(x):
+def _num(x, cast=float):
     try:
-        return float(str(x).replace(" ", "").replace(",", "."))
+        return cast(str(x).replace(" ", "").replace(" ", "").replace(",", "."))
     except (ValueError, TypeError):
         return None
 
@@ -147,6 +147,10 @@ def detect_type(rows):
         return "vrachi"
     if "неподписанными документами" in head or "неподписанных документ" in head:
         return "debts"
+    if "в разрезе видов документов и работников" in head:
+        return "vid_worker"   # агрегат вид×врач: считается из витрины, загрузка не нужна
+    if "детализация статистики отправки" in head:
+        return "detail"
     if "в разрезе видов документов" in head:
         return "vidy"
     if "по статусам документ" in head:
@@ -168,7 +172,96 @@ def _period(rows):
         low = joined.lower()
         if "период" in low or ("с " in low and "по" in low and "202" in low):
             return joined
+    return _period_from_dates(rows)
+
+
+def _period_from_dates(rows):
+    """Период из строк «Дата начала: …» / «Дата окончания: …» (выгрузки РЭМД)."""
+    d1 = d2 = ""
+    for r in rows[:16]:
+        joined = " ".join(v for v in r.values() if v)
+        low = joined.lower()
+        m = re.findall(r"\d{2}\.\d{2}\.\d{4}", joined)
+        if "дата начала" in low and m:
+            d1 = m[0]
+            if "дата оконча" in low and len(m) > 1:
+                d2 = m[1]
+        elif "дата оконча" in low and m:
+            d2 = m[0]
+    if d1 and d2:
+        return f"с {d1} по {d2}"
     return ""
+
+
+def _iso(d):
+    """«ДД.ММ.ГГГГ» -> «ГГГГ-ММ-ДД» (для сортируемого хранения в витрине)."""
+    d = (d or "").strip()
+    m = re.match(r"^(\d{2})\.(\d{2})\.(\d{4})", d)
+    return f"{m.group(3)}-{m.group(2)}-{m.group(1)}" if m else ""
+
+
+def _parse_state(rows):
+    """«РЭМД. Состояние по ЭМД» — подокументный реестр (по дате создания документа).
+    ПДн пациентов (ФИО/дата рождения/СНИЛС, колонки 8-10) сознательно НЕ читаем —
+    в витрине храним только врачебно-организационный разрез."""
+    out = []
+    started = False
+    for r in rows:
+        if not started:
+            if " ".join((r.get(1, "") or "").split()) == "№ п/п":
+                started = True
+            continue
+        no = (r.get(1, "") or "").strip()
+        if not no.replace(".", "").isdigit():
+            continue
+        if (r.get(2, "") or "").strip().isdigit():
+            continue          # строка с номерами колонок под шапкой — не данные
+        regnum = (r.get(21, "") or "").strip()
+        if not regnum:
+            continue
+        out.append({
+            "regnum": regnum,
+            "version": _num(r.get(24), int) or 1,
+            "vid": r.get(2, ""), "status": r.get(7, ""),
+            "vrach": r.get(15, ""), "podr": r.get(18, ""), "oid": r.get(20, ""),
+            "d_created": _iso(r.get(5)), "d_signed": _iso(r.get(25)),
+            "d_registered": _iso(r.get(22)), "remd_num": r.get(23, ""),
+            "err_code": " ".join((r.get(30, "") or "").split()), "err_text": r.get(31, ""),
+            "attempts": _num(r.get(32), int) or 0, "fmt": r.get(29, ""),
+            "days_to_sign": _num(r.get(26)), "days_to_reg": _num(r.get(28)),
+        })
+    return out
+
+
+def _parse_detail(rows):
+    """«Детализация статистики отправки ЭМД» — события отправки/регистрации за период
+    (включая документы прошлых недель — этим выгрузка сама актуализирует витрину)."""
+    out = []
+    started = False
+    for r in rows:
+        if not started:
+            if " ".join((r.get(1, "") or "").split()) == "№ п/п":
+                started = True
+            continue
+        no = (r.get(1, "") or "").strip()
+        if not no.replace(".", "").isdigit():
+            continue
+        if (r.get(2, "") or "").strip().isdigit():
+            continue          # строка с номерами колонок под шапкой — не данные
+        uid = (r.get(11, "") or "").strip()
+        regnum = (r.get(8, "") or "").strip() or (f"uid:{uid}" if uid else "")
+        if not regnum:
+            continue
+        out.append({
+            "uid": uid, "regnum": regnum,
+            "vid": r.get(2, ""), "status": r.get(3, ""),
+            "d_registered": _iso(r.get(4)), "oid": r.get(6, ""), "podr": r.get(7, ""),
+            "vrach": r.get(10, ""), "remd_num": r.get(12, ""),
+            "err_code": " ".join((r.get(13, "") or "").split()),
+            "err_type": " ".join((r.get(14, "") or "").split()), "err_text": r.get(15, ""),
+            "d_doc": _iso(r.get(9)),
+        })
+    return out
 
 
 def norm_period(text):
@@ -232,6 +325,12 @@ def parse(path):
 
     if rtype == "koiki":
         res["records"] = _parse_koiki(_rows_merged(path))
+    elif rtype == "state":
+        res["records"] = _parse_state(rows)
+        res["period"] = _period_from_dates(rows) or res["period"]
+    elif rtype == "detail":
+        res["records"] = _parse_detail(rows)
+        res["period"] = _period_from_dates(rows) or res["period"]
     elif rtype == "vrachi":
         res["records"] = _parse_vrachi(rows)
     elif rtype == "debts":

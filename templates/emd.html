@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block body %}
+{% set emd_tab = 'analytics' %}{% include "_emd_tabs.html" %}
+<h1>ЭМД — аналитика по витрине</h1>
+<p class="muted">Считается из накопленной первички («РЭМД. Состояние по ЭМД» + «Детализация отправки»):
+любой период — без новых выгрузок из ЕИСЗ. Витрина сквозная, недельные загрузки складываются;
+«Детализация» события прошлых недель обновляет задним числом. Охват — документы, подписанные МО
+(неподписанные — на вкладке «Врачи / долги»).</p>
+
+{% if not bounds.n %}
+<div class="alert">Витрина пуста. Загрузите на «Загрузке» еженедельные выгрузки
+«РЭМД. Состояние по ЭМД» и «Детализация статистики отправки ЭМД» — данные накапливаются.</div>
+{% else %}
+
+<div class="toolbar" style="margin-top:2px">
+  <div class="tagbar" style="margin:0">
+    {% for label, f, t in presets %}
+    <a class="tchip {{ 'on' if dfrom == f and dto == t }}" href="{{ url_for('emd_analytics', **({'from': f, 'to': t} if f or t else {})) }}">{{ label }}</a>
+    {% endfor %}
+  </div>
+  <form method="get" style="margin:0;display:flex;gap:6px;align-items:center">
+    <span class="small muted">с</span><input type="date" name="from" value="{{ dfrom }}" min="{{ bounds.lo }}" max="{{ bounds.hi }}">
+    <span class="small muted">по</span><input type="date" name="to" value="{{ dto }}" min="{{ bounds.lo }}" max="{{ bounds.hi }}">
+    <button type="submit">Показать</button>
+  </form>
+</div>
+
+{% set T = s.totals %}
+<section class="cards" style="grid-template-columns:repeat(5,1fr)">
+  <div class="card"><div class="num">{{ T.n }}</div><div class="lbl">Подписано МО (создано за период)</div></div>
+  <div class="card"><div class="num">{{ T.reg }}</div><div class="lbl">Зарегистрировано в РЭМД{% if T.n %} · {{ (100 * T.reg / T.n) | round(1) }}%{% endif %}</div></div>
+  <div class="card {{ 'bad' if T.err }}"><div class="num">{{ T.err }}</div><div class="lbl">С ошибкой</div></div>
+  <div class="card"><div class="num">{{ T.ready + T.sent }}</div><div class="lbl">В работе (готово + отправлено)</div></div>
+  <div class="card"><div class="num">{{ T.sla_reg if T.sla_reg is not none else '—' }}</div><div class="lbl">Ср. дней до регистрации</div></div>
+</section>
+
+<h2>Покрытие витрины по неделям <span class="small muted">— по дате создания документа</span></h2>
+<div class="tagbar">
+  {% for w in cov.weeks %}
+  <span class="tchip" style="cursor:default" title="документов: {{ w.n }}, ошибок: {{ w.err }}">{{ w.w }} <span class="tcnt">{{ w.n }}</span></span>
+  {% endfor %}
+</div>
+{% if cov.gaps %}
+<div class="alert">⚠️ Дырки в покрытии: {% for g in cov.gaps %}между {{ g.after }} и {{ g.before }} ({{ g.weeks }} нед.){% if not loop.last %}; {% endif %}{% endfor %} —
+догрузите недельные выгрузки за пропущенные недели, и картина срастётся.</div>
+{% endif %}
+
+<div class="cols">
+  <div>
+    <h2>По видам документов <span class="small muted">— топ-15 за период</span></h2>
+    <table>
+      <tr><th>Вид документа</th><th>Всего</th><th>Зарег.</th><th>Ошибки</th><th>% рег.</th></tr>
+      {% for r in s.by_vid %}
+      <tr {% if r.err %}class="lowpct"{% endif %}>
+        <td style="text-align:left">{{ r.vid or '—' }}</td>
+        <td class="r">{{ r.n }}</td><td class="r">{{ r.reg }}</td>
+        <td class="r {{ 'bad' if r.err }}">{{ r.err }}</td>
+        <td class="r">{{ (100 * r.reg / r.n) | round(1) if r.n else '—' }}</td>
+      </tr>
+      {% else %}<tr><td colspan="5" class="empty">нет данных за период</td></tr>{% endfor %}
+    </table>
+  </div>
+  <div>
+    <h2>По подразделениям <span class="small muted">— топ-12</span></h2>
+    <table>
+      <tr><th>Подразделение</th><th>Всего</th><th>Ошибки</th></tr>
+      {% for r in s.by_podr %}
+      <tr><td style="text-align:left">{{ r.podr or '—' }}</td><td class="r">{{ r.n }}</td>
+          <td class="r {{ 'bad' if r.err }}">{{ r.err }}</td></tr>
+      {% else %}<tr><td colspan="3" class="empty">нет данных</td></tr>{% endfor %}
+    </table>
+  </div>
+</div>
+
+<h2>Ошибки регистрации <span class="small muted">— сгруппировано по коду и типу, за период</span></h2>
+<table>
+  <tr><th>Код ошибки</th><th>Тип</th><th>Пример сообщения</th><th>Док-в</th></tr>
+  {% for e in s.errors %}
+  <tr>
+    <td style="text-align:left;white-space:nowrap"><code>{{ e.err_code }}</code></td>
+    <td style="text-align:left">{{ e.err_type or '—' }}</td>
+    <td style="text-align:left" class="small">{{ (e.sample or '')[:220] }}{% if e.sample and e.sample|length > 220 %}…{% endif %}</td>
+    <td class="r">{{ e.n }}</td>
+  </tr>
+  {% else %}<tr><td colspan="4" class="empty">ошибок за период нет 🎉</td></tr>{% endfor %}
+</table>
+
+{% endif %}
+{% endblock %}

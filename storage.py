@@ -3,6 +3,7 @@
 import os
 import sqlite3
 import datetime
+import zlib
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(BASE_DIR, "data")
@@ -71,6 +72,19 @@ def init():
         CREATE TABLE IF NOT EXISTS period_files(
             period TEXT, rtype TEXT, filename TEXT, uploaded_at TEXT, data BLOB,
             PRIMARY KEY(period, rtype));
+        CREATE TABLE IF NOT EXISTS emd_docs(
+            regnum TEXT, version INTEGER DEFAULT 1, uid TEXT DEFAULT '',
+            vid TEXT DEFAULT '', status TEXT DEFAULT '', vrach TEXT DEFAULT '',
+            podr TEXT DEFAULT '', oid TEXT DEFAULT '',
+            d_created TEXT DEFAULT '', d_signed TEXT DEFAULT '', d_registered TEXT DEFAULT '',
+            remd_num TEXT DEFAULT '', err_code TEXT DEFAULT '', err_type TEXT DEFAULT '',
+            err_text TEXT DEFAULT '', attempts INTEGER DEFAULT 0, fmt TEXT DEFAULT '',
+            days_to_sign REAL, days_to_reg REAL, src_week TEXT DEFAULT '',
+            updated_at TEXT DEFAULT '',
+            PRIMARY KEY(regnum, version));
+        CREATE INDEX IF NOT EXISTS idx_emd_created ON emd_docs(d_created);
+        CREATE INDEX IF NOT EXISTS idx_emd_status ON emd_docs(status);
+        CREATE INDEX IF NOT EXISTS idx_emd_week ON emd_docs(src_week);
         """)
         # миграция старых БД: колонка отделения в таблице долгов
         cols = {r["name"] for r in c.execute("PRAGMA table_info(debts)")}
@@ -88,6 +102,10 @@ def init():
         for col in ("kind", "subject", "period", "by_user"):
             if col not in slcols:
                 c.execute(f"ALTER TABLE send_log ADD COLUMN {col} TEXT DEFAULT ''")
+        # миграция истории файлов: флаг сжатия (большие выгрузки храним в zlib)
+        pfcols = {r["name"] for r in c.execute("PRAGMA table_info(period_files)")}
+        if "compressed" not in pfcols:
+            c.execute("ALTER TABLE period_files ADD COLUMN compressed INTEGER DEFAULT 0")
 
 
 def cfg_get(key):
@@ -103,12 +121,160 @@ def cfg_set(key, val):
         c.execute("INSERT OR REPLACE INTO config(k,v) VALUES(?,?)", (key, "" if val is None else str(val)))
 
 
+def _week_of(iso_date):
+    """«ГГГГ-ММ-ДД» -> метка ISO-недели «ГГГГ-Wнн» (для карты покрытия витрины)."""
+    try:
+        y, w, _ = datetime.date.fromisoformat(iso_date).isocalendar()
+        return f"{y}-W{w:02d}"
+    except (TypeError, ValueError):
+        return ""
+
+
+def emd_upsert_state(records, c):
+    """«Состояние по ЭМД» -> витрина: скелет документа (INSERT или полное обновление).
+    Ключ — (рег.№ в региональном реестре, версия). Возвращает (новых, обновлено)."""
+    now = datetime.datetime.now().isoformat(timespec="seconds")
+    before = c.execute("SELECT COUNT(*) n FROM emd_docs").fetchone()["n"]
+    c.executemany("""
+        INSERT INTO emd_docs(regnum,version,vid,status,vrach,podr,oid,
+            d_created,d_signed,d_registered,remd_num,err_code,err_text,
+            attempts,fmt,days_to_sign,days_to_reg,src_week,updated_at)
+        VALUES(:regnum,:version,:vid,:status,:vrach,:podr,:oid,
+            :d_created,:d_signed,:d_registered,:remd_num,:err_code,:err_text,
+            :attempts,:fmt,:days_to_sign,:days_to_reg,:src_week,:updated_at)
+        ON CONFLICT(regnum, version) DO UPDATE SET
+            vid=excluded.vid, status=excluded.status, vrach=excluded.vrach,
+            podr=excluded.podr, oid=excluded.oid, d_created=excluded.d_created,
+            d_signed=excluded.d_signed, d_registered=excluded.d_registered,
+            remd_num=excluded.remd_num, err_code=excluded.err_code,
+            err_text=excluded.err_text, attempts=excluded.attempts,
+            fmt=excluded.fmt, days_to_sign=excluded.days_to_sign,
+            days_to_reg=excluded.days_to_reg, src_week=excluded.src_week,
+            updated_at=excluded.updated_at
+        """, [dict(r, src_week=_week_of(r["d_created"]), updated_at=now) for r in records])
+    after = c.execute("SELECT COUNT(*) n FROM emd_docs").fetchone()["n"]
+    ins = after - before
+    return ins, max(0, len(records) - ins)
+
+
+def emd_upsert_detail(records, c):
+    """«Детализация отправки» -> витрина: обновляет статус/ошибки/регистрацию
+    последней версии документа; неизвестные документы (хвост прошлых недель)
+    вставляет со скелетом из самой детализации. Возвращает (новых, обновлено)."""
+    now = datetime.datetime.now().isoformat(timespec="seconds")
+    ins = upd = 0
+    for r in records:
+        cur = c.execute("""
+            UPDATE emd_docs SET
+                status=:status, uid=:uid,
+                d_registered=CASE WHEN :d_registered<>'' THEN :d_registered ELSE d_registered END,
+                remd_num=CASE WHEN :remd_num<>'' THEN :remd_num ELSE remd_num END,
+                err_code=:err_code, err_type=:err_type, err_text=:err_text,
+                vrach=CASE WHEN vrach='' THEN :vrach ELSE vrach END,
+                updated_at=:now
+            WHERE regnum=:regnum
+              AND version=(SELECT MAX(version) FROM emd_docs WHERE regnum=:regnum)
+            """, dict(r, now=now))
+        if cur.rowcount:
+            upd += 1
+        else:
+            c.execute("""
+                INSERT INTO emd_docs(regnum,version,uid,vid,status,vrach,podr,oid,
+                    d_created,d_registered,remd_num,err_code,err_type,err_text,
+                    src_week,updated_at)
+                VALUES(:regnum,1,:uid,:vid,:status,:vrach,:podr,:oid,
+                    :d_doc,:d_registered,:remd_num,:err_code,:err_type,:err_text,
+                    :src_week,:now)
+                """, dict(r, src_week=_week_of(r["d_doc"]), now=now))
+            ins += 1
+    return ins, upd
+
+
+_REG = "status LIKE 'Версия ЭМД успешно зарегистрирована%'"
+_ERR = "status LIKE 'Ошибка%'"
+_RDY = "status LIKE 'Готов%'"
+_SNT = "status LIKE '%отправлена на регистрацию%'"
+
+
+def _emd_where(dfrom, dto):
+    cond, args = "WHERE regnum<>''", []
+    if dfrom:
+        cond += " AND d_created>=?"
+        args.append(dfrom)
+    if dto:
+        cond += " AND d_created<=?"
+        args.append(dto)
+    return cond, args
+
+
+def emd_bounds():
+    init()
+    with _conn() as c:
+        r = c.execute("SELECT MIN(d_created) lo, MAX(d_created) hi, COUNT(*) n "
+                      "FROM emd_docs WHERE d_created<>''").fetchone()
+    return {"lo": r["lo"] or "", "hi": r["hi"] or "", "n": r["n"]}
+
+
+def emd_summary(dfrom="", dto=""):
+    """Сводка витрины за произвольный период (по дате создания документа)."""
+    init()
+    W, args = _emd_where(dfrom, dto)
+    with _conn() as c:
+        t = dict(c.execute(f"""
+            SELECT COUNT(*) n, SUM({_REG}) reg, SUM({_ERR}) err,
+                   SUM({_RDY}) ready, SUM({_SNT}) sent,
+                   ROUND(AVG(CASE WHEN {_REG} THEN days_to_reg END), 1) sla_reg,
+                   ROUND(AVG(days_to_sign), 1) sla_sign
+            FROM emd_docs {W}""", args).fetchone())
+        by_vid = [dict(r) for r in c.execute(f"""
+            SELECT vid, COUNT(*) n, SUM({_REG}) reg, SUM({_ERR}) err
+            FROM emd_docs {W} GROUP BY vid ORDER BY n DESC LIMIT 15""", args)]
+        errors = [dict(r) for r in c.execute(f"""
+            SELECT err_code, err_type, COUNT(*) n, MIN(err_text) sample
+            FROM emd_docs {W} AND err_code<>'' AND {_ERR}
+            GROUP BY err_code, err_type ORDER BY n DESC LIMIT 25""", args)]
+        by_podr = [dict(r) for r in c.execute(f"""
+            SELECT podr, COUNT(*) n, SUM({_ERR}) err
+            FROM emd_docs {W} GROUP BY podr ORDER BY n DESC LIMIT 12""", args)]
+    for x in (t, *by_vid, *errors, *by_podr):
+        for k, v in list(x.items()):
+            if v is None and k != "sample":
+                x[k] = 0
+    return {"totals": t, "by_vid": by_vid, "errors": errors, "by_podr": by_podr}
+
+
+def emd_coverage():
+    """Недели витрины (по дате создания): загруженные + дырки между ними."""
+    init()
+    with _conn() as c:
+        rows = [dict(r) for r in c.execute(f"""
+            SELECT src_week w, COUNT(*) n, SUM({_ERR}) err
+            FROM emd_docs WHERE src_week<>'' GROUP BY src_week ORDER BY src_week""")]
+    gaps = []
+    def _wk(s):
+        y, w = s.split("-W")
+        return datetime.date.fromisocalendar(int(y), int(w), 1)
+    for a, b in zip(rows, rows[1:]):
+        d = ( _wk(b["w"]) - _wk(a["w"]) ).days // 7 - 1
+        if d > 0:
+            gaps.append({"after": a["w"], "before": b["w"], "weeks": d})
+    return {"weeks": rows, "gaps": gaps}
+
+
 def replace_report(rtype, filename, period, nrows, records):
-    """Заменяет данные отчёта данного типа на свежие."""
+    """Заменяет данные отчёта данного типа на свежие.
+    Для первичек РЭМД (state/detail) — не замена, а UPSERT в сквозную витрину emd_docs;
+    возвращает {'ins': новых, 'upd': обновлено} (для остальных типов — None)."""
     init()
     with _conn() as c:
         c.execute("INSERT OR REPLACE INTO meta VALUES(?,?,?,?,?)",
                   (rtype, filename, period, datetime.datetime.now().isoformat(timespec="seconds"), nrows))
+        if rtype == "state":
+            ins, upd = emd_upsert_state(records, c)
+            return {"ins": ins, "upd": upd}
+        if rtype == "detail":
+            ins, upd = emd_upsert_detail(records, c)
+            return {"ins": ins, "upd": upd}
         if rtype == "vrachi":
             c.execute("DELETE FROM vrachi")
             c.executemany(
@@ -193,13 +359,18 @@ def reset_reports():
 # --- История периодов: храним сырые файлы по периодам, можно вернуться и выгрузить ---
 
 def save_period_file(period, rtype, filename, data):
-    """Сохраняет сырой загруженный файл в историю (по периоду и типу)."""
+    """Сохраняет сырой загруженный файл в историю (по периоду и типу).
+    Крупные файлы (первички РЭМД, десятки МБ XML) сжимаются zlib (~10x)."""
     init()
+    comp = 0
+    if len(data) > 2 * 1024 * 1024:
+        data = zlib.compress(data, 6)
+        comp = 1
     with _conn() as c:
-        c.execute("INSERT OR REPLACE INTO period_files(period,rtype,filename,uploaded_at,data) "
-                  "VALUES(?,?,?,?,?)",
+        c.execute("INSERT OR REPLACE INTO period_files(period,rtype,filename,uploaded_at,data,compressed) "
+                  "VALUES(?,?,?,?,?,?)",
                   (period, rtype, filename,
-                   datetime.datetime.now().isoformat(timespec="seconds"), sqlite3.Binary(data)))
+                   datetime.datetime.now().isoformat(timespec="seconds"), sqlite3.Binary(data), comp))
 
 
 def _ts_human(ts):
@@ -234,9 +405,14 @@ def period_file(period, rtype):
     """(имя файла, байты) сохранённого отчёта — для выгрузки обратно."""
     init()
     with _conn() as c:
-        r = c.execute("SELECT filename, data FROM period_files WHERE period=? AND rtype=?",
+        r = c.execute("SELECT filename, data, compressed FROM period_files WHERE period=? AND rtype=?",
                       (period, rtype)).fetchone()
-    return (r["filename"], bytes(r["data"])) if r else (None, None)
+    if not r:
+        return (None, None)
+    data = bytes(r["data"])
+    if r["compressed"]:
+        data = zlib.decompress(data)
+    return (r["filename"], data)
 
 
 def switch_period(period):
@@ -245,8 +421,10 @@ def switch_period(period):
     import parser, tempfile, os as _os
     init()
     with _conn() as c:
-        files = [(r["rtype"], r["filename"], bytes(r["data"]))
-                 for r in c.execute("SELECT rtype, filename, data FROM period_files WHERE period=?", (period,))]
+        files = [(r["rtype"], r["filename"],
+                  zlib.decompress(bytes(r["data"])) if r["compressed"] else bytes(r["data"]))
+                 for r in c.execute("SELECT rtype, filename, data, compressed "
+                                    "FROM period_files WHERE period=?", (period,))]
     if not files:
         return 0
     reset_reports()

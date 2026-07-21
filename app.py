@@ -45,11 +45,14 @@ RTYPE_RU = {
     "koiki": "Стационары (занятость коек)",
     "max": "MAX — записи и ТМК через чат-бот",
     "xray": "Рентген — обработка исследований ИИ",
-    "state": "Состояние по ЭМД",
+    "state": "Состояние по ЭМД (первичка)",
+    "detail": "Детализация отправки ЭМД (первичка)",
+    "vid_worker": "Количество ЭМД вид×работник (считается из витрины)",
     "unknown": "Не распознан",
 }
 LOADABLE = ("vrachi", "debts", "flk", "notrans",
-            "fap", "vidy", "docerr", "status", "koiki", "max", "xray")
+            "fap", "vidy", "docerr", "status", "koiki", "max", "xray",
+            "state", "detail")
 
 # Справочник поддерживаемых отчётов: точное наименование (как в ЕИСЗ ПК) и что даёт в системе.
 REPORTS_INFO = [
@@ -63,6 +66,20 @@ REPORTS_INFO = [
      "gives": "Конкретные неподписанные документы каждого врача (пациент, № случая, вид, дата). "
               "Наполняет содержимое писем-долгов.",
      "section": "Врачи/долги (рассылка)"},
+    {"key": "state",
+     "title": "РЭМД. Состояние по ЭМД",
+     "gives": "ПЕРВИЧКА (еженед.): все подписанные МО документы, созданные за период, — вид, врач, "
+              "подразделение, статус, даты, дни до подписи/регистрации, попытки. Скелет витрины ЭМД: "
+              "из неё считаются статусы, виды, SLA за любой период. ПДн пациентов не сохраняются.",
+     "section": "ЭМД → Аналитика",
+     "note": "Выгружать еженедельно (лимит выгрузки 50 000 строк). Фильтр — по дате документа."},
+    {"key": "detail",
+     "title": "Детализация статистики отправки ЭМД",
+     "gives": "ПЕРВИЧКА (еженед.): события отправки/регистрации за период, включая документы прошлых "
+              "недель (сама актуализирует витрину задним числом) + коды и полные тексты ошибок. "
+              "Заменяет отчёты об ошибках ФЛК/по документам.",
+     "section": "ЭМД → Аналитика",
+     "note": "Выгружать еженедельно (лимит 50 000 строк). Фильтр — по дате события отправки."},
     {"key": "flk",
      "title": "РЭМД. Детализация по ошибкам ФЛК",
      "gives": "Коды и описания ошибок регистрации по сотрудникам (OBJECT_NOT_FOUND и др.) — "
@@ -119,6 +136,7 @@ REPORT_GROUP = {
     "vrachi": "ЭМД", "debts": "ЭМД", "notrans": "ЭМД", "vidy": "ЭМД", "status": "ЭМД",
     "flk": "Ошибки", "docerr": "Ошибки",
     "fap": "ФАП", "koiki": "Стационары", "max": "Телемед", "xray": "Рентген",
+    "state": "ЭМД", "detail": "ЭМД",
 }
 # Прежняя жёсткая классификация «необходимые/дополнительные». Оставлена только как
 # источник разовой миграции в стартовые теги (см. _seed_report_tags) — дальше
@@ -228,9 +246,13 @@ def upload():
             # Файлы просто грузятся в текущую выгрузку (тот же тип — замещается).
             # Период с ранее загруженными НЕ сравниваем: для нового периода жмите «Новая выгрузка».
             for res, fn, raw in parsed:
-                storage.replace_report(res["type"], fn, res["period"], res["rows"], res["records"])
+                info = storage.replace_report(res["type"], fn, res["period"], res["rows"], res["records"])
                 storage.save_period_file(batch_period, res["type"], fn, raw)
-                ok.append(f"{fn} → {RTYPE_RU[res['type']]} ({len(res['records'])} записей)")
+                if info:
+                    ok.append(f"{fn} → {RTYPE_RU[res['type']]}: в витрину +{info['ins']} новых, "
+                              f"{info['upd']} обновлено")
+                else:
+                    ok.append(f"{fn} → {RTYPE_RU[res['type']]} ({len(res['records'])} записей)")
             appconfig.set("active_period", batch_period)
             audit("Загрузка отчётов", f"период «{batch_period}»; файлов: {len(parsed)} — "
                   + ", ".join(fn for _, fn, _ in parsed))
@@ -547,6 +569,32 @@ def doctor_detail(vrach):
     return render_template("doctor_detail.html", vrach=vrach,
                            debts=storage.doctor_debts(vrach),
                            bd=storage.doctor_breakdown(vrach))
+
+
+@app.route("/emd")
+def emd_analytics():
+    """Аналитика ЭМД поверх витрины первички: любой период без новых выгрузок."""
+    import datetime as _dt
+    bounds = storage.emd_bounds()
+    presets = []
+    if bounds["hi"]:
+        hi = _dt.date.fromisoformat(bounds["hi"])
+        week_start = hi - _dt.timedelta(days=hi.isoweekday() - 1)
+        q_start = _dt.date(hi.year, 3 * ((hi.month - 1) // 3) + 1, 1)
+        presets = [
+            ("Всё", "", ""),
+            ("Год", f"{hi.year}-01-01", bounds["hi"]),
+            ("Квартал", q_start.isoformat(), bounds["hi"]),
+            ("Месяц", hi.replace(day=1).isoformat(), bounds["hi"]),
+            ("Неделя", week_start.isoformat(), bounds["hi"]),
+        ]
+    dfrom = (request.args.get("from") or "").strip()
+    dto = (request.args.get("to") or "").strip()
+    return render_template("emd.html",
+                           s=storage.emd_summary(dfrom, dto),
+                           cov=storage.emd_coverage(),
+                           bounds=bounds, presets=presets,
+                           dfrom=dfrom, dto=dto)
 
 
 @app.route("/departments")
