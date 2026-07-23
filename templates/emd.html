@@ -13,21 +13,11 @@
 «РЭМД. Состояние по ЭМД» и «Детализация статистики отправки ЭМД» — данные накапливаются.</div>
 {% else %}
 
-<div class="toolbar" style="margin-top:2px">
-  <div class="tagbar" style="margin:0">
-    {% for label, f, t in presets %}
-    <a class="tchip {{ 'on' if dfrom == f and dto == t }}" href="{{ url_for('emd_analytics', **({'from': f, 'to': t} if f or t else {})) }}">{{ label }}</a>
-    {% endfor %}
-  </div>
-  <form method="get" style="margin:0;display:flex;gap:6px;align-items:center">
-    <span class="small muted">с</span><input type="date" name="from" value="{{ dfrom }}" min="{{ bounds.lo }}" max="{{ bounds.hi }}">
-    <span class="small muted">по</span><input type="date" name="to" value="{{ dto }}" min="{{ bounds.lo }}" max="{{ bounds.hi }}">
-    <button type="submit">Показать</button>
-  </form>
-</div>
+<p class="muted" style="margin:2px 0 10px">Период: <b>{% if dfrom or dto %}{{ dfrom or '…' }} — {{ dto or '…' }}{% else %}все данные{% endif %}</b>
+— управляется переключателем «Отчётный период» в шапке (День/Неделя/Месяц/Квартал/Полугодие/Год или произвольный диапазон).</p>
 
 {% set T = s.totals %}
-<section class="cards" style="grid-template-columns:repeat(5,1fr)">
+<section class="cards">
   <div class="card"><div class="num">{{ T.n }}</div><div class="lbl">Подписано МО (создано за период)</div></div>
   <div class="card"><div class="num">{{ T.reg }}</div><div class="lbl">Зарегистрировано в РЭМД{% if T.n %} · {{ (100 * T.reg / T.n) | round(1) }}%{% endif %}</div></div>
   <div class="card {{ 'bad' if T.err }}"><div class="num">{{ T.err }}</div><div class="lbl">С ошибкой</div></div>
@@ -37,7 +27,7 @@
 
 {% if sign %}
 <h2>Подписной контур <span class="small muted">— сверка с отчётом «в разрезе врачей» ({{ sign.period }})</span></h2>
-<section class="cards" style="grid-template-columns:repeat(4,1fr)">
+<section class="cards">
   <div class="card"><div class="num">{{ sign.sform }}</div><div class="lbl">Сформировано (по врачам)</div></div>
   <div class="card"><div class="num">{{ sign.podp }}</div><div class="lbl">Подписано врачом</div></div>
   <div class="card {{ 'bad' if sign.wait > 50 }}"><div class="num">{{ sign.wait }}</div><div class="lbl">Ждёт подписи МО (оценка)</div></div>
@@ -62,7 +52,7 @@
 <div class="cols">
   <div>
     <h2>По видам документов <span class="small muted">— топ-15 за период</span></h2>
-    <table>
+    <div class="tablewrap"><table>
       <tr><th>Вид документа</th><th>Всего</th><th>Зарег.</th><th>Ошибки</th><th>% рег.</th></tr>
       {% for r in s.by_vid %}
       <tr {% if r.err %}class="lowpct"{% endif %}>
@@ -72,22 +62,22 @@
         <td class="r">{{ (100 * r.reg / r.n) | round(1) if r.n else '—' }}</td>
       </tr>
       {% else %}<tr><td colspan="5" class="empty">нет данных за период</td></tr>{% endfor %}
-    </table>
+    </table></div>
   </div>
   <div>
     <h2>По подразделениям <span class="small muted">— топ-12</span></h2>
-    <table>
+    <div class="tablewrap"><table>
       <tr><th>Подразделение</th><th>Всего</th><th>Ошибки</th></tr>
       {% for r in s.by_podr %}
       <tr><td style="text-align:left">{{ r.podr or '—' }}</td><td class="r">{{ r.n }}</td>
           <td class="r {{ 'bad' if r.err }}">{{ r.err }}</td></tr>
       {% else %}<tr><td colspan="3" class="empty">нет данных</td></tr>{% endfor %}
-    </table>
+    </table></div>
   </div>
 </div>
 
 <h2>Ошибки регистрации <span class="small muted">— сгруппировано по коду и типу, за период</span></h2>
-<table>
+<div class="tablewrap"><table>
   <tr><th>Код ошибки</th><th>Тип</th><th>Пример сообщения</th><th>Док-в</th></tr>
   {% for e in s.errors %}
   <tr>
@@ -97,7 +87,7 @@
     <td class="r">{{ e.n }}</td>
   </tr>
   {% else %}<tr><td colspan="4" class="empty">ошибок за период нет 🎉</td></tr>{% endfor %}
-</table>
+</table></div>
 
 <h2>Документы с ошибками — детально <span class="small muted">— последние {{ errdocs|length }} за период; полная информация (в письма не попадает)</span></h2>
 <div class="fullbleed" style="overflow-x:auto">

@@ -684,20 +684,7 @@ def doctor_detail(vrach):
 @app.route("/emd")
 def emd_analytics():
     """Аналитика ЭМД поверх витрины первички: любой период без новых выгрузок."""
-    import datetime as _dt
     bounds = storage.emd_bounds()
-    presets = []
-    if bounds["hi"]:
-        hi = _dt.date.fromisoformat(bounds["hi"])
-        week_start = hi - _dt.timedelta(days=hi.isoweekday() - 1)
-        q_start = _dt.date(hi.year, 3 * ((hi.month - 1) // 3) + 1, 1)
-        presets = [
-            ("Всё", "", ""),
-            ("Год", f"{hi.year}-01-01", bounds["hi"]),
-            ("Квартал", q_start.isoformat(), bounds["hi"]),
-            ("Месяц", hi.replace(day=1).isoformat(), bounds["hi"]),
-            ("Неделя", week_start.isoformat(), bounds["hi"]),
-        ]
     # По умолчанию — глобальный отчётный период (переключатель в шапке);
     # явные from/to в URL (быстрые пресеты страницы) его перекрывают.
     rp = reporting_range()
@@ -718,7 +705,7 @@ def emd_analytics():
                            cov=storage.emd_coverage(),
                            errdocs=storage.emd_error_docs(dfrom, dto),
                            sign=sign,
-                           bounds=bounds, presets=presets,
+                           bounds=bounds,
                            dfrom=dfrom, dto=dto)
 
 

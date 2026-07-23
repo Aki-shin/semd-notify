@@ -69,7 +69,7 @@ a.small { font-size: 12px; font-weight: 400; }
 .flash { padding: 10px 14px; border-radius: 7px; margin: 10px 0; font-size: 14px; }
 .flash.ok { background: #e7f6ec; color: #14633a; border: 1px solid #b7e0c4; }
 .flash.warn { background: #fff4e2; color: #8a5a00; border: 1px solid #f0d39a; }
-.cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 10px 0; }
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(175px, 1fr)); gap: 12px; margin: 10px 0; }
 .card { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 16px; }
 .card .num { font-size: 26px; font-weight: 700; }
 .card .lbl { color: #6b7280; font-size: 13px; margin-top: 4px; }
@@ -90,6 +90,9 @@ form.cfg label.chk input { width: auto; margin: 0; }
 input[type=password] { border: 1px solid #cbd2da; border-radius: 6px; padding: 6px 9px; font-size: 13px; }
 .alert { background: #fdecec; border: 1px solid #f4b5b5; color: #8a1c1c; padding: 12px 14px; border-radius: 8px; margin: 12px 0; font-size: 14px; }
 .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+@media (max-width: 1280px) { .cols { grid-template-columns: 1fr; } }
+.tablewrap { overflow-x: auto; }
+.tablewrap table { min-width: 640px; }
 table { width: 100%; border-collapse: collapse; background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden; font-size: 13px; }
 th, td { text-align: center; padding: 7px 10px; border-bottom: 1px solid #eef0f2; }
 th { background: #f3f5f7; font-weight: 600; color: #374151; }
@@ -135,7 +138,7 @@ code { background: #eef0f2; padding: 1px 5px; border-radius: 4px; font-size: 12p
 .chip .chip-x { background: none; border: 0; color: #b91c1c; cursor: pointer; font-size: 15px; line-height: 1; padding: 0 2px; }
 .chip .chip-x:hover { color: #7f1414; }
 /* Раздел во всю ширину рабочей области (вырывается из отступов main) */
-.fullbleed { margin-left: -28px; margin-right: -28px; padding: 0 28px; }
+.fullbleed { margin-left: -28px; margin-right: -28px; padding: 0 28px; overflow-x: auto; }
 /* Переключатель выгрузок (в хедере, доступен на всех страницах) */
 .period-switch { position: relative; display: inline-flex; align-items: center; }
 .period-btn { display: inline-flex; align-items: center; gap: 9px; background: #fff; color: #1f2937;
@@ -146,53 +149,35 @@ code { background: #eef0f2; padding: 1px 5px; border-radius: 4px; font-size: 12p
 .pb-txt { display: flex; flex-direction: column; align-items: flex-start; line-height: 1.18; }
 .pb-cap { font-size: 9.5px; text-transform: uppercase; letter-spacing: .5px; color: #8a93a0; }
 .pb-val { font-size: 13px; font-weight: 600; white-space: nowrap; }
-.pb-cnt { background: #eaf3ff; color: #1d4ed8; border-radius: 10px; font-size: 11px; padding: 1px 7px; font-weight: 600; }
-.pb-dot { width: 8px; height: 8px; border-radius: 50%; background: #d98324; box-shadow: 0 0 0 3px #fff4e2; }
 .pb-chev { color: #8a93a0; display: inline-flex; transition: transform .15s; }
 .period-switch.open .pb-chev { transform: rotate(180deg); }
-.period-menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 60; width: 320px; background: #fff; color: #1f2937;
-  border: 1px solid #d5dae1; border-radius: 12px; box-shadow: 0 12px 32px rgba(0,0,0,.18); padding: 8px; }
+.period-menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 60; width: 344px; background: #fff; color: #1f2937;
+  border: 1px solid #d5dae1; border-radius: 12px; box-shadow: 0 12px 32px rgba(0,0,0,.18); padding: 12px; }
 .period-menu[hidden] { display: none; }
 .pm-head { display: flex; align-items: center; justify-content: space-between; padding: 2px 4px 8px 7px; }
 .pm-title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: #8a93a0; }
-.rp-grans { display: flex; flex-wrap: wrap; gap: 5px; margin: 0; }
-.rp-g { border: 1px solid #d5dae1; background: #fff; border-radius: 14px; padding: 5px 12px; font-size: 12.5px;
-  font-family: inherit; cursor: pointer; color: #374151; }
-.rp-g:hover { border-color: #9ec3f0; }
+.rp-grans { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin: 0; }
+.rp-g { border: 1px solid #d5dae1; background: #fff; border-radius: 8px; padding: 8px 4px; font-size: 12.5px;
+  font-family: inherit; cursor: pointer; color: #374151; text-align: center; white-space: nowrap;
+  transition: background .12s, border-color .12s, color .12s; }
+.rp-g:hover { background: #eaf3ff; border-color: #9ec3f0; color: #1d4ed8; }
 .rp-g.on { background: #0d6efd; border-color: #0d6efd; color: #fff; font-weight: 600; }
-.rp-custom { margin: 0; display: flex; flex-direction: column; gap: 6px; }
-.rp-custom label { font-size: 12px; color: #6b7280; display: flex; flex-direction: column; gap: 3px; }
-.rp-custom input[type=date] { border: 1px solid #cbd2da; border-radius: 6px; padding: 5px 8px; font-size: 13px; }
-.rp-row { display: flex; gap: 6px; align-items: center; }
-.rp-row input[type=date] { flex: 1; }
-.rp-apply { background: #eaf3ff; color: #1d4ed8; border: 0; border-radius: 7px; padding: 6px 12px; font-size: 12.5px; font-weight: 600; cursor: pointer; }
-.rp-apply:hover { background: #d8e8fb; }
-.rp-note { margin-top: 8px; padding: 0 4px; }
+.rp-g.on:hover { background: #0b5ed7; color: #fff; }
+.rp-custom { margin: 0; display: flex; flex-direction: column; gap: 7px; }
+.rp-custom input[type=date] { border: 1px solid #cbd2da; border-radius: 6px; padding: 6px 8px; font-size: 13px;
+  width: 100%; min-width: 0; font-family: inherit; }
+.rp-row { display: flex; gap: 7px; align-items: end; }
+.rp-row > * { flex: 1; min-width: 0; }
+.rp-lbl { font-size: 12px; color: #6b7280; display: flex; flex-direction: column; gap: 3px; }
+.rp-apply { background: #eaf3ff; color: #1d4ed8; border: 1px solid #cfe0f5; border-radius: 7px; padding: 8px 12px;
+  font-size: 12.5px; font-weight: 600; cursor: pointer; white-space: nowrap; width: 100%; }
+.rp-apply:hover { background: #d8e8fb; color: #1d4ed8; }
+.rp-note { margin-top: 10px; padding: 0 4px; }
 .pend-row { display: flex; align-items: center; gap: 8px; margin: 8px 0 0; flex-wrap: wrap; }
 .pend-row .pend-name { flex: 1 1 260px; }
 .pend-row input[type=date] { border: 1px solid #cbd2da; border-radius: 6px; padding: 5px 8px; font-size: 13px; }
-.pm-new { background: #eaf3ff; color: #1d4ed8; border: 0; border-radius: 7px; padding: 5px 11px; font-size: 12.5px; font-weight: 600; cursor: pointer; }
-.pm-new:hover { background: #d8e8fb; color: #1d4ed8; }
 .pm-warn { background: #fff4e2; color: #8a5a00; border: 1px solid #f0d39a; border-radius: 8px;
   padding: 7px 10px; font-size: 12.5px; margin: 0 0 6px; }
-.period-menu .psearch { width: 100%; margin: 0 0 6px; border: 1px solid #cbd2da; border-radius: 6px; padding: 6px 9px; font-size: 13px; }
-.period-list { max-height: 340px; overflow-y: auto; }
-.period-item { display: flex; align-items: center; gap: 4px; border-radius: 8px; }
-.period-item:hover { background: #f2f5f9; }
-.period-item.active { background: #eaf3ff; }
-.period-item .pi-form { flex: 1; margin: 0; min-width: 0; }
-.period-item .psw { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; width: 100%;
-  text-align: left; background: none; border: 0; padding: 6px 9px; cursor: pointer; border-radius: 8px; }
-.period-item .psw:hover { background: #e5edf7; }
-.period-item .psw[disabled] { cursor: default; }
-.period-item .psw[disabled]:hover { background: none; }
-.pi-name { font-size: 13px; font-weight: 600; color: #1d4ed8; }
-.period-item.active .pi-name { color: #1f2937; }
-.pi-meta { font-size: 11px; color: #6b7280; }
-.pi-check { color: #0d6efd; font-weight: 700; padding: 0 9px; }
-.period-item .pdel { background: none; color: #b91c1c; border: 0; padding: 4px 8px; font-size: 12px; cursor: pointer; border-radius: 6px; }
-.period-item .pdel:hover { background: #fdecec; }
-.period-empty { color: #9aa3af; text-align: center; padding: 14px 10px; font-size: 13px; line-height: 1.5; }
 /* Теги отчётов (страница «Загрузка»): фильтр и чипсы в таблице */
 .tagbar { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 12px; }
 .tchip { border: 1px solid #d5dae1; background: #fff; border-radius: 14px; padding: 4px 12px;

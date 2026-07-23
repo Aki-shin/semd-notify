@@ -28,7 +28,7 @@
   </div>
 </div>
 
-<table id="logtbl">
+<div class="tablewrap"><table id="logtbl">
   <thead><tr><th>Время</th><th>Рассылка</th><th>Адресат</th><th>Почта</th><th>Тема</th><th>Период</th><th>Кол-во</th><th>Статус</th><th>Запустил</th></tr></thead>
   <tbody id="sendlog">
   {% for l in log %}
@@ -46,7 +46,7 @@
   </tr>
   {% else %}<tr><td colspan="9" class="empty">пока пусто</td></tr>{% endfor %}
   </tbody>
-</table>
+</table></div>
 
 <script>
 (function(){

@@ -107,19 +107,26 @@
           <form method="post" action="{{ url_for('rperiod_set') }}" class="rp-grans">
             <input type="hidden" name="anchor" value="{{ rperiod.anchor }}">
             {% for key, label in rperiod.grans if key != 'custom' %}
-            <button type="submit" name="gran" value="{{ key }}" class="rp-g {{ 'on' if rperiod.gran == key }}">{{ label }}</button>
+            <button type="submit" name="gran" value="{{ key }}" class="rp-g{{ ' on' if rperiod.gran == key }}">{{ label }}</button>
             {% endfor %}
           </form>
-          <div class="pm-head" style="margin-top:6px"><span class="pm-title">Опорная дата и произвольный период</span></div>
+          <div class="pm-head" style="margin-top:10px"><span class="pm-title">Опорная дата</span></div>
           <form method="post" action="{{ url_for('rperiod_set') }}" class="rp-custom">
-            <label class="small muted">Опорная дата
-              <input type="date" name="anchor" value="{{ rperiod.anchor }}"
-                     {% if rperiod.bounds.lo %}min="{{ rperiod.bounds.lo }}" max="{{ rperiod.bounds.hi }}"{% endif %}></label>
+            <input type="hidden" name="gran" value="{{ rperiod.gran if rperiod.gran != 'custom' else 'month' }}">
             <div class="rp-row">
-              <input type="date" name="from" value="{{ rperiod.from }}" title="с">
-              <input type="date" name="to" value="{{ rperiod.to }}" title="по">
-              <button type="submit" name="gran" value="custom" class="rp-apply">Период</button>
+              <input type="date" name="anchor" value="{{ rperiod.anchor }}"
+                     {% if rperiod.bounds.lo %}min="{{ rperiod.bounds.lo }}" max="{{ rperiod.bounds.hi }}"{% endif %}>
+              <button type="submit" class="rp-apply">Применить</button>
             </div>
+          </form>
+          <div class="pm-head" style="margin-top:10px"><span class="pm-title">Произвольный диапазон</span></div>
+          <form method="post" action="{{ url_for('rperiod_set') }}" class="rp-custom">
+            <input type="hidden" name="gran" value="custom">
+            <div class="rp-row">
+              <label class="rp-lbl">с <input type="date" name="from" value="{{ rperiod.from }}"></label>
+              <label class="rp-lbl">по <input type="date" name="to" value="{{ rperiod.to }}"></label>
+            </div>
+            <button type="submit" class="rp-apply">Применить диапазон</button>
           </form>
           {% if rperiod.bounds.lo %}<div class="rp-note small muted">Данные ЭМД: {{ rperiod.bounds.lo }} … {{ rperiod.bounds.hi }}</div>{% endif %}
         </div>

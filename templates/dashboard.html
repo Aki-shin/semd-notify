@@ -16,7 +16,7 @@
   <div class="frow"><span class="fl">Зарегистрировано в РЭМД</span><div class="fbar"><i class="b" style="width:{{ (100*funnel.zareg/mx)|round(0) }}%">{{ funnel.zareg }} ({{ funnel.pct_zareg }}%)</i></div></div>
   <div class="muted small" style="margin-top:8px">Все три цифры — из одного отчёта «в разрезе врачей», поэтому сходятся между собой.</div>
 </div>
-<section class="cards" style="grid-template-columns:repeat(2,1fr);margin-top:10px">
+<section class="cards" style="margin-top:10px">
   <div class="card {{ 'bad' if funnel.nepodp }}"><div class="num">{{ funnel.nepodp }}</div>
     <div class="lbl">Не подписано врачами → <a class="small" href="{{ url_for('doctors') }}">рассылка врачам/зав.</a></div></div>
   <div class="card {{ 'bad' if (funnel.podp - funnel.zareg) > 0 }}"><div class="num">{{ funnel.podp - funnel.zareg }}</div>
@@ -36,7 +36,7 @@
 
 {% if notrans %}
 <h2>Не переданы в РЭМД — разбор причины</h2>
-<section class="cards" style="grid-template-columns:repeat(3,1fr)">
+<section class="cards">
   <div class="card bad"><div class="num">{{ notrans.total }}</div><div class="lbl">Всего не в РЭМД</div></div>
   <div class="card"><div class="num">{{ notrans.not_formed }}</div><div class="lbl">Не сформированы (клиническая сторона — врачи)</div></div>
   <div class="card bad"><div class="num">{{ notrans.formed_not_trans }}</div><div class="lbl">Сформированы, но не переданы (подпись МО / передача)</div></div>
