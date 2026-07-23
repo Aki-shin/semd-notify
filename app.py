@@ -308,6 +308,83 @@ def index():
                            has_data=bool(storage.meta_all()))
 
 
+_MONTHS_RU = ("январь", "февраль", "март", "апрель", "май", "июнь",
+              "июль", "август", "сентябрь", "октябрь", "ноябрь", "декабрь")
+
+
+def _upload_coverage(history):
+    """Карта загрузок: тип отчёта × ISO-недели. Ячейка «ok» — файлы есть,
+    «gap» — недели не хватает (внутри диапазона типа; для регулярных типов —
+    и до текущей недели), «off» — вне диапазона. Недели — из дат периода файла."""
+    import datetime as dt
+
+    def _dates(period):
+        ds = re.findall(r"\d{2}\.\d{2}\.\d{4}", period or "")
+        if not ds:
+            return None
+        try:
+            a = dt.datetime.strptime(ds[0], "%d.%m.%Y").date()
+            b = dt.datetime.strptime(ds[-1], "%d.%m.%Y").date()
+        except ValueError:
+            return None
+        return (a, b) if a <= b else (b, a)
+
+    def monday(d):
+        return d - dt.timedelta(days=d.weekday())
+
+    files = [(h, *d) for h in history if (d := _dates(h["period"]))]
+    if not files:
+        return None
+    today_w = monday(dt.date.today())
+    lo = min(monday(a) for _, a, _ in files)
+    hi = max(max(monday(b) for _, _, b in files), today_w)
+    weeks = []
+    w = lo
+    while w <= hi:
+        weeks.append(w)
+        w += dt.timedelta(days=7)
+    weeks = weeks[-32:]  # карта не разрастается бесконечно — последние 32 недели
+
+    months, prev = [], None
+    for w in weeks:
+        if (w.year, w.month) != prev:
+            months.append({"label": f"{_MONTHS_RU[w.month - 1]} {w.year}", "span": 1})
+            prev = (w.year, w.month)
+        else:
+            months[-1]["span"] += 1
+
+    by_type = {}
+    for h, a, b in files:
+        by_type.setdefault(h["rtype"], []).append((h, a, b))
+    order = [k for k in RTYPE_RU if k != "unknown"]
+    rows = []
+    for rt in sorted(by_type, key=lambda k: order.index(k) if k in order else 99):
+        fl = by_type[rt]
+        load_weeks = {monday(a) for _, a, _ in fl}
+        t_lo = min(load_weeks)
+        t_hi = max(monday(b) for _, _, b in fl)
+        if len(load_weeks) >= 2:  # регулярный тип: отсутствие свежей выгрузки — тоже пропуск
+            t_hi = max(t_hi, today_w)
+        cells, gaps = [], []
+        for w in weeks:
+            we = w + dt.timedelta(days=6)
+            hit = [h for h, a, b in fl if a <= we and b >= w]
+            if hit:
+                cells.append({"st": "ok", "n": len(hit),
+                              "work": any(h["in_work"] for h in hit),
+                              "tip": "; ".join(f"{h['period']} — {h['filename']}" for h in hit[:4])})
+            elif t_lo <= w <= t_hi:
+                cells.append({"st": "gap", "n": 0, "work": False,
+                              "tip": f"нет выгрузки за неделю с {w.strftime('%d.%m.%Y')}"})
+                gaps.append(w.isoformat())
+            else:
+                cells.append({"st": "off", "n": 0, "work": False, "tip": ""})
+        rows.append({"rtype": rt, "title": RTYPE_RU.get(rt, rt), "cells": cells, "gaps": gaps})
+    return {"weeks": [{"label": w.strftime("%d.%m"), "iso": w.isoformat(), "cur": w == today_w}
+                      for w in weeks],
+            "months": months, "rows": rows}
+
+
 @app.route("/upload", methods=["GET", "POST"])
 def upload():
     if request.method == "POST":
@@ -373,9 +450,10 @@ def upload():
     tag_counts = sorted(cnt.items(), key=lambda kv: (-kv[1], kv[0].lower()))
     tag_hues = {t: zlib.crc32(t.encode("utf-8")) % 360 for t in cnt}
     untagged = sum(1 for r in allr if not r["tags"])
+    hist = storage.history_files()
     return render_template("upload.html", meta=meta, meta_by_rtype=meta_by_rtype, exports=exports,
                            reports=allr, tag_counts=tag_counts, tag_hues=tag_hues, untagged=untagged,
-                           history=storage.history_files(), pending=_pending_get())
+                           history=hist, coverage=_upload_coverage(hist), pending=_pending_get())
 
 
 def _seed_report_tags():

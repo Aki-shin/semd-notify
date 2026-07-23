@@ -122,8 +122,32 @@
 </table>
 <datalist id="alltags">{% for t, n in tag_counts %}<option value="{{ t }}"></option>{% endfor %}</datalist>
 
+{% if coverage %}
+<h2>Карта загрузок <span class="small muted">— по неделям: видно, каких выгрузок не хватает</span></h2>
+<div class="tablewrap">
+<table class="umap">
+  <tr><th class="um-name"></th>{% for m in coverage.months %}<th colspan="{{ m.span }}" class="um-month">{{ m.label }}</th>{% endfor %}</tr>
+  <tr><th class="um-name"></th>{% for w in coverage.weeks %}<th class="um-w{{ ' um-cur' if w.cur }}">{{ w.label }}</th>{% endfor %}</tr>
+  {% for r in coverage.rows %}
+  <tr>
+    <td class="um-name">{{ r.title }}</td>
+    {% for c in r.cells %}
+    <td class="um {{ c.st }}{{ ' work' if c.work }}"{% if c.tip %} title="{{ c.tip }}"{% endif %}>{% if c.n > 1 %}{{ c.n }}{% endif %}</td>
+    {% endfor %}
+  </tr>
+  {% endfor %}
+</table>
+</div>
+<p class="muted small" style="margin:6px 0 14px">
+  <span class="um-lg ok"></span> файл загружен (цифра — несколько файлов, светлая рамка — сейчас в работе) ·
+  <span class="um-lg gap"></span> выгрузки за эту неделю не хватает ·
+  <span class="um-lg off"></span> вне периода наблюдения · синяя дата — текущая неделя.
+</p>
+{% endif %}
+
 {% if history %}
-<h2>История загрузок <span class="small muted">— все загруженные файлы; можно вернуть в работу, скачать, удалить</span></h2>
+<details class="hist">
+<summary>Все загруженные файлы ({{ history|length }}) — скачать, вернуть в работу, удалить</summary>
 <table>
   <tr><th>Отчёт</th><th>Период</th><th>Файл</th><th>Загружен</th><th>Статус</th><th>Действия</th></tr>
   {% for h in history %}
@@ -150,6 +174,7 @@
   </tr>
   {% endfor %}
 </table>
+</details>
 {% endif %}
 </div>
 

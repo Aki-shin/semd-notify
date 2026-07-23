@@ -157,6 +157,19 @@ def reporting_period_get(a):
     return app.reporting_range()
 
 
+def upload_coverage(a):
+    """Карта загрузок по ISO-неделям: какие недели покрыты файлами каждого типа отчёта
+    и каких недель не хватает (то же, что «Карта загрузок» на странице Загрузка)."""
+    import app
+    cov = app._upload_coverage(storage.history_files())
+    if not cov:
+        return {"weeks": [], "rows": [], "note": "загрузок с датами в периоде нет"}
+    return {"weeks": [w["iso"] for w in cov["weeks"]],
+            "rows": [{"type": r["rtype"], "title": r["title"],
+                      "loaded_weeks": sum(1 for c in r["cells"] if c["st"] == "ok"),
+                      "missing_weeks": r["gaps"]} for r in cov["rows"]]}
+
+
 def send_log_recent(a):
     """Журнал рассылок: последние записи (кому, что, статус, кто запустил)."""
     return storage.send_log(int(a.get("limit") or 30))
@@ -389,6 +402,7 @@ TOOLS = [
     ("xray_summary", xray_summary, _schema(), "read"),
     ("staff_stats", staff_stats, _schema(), "read"),
     ("reports_status", reports_status, _schema(), "read"),
+    ("upload_coverage", upload_coverage, _schema(), "read"),
     ("reporting_period_get", reporting_period_get, _schema(), "read"),
     ("send_log_recent", send_log_recent, _schema(_LIMIT_PROP), "read"),
     ("ops_log_recent", ops_log_recent, _schema(_LIMIT_PROP), "read"),
