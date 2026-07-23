@@ -12,11 +12,12 @@ body { font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 
 .side-brand img { width: 30px; height: 30px; flex-shrink: 0; }
 .side-nav { flex: 1; padding: 6px 12px; display: flex; flex-direction: column; gap: 3px; overflow-y: auto; overflow-x: hidden; }
 .side-nav a { display: flex; align-items: center; gap: 13px; padding: 10px 11px; border-radius: 10px; white-space: nowrap;
-  color: rgba(255,255,255,.82); text-decoration: none; font-size: 14px; transition: background .13s, color .13s; }
+  color: rgba(255,255,255,.82); text-decoration: none; font-size: 14px;
+  transition: background .13s, color .13s, padding-left .18s; }
 .side-nav a .ic { width: 20px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
 .side-nav a .ic svg { display: block; }
 .side-nav a:hover { background: rgba(255,255,255,.16); color: #fff; }
-.nav-group { display: flex; align-items: center; gap: 13px; padding: 10px 11px; border-radius: 10px;
+.nav-group { display: flex; align-items: center; justify-content: flex-start; gap: 13px; padding: 10px 11px; border-radius: 10px;
   background: none; border: 0; width: 100%; color: rgba(255,255,255,.82); font: inherit; font-size: 14px;
   cursor: pointer; white-space: nowrap; text-align: left; transition: background .13s, color .13s; }
 .nav-group .ic { width: 20px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
@@ -24,8 +25,8 @@ body { font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 
 .nav-group.inside { color: #fff; font-weight: 600; background: rgba(255,255,255,.14); }
 .nav-group .chev { margin-left: auto; display: inline-flex; opacity: .7; transition: transform .15s; }
 .nav-group.open .chev { transform: rotate(180deg); }
-.nav-sub { display: none; }  /* в узком рельсе подпункты скрыты — видны при выезде меню */
-.sidebar:hover .nav-sub.open { display: flex; flex-direction: column; gap: 3px; }
+.nav-sub { display: none; }
+.nav-sub.open { display: flex; flex-direction: column; gap: 3px; }
 .sidebar:hover .nav-sub.open a.sub { padding-left: 27px; }
 .side-nav a.active { background: rgba(255,255,255,.97); color: #0d6efd; font-weight: 600; }
 .sidebar .lbl { opacity: 0; transition: opacity .14s ease .02s; }
@@ -55,7 +56,6 @@ footer { text-align: center; color: #9aa3af; font-size: 12px; padding: 20px; }
   .side-nav { flex-direction: row; flex-wrap: wrap; }
   .side-nav a { padding: 8px 11px; }
   .sidebar .lbl, .sidebar:hover .lbl { opacity: 1; }
-  .nav-sub.open { display: flex; flex-direction: column; gap: 3px; }
   .side-brand .lbl br { display: none; }
   .side-foot { opacity: 1; flex-direction: row; align-items: center; gap: 12px; }
   .main-wrap { margin-left: 0; }
@@ -105,7 +105,7 @@ table tr:hover td { background: #f2f7ff; }
 .bicon { flex-shrink: 0; display: inline-block; vertical-align: -2px; }
 a .bicon, td .bicon { margin-right: 2px; }
 /* Карточки-переключатели блоков (ЕИСЗ) */
-.ecard { text-align: left; cursor: pointer; background: #fff; border: 1px solid #e5e7eb; border-radius: 10px;
+.ecard { display: block; text-align: left; cursor: pointer; background: #fff; border: 1px solid #e5e7eb; border-radius: 10px;
   padding: 14px 16px; font: inherit; color: inherit; transition: border-color .12s, box-shadow .12s, transform .06s; }
 .ecard:hover { border-color: #9ec3f0; }
 .ecard:active { transform: translateY(1px); }
