@@ -9,48 +9,48 @@
   <input type="file" name="files" multiple accept=".xls,.xml">
   <button type="submit">Загрузить и разобрать</button>
 </form>
+<p class="muted small" style="margin:6px 0 0">Накопительная модель: просто грузите файлы. Каждый отчёт живёт своим периодом (из самого файла);
+повторная загрузка того же типа заменяет рабочие данные. Первички ЭМД копятся в витрину, койки — в накопительный план.
+Отчётный период для аналитики — переключатель в шапке (День/Неделя/Месяц/Квартал/Полугодие/Год).</p>
 
-<div class="toolbar" style="margin-top:8px">
-  <form method="post" action="{{ url_for('period_new') }}" style="margin:0"
-        onsubmit="return confirm('Начать новую выгрузку? Текущие отчёты очистятся (останутся в истории), затем загрузите новый период.')">
-    <button type="submit">🔄 Новая выгрузка</button>
+{% if pending %}
+<div class="alert" style="background:#fff4e2;border-color:#f0d39a;color:#8a5a00">
+  <b>Ожидают указания периода</b> — в этих файлах нет периода, укажите его вручную:
+  {% for pf in pending %}
+  <form method="post" action="{{ url_for('upload_assign_period') }}" class="pend-row">
+    <span class="pend-name">{{ pf.title }} <span class="small muted">— {{ pf.filename }}</span></span>
+    <input type="hidden" name="filename" value="{{ pf.filename }}">
+    <input type="date" name="from" required title="с"> <input type="date" name="to" required title="по">
+    <button type="submit">Задать период</button>
+    <button type="submit" formaction="{{ url_for('upload_pending_cancel') }}" class="danger" title="Убрать из ожидания">✕</button>
   </form>
-  <span class="muted small">{% if active_period %}Текущая выгрузка (период): <b>{{ active_period }}</b>{% else %}Выгрузка не загружена — выберите файлы выше{% endif %}</span>
+  {% endfor %}
 </div>
-<p class="muted small" style="margin:4px 0 0">Порядок: загрузите отчёты периода → для следующего периода нажмите «🔄 Новая выгрузка» → загрузите его. Пересечение периодов с уже загруженными не мешает.</p>
+{% endif %}
 
 {% if meta %}
 <div class="toolbar" style="margin-top:8px">
   <form method="post" action="{{ url_for('send_all') }}" style="margin:0"
-        onsubmit="return confirm('Разослать письма по всем загруженным отчётам текущей выгрузки?\n\nУйдут (по сохранённым адресам): долги врачам, сводки заведующим, сводные отчёты ответственным — отделения, ошибки, ФАП, стационары, MAX, рентген.\nОтчёты без получателей и адресаты без почты будут пропущены (покажется списком).')">
+        onsubmit="return confirm('Разослать письма по всем загруженным отчётам?\n\nУйдут (по сохранённым адресам): долги врачам, сводки заведующим, сводные отчёты ответственным — отделения, ошибки, ФАП, стационары, MAX, рентген.\nОтчёты без получателей и адресаты без почты будут пропущены (покажется списком).')">
     <button type="submit">📨 Разослать всё</button>
   </form>
   <span class="muted small">одной кнопкой — все рассылки по загруженным отчётам; всё уходит через очередь с задержками, прогресс — чип в шапке, результат — в «Журнале»</span>
 </div>
 {% endif %}
 
-{% if periods.n_reports and not periods.consistent %}
-<div class="alert">⚠️ В выгрузке отчёты за <b>разные периоды</b> (даты не сходятся):
-  {% for p, ts in periods.by_period.items() %}<br>• <b>{{ p }}</b> — {% for t in ts %}{{ rtype_ru.get(t, t) }}{% if not loop.last %}, {% endif %}{% endfor %}{% endfor %}
-  <br>Дашборд и воронка сравнивают отчёты между собой, поэтому в одной выгрузке должен быть один период.
-  Удалите лишний отчёт либо начните «🔄 Новую выгрузку» и загрузите один период.</div>
-{% endif %}
-
-<p class="muted small">История выгрузок и переключение между ними — кнопка «Выгрузка» в шапке (там же «＋ Новая»). Доступно на любой странице; переключение перезагружает рабочие данные (почты и настройки сохраняются).</p>
-
 <div class="fullbleed">
 <div class="toolbar">
-  <h2 style="margin:0">Отчёты — поддерживаемые и загруженные{% if periods.period %} <span class="small muted">— период {{ periods.period }}</span>{% endif %}</h2>
+  <h2 style="margin:0">Отчёты — поддерживаемые и в работе</h2>
   <div style="display:flex;gap:8px">
     <button type="submit" form="rcfg" title="Сохранить комментарии отчётов">💾 Сохранить комментарии</button>
     {% if meta %}
     <form method="post" action="{{ url_for('reprocess') }}" style="margin:0"
-          title="Заново разобрать сохранённые файлы активного периода (после обновления приложения)">
+          title="Заново разобрать файлы, находящиеся в работе (после обновления приложения)">
       <button type="submit">♻ Переобработать</button>
     </form>
     <form method="post" action="{{ url_for('reset') }}" style="margin:0"
-          onsubmit="return confirm('Сбросить отчёты текущего периода{% if active_period %} «{{ active_period }}»{% endif %}? Они будут удалены (в т.ч. из истории). Почты и настройки сохранятся.')">
-      <button type="submit" class="danger">🗑 Сбросить отчёты</button>
+          onsubmit="return confirm('Очистить рабочие данные? История загрузок, витрина ЭМД, почты и настройки сохранятся.')">
+      <button type="submit" class="danger">🗑 Очистить рабочие данные</button>
     </form>
     {% endif %}
   </div>
@@ -98,11 +98,11 @@
     <td class="small">{{ m.uploaded_at if m else '—' }}</td>
     <td style="white-space:nowrap">
       {%- if m %}
-        {% if r.key in exports %}<a class="small" href="{{ url_for('export', rtype=r.key) }}">⬇ скачать</a>{% endif %}
+        <a class="small" href="{{ url_for('export', rtype=r.key) }}">⬇ скачать</a>
         <form method="post" action="{{ url_for('period_delete_report') }}" style="display:inline;margin:0"
-              onsubmit="return confirm('Удалить отчёт «{{ r.title }}» из периода?')">
+              onsubmit="return confirm('Убрать отчёт «{{ r.title }}» из работы?')">
           <input type="hidden" name="rtype" value="{{ r.key }}">
-          <button type="submit" class="danger" style="padding:2px 8px;font-size:12px">🗑 удалить</button>
+          <button type="submit" class="danger" style="padding:2px 8px;font-size:12px">🗑 убрать</button>
         </form>
       {%- else %}—{% endif %}
     </td>
@@ -110,6 +110,36 @@
   {% endfor %}
 </table>
 <datalist id="alltags">{% for t, n in tag_counts %}<option value="{{ t }}"></option>{% endfor %}</datalist>
+
+{% if history %}
+<h2>История загрузок <span class="small muted">— все загруженные файлы; можно вернуть в работу, скачать, удалить</span></h2>
+<table>
+  <tr><th>Отчёт</th><th>Период</th><th>Файл</th><th>Загружен</th><th>Статус</th><th>Действия</th></tr>
+  {% for h in history %}
+  <tr>
+    <td style="text-align:left">{{ rtype_ru.get(h.rtype, h.rtype) }}</td>
+    <td>{{ h.period }}</td>
+    <td class="small" style="text-align:left">{{ h.filename }}</td>
+    <td class="small">{{ h.ts_h }}</td>
+    <td>{% if h.in_work %}<span class="pill ok">в работе</span>{% else %}<span class="pill warn">в истории</span>{% endif %}</td>
+    <td style="white-space:nowrap">
+      <a class="small" href="{{ url_for('export', rtype=h.rtype, period=h.period) }}">⬇</a>
+      {% if not h.in_work %}
+      <form method="post" action="{{ url_for('history_restore') }}" style="display:inline;margin:0">
+        <input type="hidden" name="period" value="{{ h.period }}"><input type="hidden" name="rtype" value="{{ h.rtype }}">
+        <button type="submit" class="small" title="Вернуть в работу">↩ в работу</button>
+      </form>
+      {% endif %}
+      <form method="post" action="{{ url_for('history_delete') }}" style="display:inline;margin:0"
+            onsubmit="return confirm('Удалить файл «{{ rtype_ru.get(h.rtype, h.rtype) }}» за «{{ h.period }}» из истории?')">
+        <input type="hidden" name="period" value="{{ h.period }}"><input type="hidden" name="rtype" value="{{ h.rtype }}">
+        <button type="submit" class="danger" style="padding:2px 8px;font-size:12px">🗑</button>
+      </form>
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+{% endif %}
 </div>
 
 <script>

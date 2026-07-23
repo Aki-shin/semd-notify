@@ -206,10 +206,88 @@ def audit(action, details=""):
 def inject():
     return {"user": current_user(), "rtype_ru": RTYPE_RU,
             "smtp_ok": mailer.configured(), "smtp_dry": mailer.is_dryrun(),
-            "ipa_ok": ipa.available(), "periods": storage.periods_info(),
-            "period_history": storage.periods_history(),
-            "active_period": appconfig.get("active_period", ""),
+            "ipa_ok": ipa.available(), "rperiod": reporting_range(),
             "custom_texts": {k: appconfig.get(k, "") for k in CUSTOM_KEYS}}
+
+
+# ---- Отчётный период: единый переключатель гранулярности (для накопительных витрин) ----
+REPORT_GRANS = [("day", "День"), ("week", "Неделя"), ("month", "Месяц"),
+                ("quarter", "Квартал"), ("half", "Полугодие"), ("year", "Год"),
+                ("all", "Всё"), ("custom", "Период")]
+
+
+def reporting_range():
+    """Текущий отчётный период: гранулярность + якорь -> (from, to). Хранится в конфиге.
+    Якорь по умолчанию — дата самых свежих данных витрины ЭМД."""
+    import datetime as _dt
+    gran = appconfig.get("RPERIOD_GRAN", "month") or "month"
+    b = storage.emd_bounds()
+    anchor_s = appconfig.get("RPERIOD_ANCHOR", "") or b.get("hi") or _dt.date.today().isoformat()
+    try:
+        anchor = _dt.date.fromisoformat(anchor_s)
+    except ValueError:
+        anchor = _dt.date.today()
+    out = {"gran": gran, "anchor": anchor.isoformat(), "from": "", "to": "",
+           "label": dict(REPORT_GRANS).get(gran, gran),
+           "bounds": b, "grans": REPORT_GRANS}
+    if gran == "all":
+        return out
+    if gran == "custom":
+        out["from"] = appconfig.get("RPERIOD_FROM", "") or b.get("lo", "")
+        out["to"] = appconfig.get("RPERIOD_TO", "") or b.get("hi", "")
+        return out
+    if gran == "day":
+        lo = hi = anchor
+    elif gran == "week":
+        lo = anchor - _dt.timedelta(days=anchor.isoweekday() - 1)
+        hi = lo + _dt.timedelta(days=6)
+    elif gran == "month":
+        lo = anchor.replace(day=1)
+        hi = (lo + _dt.timedelta(days=32)).replace(day=1) - _dt.timedelta(days=1)
+    elif gran == "quarter":
+        q0 = 3 * ((anchor.month - 1) // 3) + 1
+        lo = _dt.date(anchor.year, q0, 1)
+        hi = (_dt.date(anchor.year, q0, 1) + _dt.timedelta(days=100)).replace(day=1) - _dt.timedelta(days=1)
+    elif gran == "half":
+        h0 = 1 if anchor.month <= 6 else 7
+        lo = _dt.date(anchor.year, h0, 1)
+        hi = _dt.date(anchor.year, 6, 30) if h0 == 1 else _dt.date(anchor.year, 12, 31)
+    else:  # year
+        lo, hi = _dt.date(anchor.year, 1, 1), _dt.date(anchor.year, 12, 31)
+    out["from"], out["to"] = lo.isoformat(), hi.isoformat()
+    return out
+
+
+@app.route("/rperiod/set", methods=["POST"])
+def rperiod_set():
+    gran = (request.form.get("gran") or "month").strip()
+    appconfig.set("RPERIOD_GRAN", gran)
+    if request.form.get("anchor"):
+        appconfig.set("RPERIOD_ANCHOR", request.form.get("anchor").strip())
+    if gran == "custom":
+        appconfig.set("RPERIOD_FROM", (request.form.get("from") or "").strip())
+        appconfig.set("RPERIOD_TO", (request.form.get("to") or "").strip())
+    return redirect(request.referrer or url_for("emd_analytics"))
+
+
+def _pending_get():
+    import json as _json
+    try:
+        return _json.loads(appconfig.get("PENDING_PERIOD", "") or "[]")
+    except ValueError:
+        return []
+
+
+def _pending_set(items):
+    import json as _json
+    appconfig.set("PENDING_PERIOD", _json.dumps(items, ensure_ascii=False))
+
+
+def _pending_add(filename, rtype):
+    items = [x for x in _pending_get() if x["filename"] != filename]
+    items.append({"filename": filename, "rtype": rtype,
+                  "title": RTYPE_RU.get(rtype, rtype)})
+    _pending_set(items)
 
 
 @app.route("/")
@@ -248,44 +326,33 @@ def upload():
             else:
                 skipped.append(f"{f.filename}: тип «{RTYPE_RU.get(res['type'], res['type'])}» пока не загружается")
         if parsed:
-            # идентичность периода — НЕДЕЛЯ начала (конец у ФЛК/статусов/ФАП может «дребезжать»)
-            # период выгрузки = максимальный охват загруженных отчётов
-            batch_period = report_parser.max_period([res["period"] for res, _, _ in parsed])
-            if not batch_period:
-                # Отчёты без собственного периода (напр. Рентген) привязываем к УЖЕ
-                # открытой выгрузке, а не создаём отдельную «(без периода)». Отдельный
-                # бакет — только если активной выгрузки нет вовсе.
-                batch_period = appconfig.get("active_period", "") or "(без периода)"
-            # Файлы просто грузятся в текущую выгрузку (тот же тип — замещается).
-            # Период с ранее загруженными НЕ сравниваем: для нового периода жмите «Новая выгрузка».
+            # Накопительная модель: у каждого файла свой период (бакет истории), никакой
+            # общей «активной выгрузки». Файл без собственного периода (напр. Рентген)
+            # НЕ грузится молча — откладывается, система просит указать период.
+            batch = report_parser.max_period([res["period"] for res, _, _ in parsed if res["period"]])
             for res, fn, raw in parsed:
-                info = storage.replace_report(res["type"], fn, res["period"], res["rows"], res["records"])
-                storage.save_period_file(batch_period, res["type"], fn, raw)
+                if not res["period"]:
+                    _pending_add(fn, res["type"])
+                    ok.append(f"{fn} → {RTYPE_RU[res['type']]}: в файле нет периода — "
+                              "укажите его в блоке «Ожидают периода»")
+                    continue
+                bucket = res["period"]
+                info = storage.replace_report(res["type"], fn, bucket, res["rows"], res["records"])
+                storage.save_period_file(bucket, res["type"], fn, raw)
                 if info:
                     ok.append(f"{fn} → {RTYPE_RU[res['type']]}: в витрину +{info['ins']} новых, "
                               f"{info['upd']} обновлено")
                 else:
-                    ok.append(f"{fn} → {RTYPE_RU[res['type']]} ({len(res['records'])} записей)")
-            appconfig.set("active_period", batch_period)
-            audit("Загрузка отчётов", f"период «{batch_period}»; файлов: {len(parsed)} — "
+                    ok.append(f"{fn} → {RTYPE_RU[res['type']]} за «{bucket}» ({len(res['records'])} записей)")
+            audit("Загрузка отчётов", f"файлов: {len(parsed)} — "
                   + ", ".join(fn for _, fn, _ in parsed))
         if ok:
             flash("Загружено: " + "; ".join(ok), "ok")
         if skipped:
             flash("Пропущено: " + "; ".join(skipped), "warn")
-        # Предупреждение — только если в ОДНОЙ выгрузке отчёты за разные периоды
-        pi = storage.periods_info()
-        if not pi["consistent"]:
-            parts = "; ".join(f"{p} ({', '.join(RTYPE_RU.get(t, t) for t in ts)})"
-                              for p, ts in pi["by_period"].items())
-            flash("⚠️ В выгрузке отчёты за РАЗНЫЕ периоды: " + parts +
-                  ". Оставьте один период (удалите лишний отчёт) либо начните «Новую выгрузку» "
-                  "и загрузите один период.", "warn")
         return redirect(url_for("upload"))
-    active = appconfig.get("active_period", "")
-    # статусы и «что загружено» — строго по набору отчётов активной выгрузки
-    exports = {x["rtype"]: x["filename"] for x in storage.period_rtypes(active)} if active else {}
-    meta = [m for m in storage.meta_all() if m["rtype"] in exports]
+    meta = storage.meta_all()
+    exports = {m["rtype"]: m["filename"] for m in meta}
     meta_by_rtype = {m["rtype"]: m for m in meta}
     rcfg = storage.report_cfg_all()  # пользовательские комментарии к отчётам
     _seed_report_tags()
@@ -302,7 +369,8 @@ def upload():
     tag_hues = {t: zlib.crc32(t.encode("utf-8")) % 360 for t in cnt}
     untagged = sum(1 for r in allr if not r["tags"])
     return render_template("upload.html", meta=meta, meta_by_rtype=meta_by_rtype, exports=exports,
-                           reports=allr, tag_counts=tag_counts, tag_hues=tag_hues, untagged=untagged)
+                           reports=allr, tag_counts=tag_counts, tag_hues=tag_hues, untagged=untagged,
+                           history=storage.history_files(), pending=_pending_get())
 
 
 def _seed_report_tags():
@@ -361,80 +429,109 @@ def reports_tag_remove():
 
 @app.route("/reset", methods=["POST"])
 def reset():
-    active = appconfig.get("active_period", "")
-    if active:
-        storage.delete_period(active)
-        flash(f"Отчёты периода «{active}» сброшены (удалены, в т.ч. из истории). "
-              "Почты врачей/зав. отделениями и настройки сохранены.", "ok")
-        audit("Сброс отчётов", f"период «{active}» удалён (в т.ч. из истории)")
-    else:
-        storage.reset_reports()
-        flash("Рабочие данные очищены. Почты и настройки сохранены.", "ok")
-        audit("Сброс отчётов", "рабочие данные очищены")
-    return redirect(url_for("upload"))
-
-
-@app.route("/period/new", methods=["POST"])
-def period_new():
-    storage.new_period()
-    flash("Начата новая выгрузка — загрузите отчёты нового периода. "
-          "Прежняя выгрузка остаётся в истории (можно вернуться).", "ok")
-    audit("Новая выгрузка", "рабочие данные очищены, прежняя выгрузка в истории")
+    storage.reset_reports()
+    flash("Рабочие данные очищены. История загрузок, витрина ЭМД, почты и настройки не тронуты.", "ok")
+    audit("Сброс отчётов", "рабочие данные очищены (история и витрина сохранены)")
     return redirect(url_for("upload"))
 
 
 @app.route("/period/delete_report", methods=["POST"])
 def period_delete_report():
     rtype = (request.form.get("rtype") or "").strip()
-    active = appconfig.get("active_period", "")
-    storage.delete_report(active, rtype)
-    flash(f"Отчёт «{RTYPE_RU.get(rtype, rtype)}» удалён из периода.", "ok")
-    audit("Удаление отчёта", f"«{RTYPE_RU.get(rtype, rtype)}» из выгрузки «{active}»")
+    m = next((x for x in storage.meta_all() if x["rtype"] == rtype), None)
+    storage.delete_report(m["period"] if m else "", rtype)
+    flash(f"Отчёт «{RTYPE_RU.get(rtype, rtype)}» убран из работы (и его файл из истории).", "ok")
+    audit("Удаление отчёта", f"«{RTYPE_RU.get(rtype, rtype)}» из работы")
     return redirect(url_for("upload"))
 
 
-@app.route("/period/switch", methods=["POST"])
-def period_switch():
+@app.route("/upload/assign_period", methods=["POST"])
+def upload_assign_period():
+    """Файл без собственного периода: пользователь указывает период — файл встаёт в работу."""
+    filename = os.path.basename((request.form.get("filename") or "").strip())
+    d1 = (request.form.get("from") or "").strip()
+    d2 = (request.form.get("to") or "").strip()
+    path = os.path.join(UPLOAD_DIR, filename)
+    if not (filename and d1 and d2 and os.path.exists(path)):
+        flash("Файл не найден или период не указан.", "warn")
+        return redirect(url_for("upload"))
+    if d2 < d1:
+        flash("Конец периода раньше начала — проверьте даты.", "warn")
+        return redirect(url_for("upload"))
+
+    def _ru(d):
+        y, m, dd = d.split("-")
+        return f"{dd}.{m}.{y}"
+
+    bucket = f"с {_ru(d1)} по {_ru(d2)}"
+    try:
+        res = report_parser.parse(path)
+    except Exception as e:
+        flash(f"{filename}: ошибка разбора ({e})", "warn")
+        return redirect(url_for("upload"))
+    with open(path, "rb") as fh:
+        raw = fh.read()
+    info = storage.replace_report(res["type"], filename, bucket, res["rows"], res["records"])
+    storage.save_period_file(bucket, res["type"], filename, raw)
+    _pending_set([x for x in _pending_get() if x["filename"] != filename])
+    extra = (f": в витрину +{info['ins']}, обновлено {info['upd']}" if info
+             else f" ({len(res['records'])} записей)")
+    flash(f"{filename} → {RTYPE_RU.get(res['type'], res['type'])} за «{bucket}»{extra}.", "ok")
+    audit("Загрузка отчётов", f"{filename}: период задан вручную «{bucket}»")
+    return redirect(url_for("upload"))
+
+
+@app.route("/upload/pending_cancel", methods=["POST"])
+def upload_pending_cancel():
+    filename = os.path.basename((request.form.get("filename") or "").strip())
+    _pending_set([x for x in _pending_get() if x["filename"] != filename])
+    flash(f"«{filename}» убран из ожидания периода.", "ok")
+    return redirect(url_for("upload"))
+
+
+@app.route("/history/restore", methods=["POST"])
+def history_restore():
     period = (request.form.get("period") or "").strip()
-    n = storage.switch_period(period)
-    if n:
-        flash(f"Переключено на период «{period}» (загружено отчётов: {n}).", "ok")
-        audit("Переключение выгрузки", f"→ «{period}» ({n} отч.)")
+    rtype = (request.form.get("rtype") or "").strip()
+    res = storage.restore_file(period, rtype)
+    if res:
+        flash(f"«{RTYPE_RU.get(rtype, rtype)}» за «{period}» возвращён в работу "
+              f"({len(res['records'])} записей).", "ok")
+        audit("История: возврат в работу", f"«{RTYPE_RU.get(rtype, rtype)}» за «{period}»")
     else:
-        flash(f"Для периода «{period}» нет сохранённых отчётов.", "warn")
-    return redirect(request.referrer or url_for("upload"))
+        flash("Файл не найден в истории.", "warn")
+    return redirect(url_for("upload"))
 
 
-@app.route("/period/delete", methods=["POST"])
-def period_delete():
+@app.route("/history/delete", methods=["POST"])
+def history_delete():
     period = (request.form.get("period") or "").strip()
-    if period:
-        storage.delete_period(period)
-        flash(f"Выгрузка «{period}» удалена из истории.", "ok")
-        audit("Удаление выгрузки", f"«{period}» (из истории)")
-    return redirect(request.referrer or url_for("upload"))
+    rtype = (request.form.get("rtype") or "").strip()
+    storage.delete_report(period, rtype)
+    flash(f"Файл «{RTYPE_RU.get(rtype, rtype)}» за «{period}» удалён из истории.", "ok")
+    audit("История: удаление файла", f"«{RTYPE_RU.get(rtype, rtype)}» за «{period}»")
+    return redirect(url_for("upload"))
 
 
 @app.route("/reprocess", methods=["POST"])
 def reprocess():
-    """Заново разбирает сохранённые файлы активного периода (после обновления парсера)."""
-    period = appconfig.get("active_period", "")
-    if not period:
-        flash("Нет активного периода. Сначала загрузите отчёты.", "warn")
-        audit("Переобработка", f"выгрузка «{period}»: {n} отч.")
-    return redirect(url_for("upload"))
-    n = storage.switch_period(period)
-    flash(f"Переобработано отчётов за «{period}»: {n} (сохранённые файлы разобраны заново).",
+    """Переразбирает файлы, находящиеся в работе (после обновления парсера)."""
+    n = storage.reprocess_current()
+    flash(f"Переобработано отчётов: {n} (файлы из истории разобраны заново).",
           "ok" if n else "warn")
+    audit("Переобработка", f"отчётов: {n}")
     return redirect(url_for("upload"))
 
 
 @app.route("/export/<rtype>")
 def export(rtype):
-    period = appconfig.get("active_period", "")
+    period = request.args.get("period", "").strip()
+    if not period:
+        m = next((x for x in storage.meta_all() if x["rtype"] == rtype), None)
+        period = m["period"] if m else ""
     fn, data = storage.period_file(period, rtype)
     if not data:
-        flash("Файл не найден для текущего периода.", "warn")
+        flash("Файл не найден.", "warn")
         return redirect(url_for("upload"))
     from io import BytesIO
     return send_file(BytesIO(data), as_attachment=True, download_name=fn or f"{rtype}.xls",
@@ -601,8 +698,11 @@ def emd_analytics():
             ("Месяц", hi.replace(day=1).isoformat(), bounds["hi"]),
             ("Неделя", week_start.isoformat(), bounds["hi"]),
         ]
-    dfrom = (request.args.get("from") or "").strip()
-    dto = (request.args.get("to") or "").strip()
+    # По умолчанию — глобальный отчётный период (переключатель в шапке);
+    # явные from/to в URL (быстрые пресеты страницы) его перекрывают.
+    rp = reporting_range()
+    dfrom = (request.args.get("from") if request.args.get("from") is not None else rp["from"]).strip()
+    dto = (request.args.get("to") if request.args.get("to") is not None else rp["to"]).strip()
     # подписной контур: «в разрезе врачей» (подписано врачом) против витрины (подписано МО)
     sign = None
     vper = storage.report_period("vrachi")

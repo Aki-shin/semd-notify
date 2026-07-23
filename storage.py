@@ -386,7 +386,7 @@ def report_period(rtype):
         r = c.execute("SELECT period FROM meta WHERE rtype=?", (rtype,)).fetchone()
     if r and r["period"]:
         return parser.norm_period(r["period"]) or r["period"]
-    return cfg_get("active_period") or ""
+    return ""
 
 
 def reset_reports():
@@ -425,16 +425,26 @@ def _ts_human(ts):
         return (ts or "")[:16]
 
 
-def periods_history():
-    """Список сохранённых периодов (для переключения), новые сверху, активный помечен."""
+def latest_period():
+    """Период самой свежей загрузки (для привязки отчётов без собственного периода)."""
     init()
-    active = cfg_get("active_period") or ""
     with _conn() as c:
-        rows = c.execute("SELECT period, COUNT(*) n, MAX(uploaded_at) ts "
-                         "FROM period_files GROUP BY period ORDER BY ts DESC").fetchall()
-    return [{"period": r["period"], "n": r["n"], "ts": r["ts"], "ts_h": _ts_human(r["ts"]),
-             "active": r["period"] == active}
-            for r in rows]
+        r = c.execute("SELECT period FROM meta ORDER BY uploaded_at DESC LIMIT 1").fetchone()
+    return r["period"] if r else ""
+
+
+def history_files():
+    """История загрузок: все сохранённые файлы, новые сверху; помечено, что сейчас в работе."""
+    init()
+    cur = {(m["period"], m["rtype"]) for m in meta_all()}
+    with _conn() as c:
+        rows = [dict(r) for r in c.execute(
+            "SELECT period, rtype, filename, uploaded_at FROM period_files "
+            "ORDER BY uploaded_at DESC")]
+    for r in rows:
+        r["in_work"] = (r["period"], r["rtype"]) in cur
+        r["ts_h"] = _ts_human(r["uploaded_at"])
+    return rows
 
 
 def period_rtypes(period):
@@ -459,35 +469,36 @@ def period_file(period, rtype):
     return (r["filename"], data)
 
 
-def switch_period(period):
-    """Переключает рабочие данные на сохранённый период: чистит таблицы и
-    заново разбирает сырые файлы этого периода. Справочники (почты) не трогает."""
+def restore_file(period, rtype):
+    """Возвращает сохранённый файл в работу: разбирает заново и замещает рабочие
+    данные его типа (первички ЭМД — идемпотентный UPSERT в витрину)."""
     import parser, tempfile, os as _os
-    init()
-    with _conn() as c:
-        files = [(r["rtype"], r["filename"],
-                  zlib.decompress(bytes(r["data"])) if r["compressed"] else bytes(r["data"]))
-                 for r in c.execute("SELECT rtype, filename, data, compressed "
-                                    "FROM period_files WHERE period=?", (period,))]
-    if not files:
-        return 0
-    reset_reports()
-    n = 0
-    for rtype, fn, data in files:
-        tf = tempfile.NamedTemporaryFile(delete=False, suffix=".xls")
-        tf.write(data); tf.close()
+    fn, data = period_file(period, rtype)
+    if not data:
+        return None
+    tf = tempfile.NamedTemporaryFile(delete=False, suffix=".xls")
+    tf.write(data)
+    tf.close()
+    try:
+        res = parser.parse(tf.name)
+        replace_report(res["type"], fn, period, res["rows"], res["records"])
+        return res
+    finally:
         try:
-            res = parser.parse(tf.name)
-            replace_report(rtype, fn, res["period"], res["rows"], res["records"])
-            n += 1
+            _os.unlink(tf.name)
+        except OSError:
+            pass
+
+
+def reprocess_current():
+    """Переразбирает файлы, которые сейчас в работе (после обновления парсера)."""
+    n = 0
+    for m in list(meta_all()):
+        try:
+            if restore_file(m["period"], m["rtype"]):
+                n += 1
         except Exception:
             pass
-        finally:
-            try:
-                _os.unlink(tf.name)
-            except OSError:
-                pass
-    cfg_set("active_period", period)
     return n
 
 
@@ -511,51 +522,13 @@ def clear_report(rtype):
 
 
 def delete_report(period, rtype):
-    """Удаляет отчёт данного типа: из истории периода и (если период активный) из рабочих таблиц."""
+    """Удаляет файл отчёта из истории; если именно он сейчас в работе — чистит и рабочие данные."""
     init()
+    in_work = any(m["rtype"] == rtype and m["period"] == period for m in meta_all())
     with _conn() as c:
         c.execute("DELETE FROM period_files WHERE period=? AND rtype=?", (period, rtype))
-    if (cfg_get("active_period") or "") == period:
+    if in_work:
         clear_report(rtype)
-
-
-def delete_period(period):
-    """Полностью удаляет период: из истории; если активный — чистит рабочие таблицы
-    и сбрасывает active_period. Другие периоды в истории не трогает."""
-    init()
-    with _conn() as c:
-        c.execute("DELETE FROM period_files WHERE period=?", (period,))
-    if (cfg_get("active_period") or "") == period:
-        reset_reports()
-        cfg_set("active_period", "")
-
-
-def new_period():
-    """Начинает новый период: чистит рабочие таблицы и сбрасывает active_period.
-    История периодов (period_files) сохраняется — на неё можно вернуться."""
-    init()
-    reset_reports()
-    cfg_set("active_period", "")
-
-
-def periods_info():
-    """Сводка по периодам загруженных отчётов: общий период и согласованность."""
-    import parser
-    init()
-    with _conn() as c:
-        rows = [dict(r) for r in c.execute("SELECT rtype, period FROM meta")]
-    by_period = {}
-    for r in rows:
-        np = parser.norm_period(r["period"])
-        if np:
-            by_period.setdefault(np, []).append(r["rtype"])
-    periods = list(by_period)
-    return {
-        "by_period": by_period,
-        "consistent": len(periods) <= 1,
-        "period": periods[0] if len(periods) == 1 else "",
-        "n_reports": len(rows),
-    }
 
 
 def funnel():

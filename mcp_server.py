@@ -137,10 +137,24 @@ def staff_stats(a):
 
 
 def reports_status(a):
-    """Что загружено: активная выгрузка, отчёты в ней, история выгрузок."""
-    return {"active_period": storage.cfg_get("active_period") or "",
-            "loaded": storage.meta_all(),
-            "history": storage.periods_history()}
+    """Свежесть данных: какой отчёт каким периодом сейчас в работе, файлы, ожидающие
+    указания периода, и история загрузок. Накопительная модель: каждый тип живёт своим
+    последним файлом, витрина ЭМД сквозная."""
+    import json as _json
+    try:
+        pend = _json.loads(storage.cfg_get("PENDING_PERIOD") or "[]")
+    except ValueError:
+        pend = []
+    return {"loaded": storage.meta_all(),
+            "pending_period": pend,
+            "history": storage.history_files()[: int(a.get("limit") or 40)]}
+
+
+def reporting_period_get(a):
+    """Текущий отчётный период: гранулярность (день/неделя/месяц/квартал/полугодие/год/всё)
+    и вычисленный диапазон дат. Управляет накопительными витринами (ЭМД)."""
+    import app
+    return app.reporting_range()
 
 
 def send_log_recent(a):
@@ -173,6 +187,20 @@ def letter_text_set(a):
     text = (a.get("text") or "").strip()
     appconfig.set(key, text)
     return {"ok": True, "key": key, "purpose": LETTER_KEYS[key], "length": len(text)}
+
+
+def reporting_period_set(a):
+    """Задать отчётный период. gran: day|week|month|quarter|half|year|all|custom;
+    anchor (ГГГГ-ММ-ДД) — опорная дата; для custom — date_from и date_to."""
+    gran = (a.get("gran") or "month").strip()
+    storage.cfg_set("RPERIOD_GRAN", gran)
+    if a.get("anchor"):
+        storage.cfg_set("RPERIOD_ANCHOR", str(a["anchor"]).strip())
+    if gran == "custom":
+        storage.cfg_set("RPERIOD_FROM", (a.get("date_from") or "").strip())
+        storage.cfg_set("RPERIOD_TO", (a.get("date_to") or "").strip())
+    import app
+    return {"ok": True, "range": app.reporting_range()}
 
 
 def report_comment_set(a):
@@ -361,6 +389,7 @@ TOOLS = [
     ("xray_summary", xray_summary, _schema(), "read"),
     ("staff_stats", staff_stats, _schema(), "read"),
     ("reports_status", reports_status, _schema(), "read"),
+    ("reporting_period_get", reporting_period_get, _schema(), "read"),
     ("send_log_recent", send_log_recent, _schema(_LIMIT_PROP), "read"),
     ("ops_log_recent", ops_log_recent, _schema(_LIMIT_PROP), "read"),
     ("letter_text_get", letter_text_get, _schema(
@@ -369,6 +398,11 @@ TOOLS = [
         {"key": {"type": "string", "enum": list(LETTER_KEYS)},
          "text": {"type": "string", "description": "текст блока оператора (пусто — очистить)"}},
         ["key", "text"]), "write"),
+    ("reporting_period_set", reporting_period_set, _schema(
+        {"gran": {"type": "string",
+                  "enum": ["day", "week", "month", "quarter", "half", "year", "all", "custom"]},
+         "anchor": {"type": "string", "description": "опорная дата ГГГГ-ММ-ДД"},
+         "date_from": {"type": "string"}, "date_to": {"type": "string"}}, ["gran"]), "write"),
     ("report_comment_set", report_comment_set, _schema(
         {"rtype": {"type": "string"}, "comment": {"type": "string"}}, ["rtype"]), "write"),
     ("report_tag_add", report_tag_add, _schema(

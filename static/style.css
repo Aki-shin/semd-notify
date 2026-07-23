@@ -155,6 +155,22 @@ code { background: #eef0f2; padding: 1px 5px; border-radius: 4px; font-size: 12p
 .period-menu[hidden] { display: none; }
 .pm-head { display: flex; align-items: center; justify-content: space-between; padding: 2px 4px 8px 7px; }
 .pm-title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: #8a93a0; }
+.rp-grans { display: flex; flex-wrap: wrap; gap: 5px; margin: 0; }
+.rp-g { border: 1px solid #d5dae1; background: #fff; border-radius: 14px; padding: 5px 12px; font-size: 12.5px;
+  font-family: inherit; cursor: pointer; color: #374151; }
+.rp-g:hover { border-color: #9ec3f0; }
+.rp-g.on { background: #0d6efd; border-color: #0d6efd; color: #fff; font-weight: 600; }
+.rp-custom { margin: 0; display: flex; flex-direction: column; gap: 6px; }
+.rp-custom label { font-size: 12px; color: #6b7280; display: flex; flex-direction: column; gap: 3px; }
+.rp-custom input[type=date] { border: 1px solid #cbd2da; border-radius: 6px; padding: 5px 8px; font-size: 13px; }
+.rp-row { display: flex; gap: 6px; align-items: center; }
+.rp-row input[type=date] { flex: 1; }
+.rp-apply { background: #eaf3ff; color: #1d4ed8; border: 0; border-radius: 7px; padding: 6px 12px; font-size: 12.5px; font-weight: 600; cursor: pointer; }
+.rp-apply:hover { background: #d8e8fb; }
+.rp-note { margin-top: 8px; padding: 0 4px; }
+.pend-row { display: flex; align-items: center; gap: 8px; margin: 8px 0 0; flex-wrap: wrap; }
+.pend-row .pend-name { flex: 1 1 260px; }
+.pend-row input[type=date] { border: 1px solid #cbd2da; border-radius: 6px; padding: 5px 8px; font-size: 13px; }
 .pm-new { background: #eaf3ff; color: #1d4ed8; border: 0; border-radius: 7px; padding: 5px 11px; font-size: 12.5px; font-weight: 600; cursor: pointer; }
 .pm-new:hover { background: #d8e8fb; color: #1d4ed8; }
 .pm-warn { background: #fff4e2; color: #8a5a00; border: 1px solid #f0d39a; border-radius: 8px;
