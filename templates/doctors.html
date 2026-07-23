@@ -1,9 +1,10 @@
 {% extends "base.html" %}
+{% from "_icons.html" import ic %}
 {% block body %}
 {% set emd_tab = 'doctors' %}{% include "_emd_tabs.html" %}
 <h1>Врачи и долги по подписанию</h1>
 <p class="muted">Отметьте врачей и нажмите «Отправить долги» — каждому уйдёт письмо со списком
-его неподписанных документов. Почту можно поправить прямо в строке и сохранить кнопкой «💾 Сохранить почты».
+его неподписанных документов. Почту можно поправить прямо в строке и сохранить кнопкой «{{ ic('save', 14) }} Сохранить почты».
 {% if smtp_dry %}<b>Режим DRYRUN: письма не отправляются, только логируются.</b>{% endif %}</p>
 
 {% set ckey = 'CUSTOM_DEBT' %}{% set clabel = 'Письмо врачу о неподписанных документах (долги по РЭМД)' %}
@@ -18,8 +19,8 @@
 <form method="post" action="{{ url_for('doctors_send') }}">
   <div class="toolbar">
     <label><input type="checkbox" id="all"> выбрать всех с долгами и почтой</label>
-    <button type="submit">✉ Отправить долги выбранным</button>
-    <button type="submit" formaction="{{ url_for('doctors_save_emails') }}">💾 Сохранить почты</button>
+    <button type="submit">{{ ic('mail', 12) }} Отправить долги выбранным</button>
+    <button type="submit" formaction="{{ url_for('doctors_save_emails') }}">{{ ic('save', 14) }} Сохранить почты</button>
   </div>
   <table class="docs">
     <tr><th></th><th>Врач</th><th>Сформ.</th><th>Подп.</th><th>Не подп.</th><th>% подп.</th>

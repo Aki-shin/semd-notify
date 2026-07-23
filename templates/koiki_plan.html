@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_icons.html" import ic %}
 {% block body %}
 <div style="margin:0 0 8px;font-size:14px"><a href="{{ url_for('koiki') }}">Занятость</a> · <b>План</b></div>
 <h1>Стационары — план госпитализаций и выполнение</h1>
@@ -17,7 +18,7 @@
   <input form="grpform" name="grp_name" placeholder="Название группы (напр. «Хирургия — всё»)" class="email" style="width:300px">
   <button form="grpform" type="submit">➕ Объединить отмеченные</button>
   <span style="flex:1"></span>
-  <button form="planform" type="submit">💾 Сохранить план</button>
+  <button form="planform" type="submit">{{ ic('save', 14) }} Сохранить план</button>
 </div>
 <table>
   <tr><th style="width:28px"></th><th>Отделение / группа</th><th>Год</th><th>Месяц</th><th>Неделя</th></tr>

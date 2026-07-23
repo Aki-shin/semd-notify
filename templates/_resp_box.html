@@ -1,3 +1,4 @@
+{% from "_icons.html" import ic %}
 {# Управление получателями сводного отчёта. Ждёт: resp (список {email,name}), report (ключ), send_action (url) #}
 <div class="toolbar" style="align-items:flex-start;flex-wrap:wrap;gap:12px">
   <div style="flex:1;min-width:280px">
@@ -20,6 +21,6 @@
     </form>
   </div>
   <form method="post" action="{{ send_action }}" style="margin:0">
-    <button type="submit" {{ 'disabled' if not resp }}>✉ Отправить сводный отчёт</button>
+    <button type="submit" {{ 'disabled' if not resp }}>{{ ic('mail', 12) }} Отправить сводный отчёт</button>
   </form>
 </div>

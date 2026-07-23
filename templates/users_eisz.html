@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_icons.html" import ic %}
 {% block body %}
 <div style="margin:0 0 8px;font-size:14px"><a href="{{ url_for('users_page') }}">Сотрудники</a> · <b>Доступ ЕИСЗ ПК</b> · <a href="{{ url_for('users_integration') }}">Интеграция</a></div>
 <h1>Доступ в ЕИСЗ ПК</h1>
@@ -27,7 +28,7 @@
 <!-- Блок: профили на удаление -->
 <div class="eblk" data-blk="delete">
   <div class="toolbar"><h2 style="margin:0">Профили на удаление <span class="small muted">— нет в штате или уволены</span></h2>
-    <a class="dl" href="{{ url_for('users_eisz_export', block='delete') }}" download>⬇ Выгрузить в xlsx</a></div>
+    <a class="dl" href="{{ url_for('users_eisz_export', block='delete') }}" download>{{ ic('download', 13) }} Выгрузить в xlsx</a></div>
   <div class="fullbleed" style="overflow-x:auto">
   <table>
     <tr><th>ФИО</th><th>СНИЛС</th><th>Должность(и)</th><th>Подразделение</th><th>Причина</th></tr>
@@ -47,7 +48,7 @@
 <!-- Блок: есть доступ -->
 <div class="eblk" data-blk="access">
   <div class="toolbar"><h2 style="margin:0">Есть доступ в ЕИСЗ <span class="small muted">— сотрудники штата с записью в ЕИСЗ</span></h2>
-    <a class="dl" href="{{ url_for('users_eisz_export', block='access') }}" download>⬇ Выгрузить в xlsx</a></div>
+    <a class="dl" href="{{ url_for('users_eisz_export', block='access') }}" download>{{ ic('download', 13) }} Выгрузить в xlsx</a></div>
   <div class="fullbleed" style="overflow-x:auto">
   <table>
     <tr><th>ФИО</th><th>СНИЛС</th><th>Должность(и)</th><th>Подразделение(я)</th></tr>
@@ -62,7 +63,7 @@
 <!-- Блок: штат без доступа -->
 <div class="eblk" data-blk="noaccess">
   <div class="toolbar"><h2 style="margin:0">Штат без доступа в ЕИСЗ <span class="small muted">— сотрудники FreeIPA без записи в ЕИСЗ</span></h2>
-    <a class="dl" href="{{ url_for('users_eisz_export', block='noaccess') }}" download>⬇ Выгрузить в xlsx</a></div>
+    <a class="dl" href="{{ url_for('users_eisz_export', block='noaccess') }}" download>{{ ic('download', 13) }} Выгрузить в xlsx</a></div>
   <div class="fullbleed" style="overflow-x:auto">
   <table>
     <tr><th>ФИО</th><th>Логин</th><th>Должность</th><th>Подразделение</th><th>Почта</th></tr>
@@ -77,7 +78,7 @@
 <!-- Блок: все записи ЕИСЗ -->
 <div class="eblk" data-blk="eisz">
   <div class="toolbar"><h2 style="margin:0">Все записи ЕИСЗ ({{ rec.records }})</h2>
-    <a class="dl" href="{{ url_for('users_eisz_export', block='eisz') }}" download>⬇ Выгрузить в xlsx</a></div>
+    <a class="dl" href="{{ url_for('users_eisz_export', block='eisz') }}" download>{{ ic('download', 13) }} Выгрузить в xlsx</a></div>
   <input type="search" id="esearch" placeholder="Поиск: ФИО, СНИЛС, должность, подразделение…" class="email" style="width:340px;margin-bottom:8px" autocomplete="off">
   <div class="fullbleed" style="overflow-x:auto">
   <table id="etable">

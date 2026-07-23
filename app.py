@@ -204,9 +204,14 @@ def audit(action, details=""):
 
 @app.context_processor
 def inject():
+    try:
+        css_v = int(os.path.getmtime(os.path.join(BASE_DIR, "static", "style.css")))
+    except OSError:
+        css_v = 0
     return {"user": current_user(), "rtype_ru": RTYPE_RU,
             "smtp_ok": mailer.configured(), "smtp_dry": mailer.is_dryrun(),
             "ipa_ok": ipa.available(), "rperiod": reporting_range(),
+            "css_v": css_v,
             "custom_texts": {k: appconfig.get(k, "") for k in CUSTOM_KEYS}}
 
 

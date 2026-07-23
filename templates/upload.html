@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_icons.html" import ic %}
 {% block body %}
 <h1>Загрузка отчётов РЭМД</h1>
 <p class="muted">Перетащите или выберите выгрузки из ЕИСЗ ПК (формат .xls / SpreadsheetML).
@@ -22,7 +23,7 @@
     <input type="hidden" name="filename" value="{{ pf.filename }}">
     <input type="date" name="from" required title="с"> <input type="date" name="to" required title="по">
     <button type="submit">Задать период</button>
-    <button type="submit" formaction="{{ url_for('upload_pending_cancel') }}" class="danger" title="Убрать из ожидания">✕</button>
+    <button type="submit" formaction="{{ url_for('upload_pending_cancel') }}" class="danger" title="Убрать из ожидания">{{ ic('x', 13) }}</button>
   </form>
   {% endfor %}
 </div>
@@ -32,7 +33,7 @@
 <div class="toolbar" style="margin-top:8px">
   <form method="post" action="{{ url_for('send_all') }}" style="margin:0"
         onsubmit="return confirm('Разослать письма по всем загруженным отчётам?\n\nУйдут (по сохранённым адресам): долги врачам, сводки заведующим, сводные отчёты ответственным — отделения, ошибки, ФАП, стационары, MAX, рентген.\nОтчёты без получателей и адресаты без почты будут пропущены (покажется списком).')">
-    <button type="submit">📨 Разослать всё</button>
+    <button type="submit">{{ ic('send', 14) }} Разослать всё</button>
   </form>
   <span class="muted small">одной кнопкой — все рассылки по загруженным отчётам; всё уходит через очередь с задержками, прогресс — чип в шапке, результат — в «Журнале»</span>
 </div>
@@ -42,15 +43,15 @@
 <div class="toolbar">
   <h2 style="margin:0">Отчёты — поддерживаемые и в работе</h2>
   <div style="display:flex;gap:8px">
-    <button type="submit" form="rcfg" title="Сохранить комментарии отчётов">💾 Сохранить комментарии</button>
+    <button type="submit" form="rcfg" title="Сохранить комментарии отчётов">{{ ic('save', 14) }} Сохранить комментарии</button>
     {% if meta %}
     <form method="post" action="{{ url_for('reprocess') }}" style="margin:0"
           title="Заново разобрать файлы, находящиеся в работе (после обновления приложения)">
-      <button type="submit">♻ Переобработать</button>
+      <button type="submit">{{ ic('refresh', 14) }} Переобработать</button>
     </form>
     <form method="post" action="{{ url_for('reset') }}" style="margin:0"
           onsubmit="return confirm('Очистить рабочие данные? История загрузок, витрина ЭМД, почты и настройки сохранятся.')">
-      <button type="submit" class="danger">🗑 Очистить рабочие данные</button>
+      <button type="submit" class="danger">{{ ic('trash', 13) }} Очистить рабочие данные</button>
     </form>
     {% endif %}
   </div>
@@ -91,18 +92,18 @@
       </form>
     </td>
     <td>{{ r.gives }}</td>
-    <td class="small">{% if r.mailing %}✉ {{ r.mailing }}{% else %}<span class="muted">—</span>{% endif %}</td>
+    <td class="small">{% if r.mailing %}{{ ic('mail', 12) }} {{ r.mailing }}{% else %}<span class="muted">—</span>{% endif %}</td>
     <td><input type="text" name="comment__{{ r.key }}" form="rcfg" value="{{ r.comment }}" placeholder="—" style="width:150px"></td>
     <td>{% if m %}<span class="pill ok">загружен</span>{% else %}<span class="pill warn">нет</span>{% endif %}</td>
     <td>{{ m.period if m else '—' }}</td>
     <td class="small">{{ m.uploaded_at if m else '—' }}</td>
     <td style="white-space:nowrap">
       {%- if m %}
-        <a class="small" href="{{ url_for('export', rtype=r.key) }}">⬇ скачать</a>
+        <a class="small" href="{{ url_for('export', rtype=r.key) }}">{{ ic('download', 13) }} скачать</a>
         <form method="post" action="{{ url_for('period_delete_report') }}" style="display:inline;margin:0"
               onsubmit="return confirm('Убрать отчёт «{{ r.title }}» из работы?')">
           <input type="hidden" name="rtype" value="{{ r.key }}">
-          <button type="submit" class="danger" style="padding:2px 8px;font-size:12px">🗑 убрать</button>
+          <button type="submit" class="danger" style="padding:2px 8px;font-size:12px">{{ ic('trash', 13) }} убрать</button>
         </form>
       {%- else %}—{% endif %}
     </td>
@@ -123,17 +124,17 @@
     <td class="small">{{ h.ts_h }}</td>
     <td>{% if h.in_work %}<span class="pill ok">в работе</span>{% else %}<span class="pill warn">в истории</span>{% endif %}</td>
     <td style="white-space:nowrap">
-      <a class="small" href="{{ url_for('export', rtype=h.rtype, period=h.period) }}">⬇</a>
+      <a class="small" href="{{ url_for('export', rtype=h.rtype, period=h.period) }}">{{ ic('download', 13) }}</a>
       {% if not h.in_work %}
       <form method="post" action="{{ url_for('history_restore') }}" style="display:inline;margin:0">
         <input type="hidden" name="period" value="{{ h.period }}"><input type="hidden" name="rtype" value="{{ h.rtype }}">
-        <button type="submit" class="small" title="Вернуть в работу">↩ в работу</button>
+        <button type="submit" class="small" title="Вернуть в работу">{{ ic('undo', 13) }} в работу</button>
       </form>
       {% endif %}
       <form method="post" action="{{ url_for('history_delete') }}" style="display:inline;margin:0"
             onsubmit="return confirm('Удалить файл «{{ rtype_ru.get(h.rtype, h.rtype) }}» за «{{ h.period }}» из истории?')">
         <input type="hidden" name="period" value="{{ h.period }}"><input type="hidden" name="rtype" value="{{ h.rtype }}">
-        <button type="submit" class="danger" style="padding:2px 8px;font-size:12px">🗑</button>
+        <button type="submit" class="danger" style="padding:2px 8px;font-size:12px">{{ ic('trash', 13) }}</button>
       </form>
     </td>
   </tr>

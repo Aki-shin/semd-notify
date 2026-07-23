@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_icons.html" import ic %}
 {% block body %}
 {% set log_tab = 'sends' %}{% include "_log_tabs.html" %}
 <h1>Журнал рассылок</h1>
@@ -23,7 +24,7 @@
   <div style="display:flex;gap:10px;align-items:center">
     <div class="muted small" id="sendline"></div>
     <form method="post" action="{{ url_for('send_cancel') }}" id="cancelform" style="margin:0;display:none">
-      <button type="submit" class="danger">⛔ Отменить рассылку</button>
+      <button type="submit" class="danger">{{ ic('stop', 14) }} Отменить рассылку</button>
     </form>
   </div>
 </div>

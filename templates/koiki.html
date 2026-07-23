@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_icons.html" import ic %}
 {% block body %}
 <div style="margin:0 0 8px;font-size:14px"><b>Занятость</b> · <a href="{{ url_for('koiki_plan') }}">План</a></div>
 <h1>Стационары — занятость коек</h1>
@@ -54,8 +55,8 @@
     <h2 style="margin:0">Отделения, занятость и рассылка</h2>
     <div style="display:flex;gap:8px;align-items:center">
       <label class="small"><input type="checkbox" id="all"> выбрать все с почтой</label>
-      <button type="submit" formaction="{{ url_for('koiki_save_map') }}">💾 Сохранить</button>
-      <button type="submit" formaction="{{ url_for('koiki_send') }}">✉ Отправить выбранным</button>
+      <button type="submit" formaction="{{ url_for('koiki_save_map') }}">{{ ic('save', 14) }} Сохранить</button>
+      <button type="submit" formaction="{{ url_for('koiki_send') }}">{{ ic('mail', 12) }} Отправить выбранным</button>
     </div>
   </div>
   <p class="muted small">Отметьте отделения и нажмите «Отправить» — каждому ответственному уйдёт одно письмо

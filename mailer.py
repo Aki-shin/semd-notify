@@ -16,7 +16,7 @@ def _custom_block(text):
         return ""
     safe = html.escape(str(text).strip()).replace("\n", "<br>")
     return ('<div style="margin:14px 0;padding:10px 12px;background:#f3f6fb;'
-            'border-left:3px solid #1e3a5f;font-size:13px;color:#333">' + safe + "</div>")
+            'border-left:3px solid #0d6efd;font-size:13px;color:#333">' + safe + "</div>")
 
 
 def _cfg():
@@ -126,7 +126,7 @@ def build_dept_report_html(depts, rep_period="", custom=""):
 <p>Сформировано: <b>{tot['sform']}</b> · подписано: {tot['podp']} ({pct}%) ·
 не подписано: <b>{tot['nepodp']}</b>.</p>
 <table border="1" cellspacing="0" cellpadding="5" style="border-collapse:collapse;font-size:13px">
-<tr style="background:#1e3a5f;color:#fff"><th>№</th><th>Подразделение</th><th>Сформировано</th>
+<tr style="background:#0d6efd;color:#fff"><th>№</th><th>Подразделение</th><th>Сформировано</th>
 <th>Подписано</th><th>%</th><th>Не подписано</th><th>Врачей с неподп.</th></tr>
 {rows}
 {total}
@@ -255,7 +255,7 @@ def build_fap_report_html(s, rows, rep_period="", custom=""):
 <p>Фельдшеров: <b>{s.get('n',0)}</b> · посещений: <b>{s.get('visits',0)}</b> ·
 с документами: <b>{s.get('visits_doc',0)}</b> ({s.get('pct',0)}% заполнения ЭМК).</p>
 <table border="1" cellspacing="0" cellpadding="4" style="border-collapse:collapse;font-size:12px">
-<tr style="background:#1e3a5f;color:#fff">
+<tr style="background:#0d6efd;color:#fff">
 <th>ФАП</th><th>Фельдшер</th><th>Посещ.</th><th>С док.</th><th>% ЭМК</th>
 <th>Направл.</th><th>Рецепты</th><th>Назнач.</th><th>ЭЛН</th><th>Телемед</th><th>Записи ЭР</th></tr>
 {body}
@@ -306,7 +306,7 @@ def build_max_report_html(totals, by_doctor, by_purpose, rep_period="", custom="
 
 <h3 style="margin:14px 0 4px">По врачам</h3>
 <table border="1" cellspacing="0" cellpadding="4" style="border-collapse:collapse;font-size:12px">
-<tr style="background:#1e3a5f;color:#fff"><th>Врач</th><th>Должность</th>
+<tr style="background:#0d6efd;color:#fff"><th>Врач</th><th>Должность</th>
 <th>Зап.</th><th>&rarr;MAX</th><th>%</th><th>Пров.</th><th>&rarr;MAX</th><th>%</th><th>Отмен.</th><th>Больн.MAX</th></tr>
 {drows}
 {dtot}
@@ -314,7 +314,7 @@ def build_max_report_html(totals, by_doctor, by_purpose, rep_period="", custom="
 
 <h3 style="margin:16px 0 4px">По целям консультации</h3>
 <table border="1" cellspacing="0" cellpadding="4" style="border-collapse:collapse;font-size:12px">
-<tr style="background:#1e3a5f;color:#fff"><th>Цель консультации</th>
+<tr style="background:#0d6efd;color:#fff"><th>Цель консультации</th>
 <th>Зап.</th><th>&rarr;MAX</th><th>%</th><th>Пров.</th><th>%</th><th>Больн.MAX</th></tr>
 {prows}
 </table>
@@ -366,7 +366,7 @@ def build_xray_report_html(totals, rows, rep_period="", custom=""):
 медорганизация (МО) — <b>{t.get('err_mo',0)}</b> · соединение — <b>{t.get('err_conn',0)}</b>.
 Успешность: <b style="color:#2563eb">синим</b> ≥ 90 %, <b style="color:#c0392b">красным</b> — ниже 70 %.</p>
 <table border="1" cellspacing="0" cellpadding="4" style="border-collapse:collapse;font-size:12px">
-<tr style="background:#1e3a5f;color:#fff"><th>Модальность</th><th>Всего</th><th>Успешно</th><th>%</th>
+<tr style="background:#0d6efd;color:#fff"><th>Модальность</th><th>Всего</th><th>Успешно</th><th>%</th>
 <th>Ошибки</th><th>%</th><th>МИ</th><th>МО</th><th>Соед.</th><th>Ср. время, с</th></tr>
 {body}
 {tot}
@@ -445,7 +445,7 @@ def build_koiki_resp_html(resp, wards, days, rep_period="", custom="", cum_vyp=N
 <p>{who}</p>
 <p>Показатели <b>занятости коек</b> по закреплённым за вами отделениям{per} (в периоде {days} дн.).</p>
 <table border="1" cellspacing="0" cellpadding="5" style="border-collapse:collapse;font-size:13px">
-<tr style="background:#1e3a5f;color:#fff"><th>Отделение</th><th>Коек</th><th>Койко-дни</th>
+<tr style="background:#0d6efd;color:#fff"><th>Отделение</th><th>Коек</th><th>Койко-дни</th>
 <th>Занятость</th><th>Поступ.</th><th>План</th>{vyp_hdr}<th>Выпис.</th><th>Перев.</th><th>Умер.</th><th>Оборот</th><th>Ср. длит.</th><th>Примечание</th></tr>
 {_koiki_rows_html(wards, cum_vyp=cum_vyp)}
 </table>
@@ -492,7 +492,7 @@ def build_koiki_overall_html(wards, totals, rep_period="", custom="", cum=None):
 переведено в другие отделения <b>{m.get('pered',0)}</b> · умерло <b>{m.get('umer',0)}</b>.</p>
 {plan_line}
 <table border="1" cellspacing="0" cellpadding="5" style="border-collapse:collapse;font-size:13px">
-<tr style="background:#1e3a5f;color:#fff"><th>Отделение</th><th>Ответственный</th><th>Коек</th><th>Койко-дни</th>
+<tr style="background:#0d6efd;color:#fff"><th>Отделение</th><th>Ответственный</th><th>Коек</th><th>Койко-дни</th>
 <th>Занятость</th><th>Поступ.</th><th>План</th>{vyp_hdr}<th>Выпис.</th><th>Перев.</th><th>Умер.</th><th>Оборот</th><th>Ср. длит.</th><th>Примечание</th></tr>
 {_koiki_rows_html(wards, show_resp=True, cum_vyp=cum_vyp)}
 </table>

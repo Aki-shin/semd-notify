@@ -98,10 +98,10 @@
   <tr>
     <td class="small" style="white-space:nowrap">{{ d.d_created or '—' }}</td>
     <td style="text-align:left">{{ d.vid }}</td>
-    <td style="text-align:left;white-space:nowrap">{{ d.patient or '—' }}</td>
+    <td style="text-align:left">{{ d.patient or '—' }}</td>
     <td class="small">{{ d.birth or '—' }}</td>
     <td class="small" style="white-space:nowrap">{{ d.snils or '—' }}</td>
-    <td style="text-align:left;white-space:nowrap">{{ d.vrach or '—' }}</td>
+    <td style="text-align:left">{{ d.vrach or '—' }}</td>
     <td class="small" style="text-align:left">{{ d.podr or '—' }}</td>
     <td class="small" style="text-align:left"><code>{{ d.err_code }}</code></td>
     <td class="small" style="text-align:left">{{ (d.err_text or '')[:160] }}{% if d.err_text and d.err_text|length > 160 %}…{% endif %}</td>

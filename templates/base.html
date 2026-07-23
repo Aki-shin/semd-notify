@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Центр Цифровизации</title>
   <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v={{ css_v }}">
 </head>
 <body>
 <div id="pgload" aria-hidden="true">
@@ -157,8 +157,8 @@
       var active = s.active || s.queued>0;
       var chip=document.getElementById('sendchip');
       if(chip) chip.innerHTML = s.active
-        ? '<span class="pill" style="background:#2f6fb0;color:#fff" title="успешно '+s.ok+', ошибок '+s.failed
-          +(s.queued>0?', в очереди '+s.queued:'')+'">📤 '+s.done+'/'+s.total+(s.queued>0?' (+'+s.queued+')':'')+'</span> ' : '';
+        ? '<span class="pill" style="background:#0d6efd;color:#fff" title="успешно '+s.ok+', ошибок '+s.failed
+          +(s.queued>0?', в очереди '+s.queued:'')+'"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-1px"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg> '+s.done+'/'+s.total+(s.queued>0?' (+'+s.queued+')':'')+'</span> ' : '';
       var line=document.getElementById('sendline');
       if(line) line.textContent = active ? '— идёт отправка: '+s.done+'/'+s.total+' (ошибок '+s.failed+')'+(s.queued>0?', в очереди '+s.queued:'') : '';
       var cf=document.getElementById('cancelform'); if(cf) cf.style.display = active ? '' : 'none';

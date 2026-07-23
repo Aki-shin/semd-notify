@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_icons.html" import ic %}
 {% block body %}
 <div style="margin:0 0 8px;font-size:14px"><a href="{{ url_for('users_page') }}">Сотрудники</a> · <a href="{{ url_for('users_eisz') }}">Доступ ЕИСЗ ПК</a> · <b>Интеграция</b></div>
 <h1>Интеграция с FreeIPA {% if ipa_ready %}<span class="pill ok">настроено</span>{% else %}<span class="pill warn">не настроено</span>{% endif %}</h1>
@@ -20,7 +21,7 @@
 </form>
 
 <form method="post" action="{{ url_for('users_sync') }}" class="inline" style="margin-top:10px">
-  <button type="submit" {{ 'disabled' if not ipa_ready }}>↻ Синхронизировать сейчас</button>
+  <button type="submit" {{ 'disabled' if not ipa_ready }}>{{ ic('refresh', 14) }} Синхронизировать сейчас</button>
   <span class="muted small">
     {% if ipacfg.IPA_AUTOSYNC %}Автосинхронизация раз в {{ ipacfg.IPA_SYNC_HOURS }} ч.{% else %}Автосинхронизация выключена.{% endif %}
     Сейчас загружено: <b>{{ stats.total }}</b> учёток.

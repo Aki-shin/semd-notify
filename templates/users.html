@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_icons.html" import ic %}
 {% block body %}
 <div style="margin:0 0 8px;font-size:14px"><b>Сотрудники</b> · <a href="{{ url_for('users_eisz') }}">Доступ ЕИСЗ ПК</a> · <a href="{{ url_for('users_integration') }}">Интеграция</a></div>
 <h1>Сотрудники (FreeIPA)</h1>
@@ -14,7 +15,7 @@
 </section>
 
 <form method="post" action="{{ url_for('users_sync') }}" class="inline" style="margin:4px 0 14px">
-  <button type="submit" {{ 'disabled' if not ipa_ready }}>↻ Синхронизировать с FreeIPA</button>
+  <button type="submit" {{ 'disabled' if not ipa_ready }}>{{ ic('refresh', 14) }} Синхронизировать с FreeIPA</button>
   <input type="search" id="usearch" placeholder="Поиск: ФИО, логин, должность, отделение, почта…"
          class="email" style="width:340px" autocomplete="off">
   {% if not ipa_ready %}<span class="pill warn">FreeIPA не настроен — <a href="{{ url_for('users_integration') }}">вкладка «Интеграция»</a></span>{% endif %}
