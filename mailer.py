@@ -137,57 +137,6 @@ def build_dept_report_html(depts, rep_period="", custom=""):
 </body></html>"""
 
 
-def build_report_html(data, custom=""):
-    """Отчёт ответственному за исправление: проблемы, не привязанные к конкретному врачу."""
-    f = data.get("funnel", {})
-    errs = data.get("errors", []) or []
-    un = data.get("unassigned", []) or []
-    docerr = data.get("docerr", []) or []
-    mo_gap = data.get("mo_gap")
-    err_rows = "".join(
-        f"<tr><td>{e['code']}</td><td style='text-align:right'>{e['c']}</td></tr>" for e in errs[:15]
-    ) or "<tr><td colspan='2'>нет данных (отчёт ФЛК не загружен)</td></tr>"
-    un_rows = "".join(
-        f"<tr><td>{u['vrach']}</td><td>{u['doc_type']}</td><td style='text-align:right'>{u['nepodp']}</td></tr>"
-        for u in un
-    ) or "<tr><td colspan='3'>нет</td></tr>"
-    de_rows = "".join(
-        f"<tr><td>{d['doc_type']}</td><td style='text-align:right'>{d['not_found']}</td>"
-        f"<td style='text-align:right'>{d['validation']}</td><td style='text-align:right'>{d['position']}</td></tr>"
-        for d in docerr[:15]
-    )
-    de_block = (f"""<h3>Ошибки по видам документов</h3>
-<table border="1" cellspacing="0" cellpadding="5" style="border-collapse:collapse;font-size:13px">
-<tr style="background:#eef"><th>Вид документа</th><th>Не найдена запись справочника</th><th>Ошибка валидации</th><th>Должность</th></tr>
-{de_rows}
-</table>""") if docerr else ""
-    mo_block = (f"<p>Подписаны врачом, но <b>не подписаны МО</b> (застряли на подписи МО): "
-                f"<b>{mo_gap}</b> — это автоподписание МО, не вина врачей.</p>") if mo_gap else ""
-    per = data.get("period", "")
-    per_line = f"<p>Период отчёта: <b>{per}</b>.</p>" if per else ""
-    return f"""<html><body style="font-family:Arial,sans-serif;font-size:14px;color:#222">
-<p>Отчёт по проблемам передачи документов в РЭМД, <b>требующим вмешательства</b>
-(не привязаны к конкретному врачу — рассылкой врачам не закрываются).</p>
-{per_line}
-<p>Сформировано: <b>{f.get('sform',0)}</b> · подписано: {f.get('podp',0)} ({f.get('pct_podp',0)}%) ·
-в РЭМД: {f.get('zareg',0)} ({f.get('pct_zareg',0)}%).</p>
-{mo_block}
-<h3>Документы без указанного врача</h3>
-<table border="1" cellspacing="0" cellpadding="5" style="border-collapse:collapse;font-size:13px">
-<tr style="background:#eef"><th>Врач</th><th>Вид документа</th><th>Не подписано</th></tr>
-{un_rows}
-</table>
-<h3>Ошибки регистрации (ФЛК) — топ кодов</h3>
-<table border="1" cellspacing="0" cellpadding="5" style="border-collapse:collapse;font-size:13px">
-<tr style="background:#eef"><th>Код ошибки</th><th>Кол-во</th></tr>
-{err_rows}
-</table>
-{de_block}
-{_custom_block(custom)}
-<p style="color:#666;font-size:12px">Сформировано автоматически системой мониторинга СЭМД.</p>
-</body></html>"""
-
-
 def build_emd_err_report_html(win_label, totals, errors, by_podr, by_vrach, custom=""):
     """Отчёт ответственному об ошибках регистрации ЭМД — из витрины первички.
     Без ПДн пациентов (политика: полные данные — только в менеджере); конкретные

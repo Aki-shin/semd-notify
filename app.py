@@ -50,9 +50,10 @@ RTYPE_RU = {
     "vid_worker": "Количество ЭМД вид×работник (считается из витрины)",
     "unknown": "Не распознан",
 }
-LOADABLE = ("vrachi", "debts", "flk", "notrans",
-            "fap", "vidy", "docerr", "status", "koiki", "max", "xray",
+LOADABLE = ("vrachi", "debts", "notrans", "fap", "koiki", "max", "xray",
             "state", "detail")
+# Выведены из системы: заменены первичками ЭМД (витриной). Файлы этих типов не принимаются.
+RETIRED = ("flk", "vidy", "docerr", "status")
 
 # Справочник поддерживаемых отчётов: точное наименование (как в ЕИСЗ ПК) и что даёт в системе.
 REPORTS_INFO = [
@@ -83,13 +84,6 @@ REPORTS_INFO = [
               "Заменяет отчёты об ошибках ФЛК/по документам.",
      "section": "ЭМД → Аналитика",
      "note": "Выгружать еженедельно (лимит 50 000 строк). Фильтр — по дате события отправки."},
-    {"key": "flk",
-     "title": "РЭМД. Детализация по ошибкам ФЛК",
-     "gives": "Коды и описания ошибок регистрации по сотрудникам (OBJECT_NOT_FOUND и др.) — "
-              "диагностика, почему документы не доходят до РЭМД.",
-     "section": "Ошибки",
-     "note": "Заменяется «Детализацией отправки» (там ошибки с конкретными документами). "
-             "После сверки переходного периода можно не выгружать."},
     {"key": "notrans",
      "title": "Отчёт по документам, не переданным в РЭМД",
      "gives": "Разбор «не в РЭМД»: не сформированы (клиническая сторона) vs сформированы, "
@@ -97,26 +91,6 @@ REPORTS_INFO = [
      "section": "Дашборд (разбор причины)",
      "note": "ОСТАЁТСЯ при переходе на первичку: единственный источник «не сформированы» "
              "(клиническая сторона) — из витрины не выводится."},
-    {"key": "vidy",
-     "title": "РЭМД. Статистика отправки ЭМД в разрезе видов документов",
-     "gives": "По каждому виду документа: зарегистрировано / отправлено / ошибки. "
-              "Видно, какие виды документов проваливаются.",
-     "section": "Дашборд (по видам)",
-     "note": "Выводится из витрины (ЭМД → Аналитика). После сверки переходного периода "
-             "можно не выгружать."},
-    {"key": "docerr",
-     "title": "РЭМД. Статистика по ошибкам документов",
-     "gives": "Ошибки по видам документов и типам (не найдена запись справочника, валидация, должность). "
-              "Дополняет ФЛК; идёт в отчёт ответственному.",
-     "section": "Ошибки",
-     "note": "Заменяется «Детализацией отправки». После сверки переходного периода "
-             "можно не выгружать."},
-    {"key": "status",
-     "title": "Статистика по статусам документов в РЭМД",
-     "gives": "Распределение по статусам: зарегистрировано / отправлено / готов / ошибка.",
-     "section": "Дашборд (статусы)",
-     "note": "Выводится из витрины (ЭМД → Аналитика). После сверки переходного периода "
-             "можно не выгружать."},
     {"key": "fap",
      "title": "Отчёт по работе в ЭМК по фельдшерам ФАП",
      "gives": "По фельдшерам ФАП: посещения, % заполнения ЭМК, рецепты, ЭЛН, подключение к интернету. "
@@ -146,22 +120,19 @@ REPORTS_INFO = [
 # Направление отчёта. В UI отдельной колонки больше нет: направления разово
 # мигрируют в теги (см. _seed_report_tags), здесь остаются для порядка сортировки.
 REPORT_GROUP = {
-    "vrachi": "ЭМД", "debts": "ЭМД", "notrans": "ЭМД", "vidy": "ЭМД", "status": "ЭМД",
-    "flk": "Ошибки", "docerr": "Ошибки",
+    "vrachi": "ЭМД", "debts": "ЭМД", "notrans": "ЭМД",
     "fap": "ФАП", "koiki": "Стационары", "max": "Телемед", "xray": "Рентген",
     "state": "ЭМД", "detail": "ЭМД",
 }
 # Прежняя жёсткая классификация «необходимые/дополнительные». Оставлена только как
 # источник разовой миграции в стартовые теги (см. _seed_report_tags) — дальше
 # классификацию ведёт пользователь своими тегами на странице «Загрузка».
-REPORT_REQUIRED = {"vrachi", "debts", "flk", "fap", "koiki"}
+REPORT_REQUIRED = {"vrachi", "debts", "fap", "koiki"}
 REPORT_GROUP_ORDER = {"ЭМД": 0, "Ошибки": 1, "Стационары": 2, "ФАП": 3, "Телемед": 4, "Рентген": 5}
 # Кому уходит рассылка по отчёту (если уходит). Отчётов здесь нет → рассылки нет, только визуализация.
 REPORT_MAILING = {
     "debts": "Врачам — их неподписанные документы",
     "vrachi": "Зав. отделениями (сводки) + ответственному (сводный по подразделениям)",
-    "flk": "Ответственному за ошибки РЭМД",
-    "docerr": "Ответственному за ошибки РЭМД",
     "fap": "Ответственному за ФАП",
     "koiki": "Ответственным за отделения + за коечный фонд",
     "max": "Ответственному за цифровизацию / ТМК",
@@ -298,13 +269,13 @@ def _pending_add(filename, rtype):
 @app.route("/")
 def index():
     storage.init()
+    dfrom, dto, err_label = _emd_err_window()
+    vit_err = storage.emd_summary(dfrom, dto)["errors"] if err_label else []
     return render_template("dashboard.html",
                            funnel=storage.funnel(),
-                           status=storage.status_list(),
                            notrans=storage.notrans_get(),
-                           vidy=storage.vidy_list(),
                            top=storage.doctors("nepodp")[:15],
-                           errors=storage.errors_summary(),
+                           errors=vit_err, err_label=err_label,
                            has_data=bool(storage.meta_all()))
 
 
@@ -332,7 +303,8 @@ def _upload_coverage(history):
     def monday(d):
         return d - dt.timedelta(days=d.weekday())
 
-    files = [(h, *d) for h in history if (d := _dates(h["period"]))]
+    files = [(h, *d) for h in history
+             if h["rtype"] not in RETIRED and (d := _dates(h["period"]))]
     if not files:
         return None
     today_w = monday(dt.date.today())
@@ -357,6 +329,7 @@ def _upload_coverage(history):
     for h, a, b in files:
         by_type.setdefault(h["rtype"], []).append((h, a, b))
     order = [k for k in RTYPE_RU if k != "unknown"]
+    titles = {r["key"]: r["title"] for r in REPORTS_INFO}  # как в блоке «Отчёты»
     rows = []
     for rt in sorted(by_type, key=lambda k: order.index(k) if k in order else 99):
         fl = by_type[rt]
@@ -370,16 +343,21 @@ def _upload_coverage(history):
             we = w + dt.timedelta(days=6)
             hit = [h for h, a, b in fl if a <= we and b >= w]
             if hit:
+                hit.sort(key=lambda h: h["uploaded_at"])
                 cells.append({"st": "ok", "n": len(hit),
                               "work": any(h["in_work"] for h in hit),
-                              "tip": "; ".join(f"{h['period']} — {h['filename']}" for h in hit[:4])})
+                              "tip": "; ".join(f"{h['period']} — {h['filename']}" for h in hit[:4]),
+                              "files": [{"period": h["period"], "filename": h["filename"],
+                                         "ts": h.get("ts_h") or h["uploaded_at"],
+                                         "work": bool(h["in_work"])} for h in hit[:10]]})
             elif t_lo <= w <= t_hi:
                 cells.append({"st": "gap", "n": 0, "work": False,
                               "tip": f"нет выгрузки за неделю с {w.strftime('%d.%m.%Y')}"})
                 gaps.append(w.isoformat())
             else:
                 cells.append({"st": "off", "n": 0, "work": False, "tip": ""})
-        rows.append({"rtype": rt, "title": RTYPE_RU.get(rt, rt), "cells": cells, "gaps": gaps})
+        rows.append({"rtype": rt, "title": titles.get(rt) or RTYPE_RU.get(rt, rt),
+                     "cells": cells, "gaps": gaps})
     return {"weeks": [{"label": w.strftime("%d.%m"), "iso": w.isoformat(), "cur": w == today_w}
                       for w in weeks],
             "months": months, "rows": rows}
@@ -402,7 +380,10 @@ def upload():
             except Exception as e:
                 skipped.append(f"{f.filename}: ошибка разбора ({e})")
                 continue
-            if res["type"] in LOADABLE:
+            if res["type"] in RETIRED:
+                skipped.append(f"{f.filename}: отчёт «{RTYPE_RU.get(res['type'], res['type'])}» выведен из системы — "
+                               "эти данные теперь считаются из первичек ЭМД (витрины)")
+            elif res["type"] in LOADABLE:
                 with open(path, "rb") as fh:
                     parsed.append((res, os.path.basename(f.filename), fh.read()))
             else:
@@ -453,7 +434,7 @@ def upload():
     hist = storage.history_files()
     return render_template("upload.html", meta=meta, meta_by_rtype=meta_by_rtype, exports=exports,
                            reports=allr, tag_counts=tag_counts, tag_hues=tag_hues, untagged=untagged,
-                           history=hist, coverage=_upload_coverage(hist), pending=_pending_get())
+                           coverage=_upload_coverage(hist), pending=_pending_get())
 
 
 def _seed_report_tags():
@@ -906,23 +887,13 @@ def report_send():
         return redirect(request.referrer or url_for("errors"))
     to = ", ".join(r["email"] for r in resp)
     letter = _emd_err_letter()
-    if letter:  # основной путь: сводка из витрины первички
-        subj, html, cnt, label = letter
-        ok, msg = mailer.send(to, subj, html)
-        storage.log_send("[отчёт] ошибки РЭМД", to, cnt, msg, kind="Ошибки РЭМД",
-                         subject=subj, period=label, by_user=_acting_user())
-    else:  # витрина пуста — старый отчёт из ФЛК/docerr (переходный период)
-        rep = storage.report_period("vrachi")
-        data = {"funnel": storage.funnel(),
-                "errors": storage.errors_summary()["by_code"],
-                "unassigned": storage.unassigned_summary(),
-                "docerr": storage.docerr_list(),
-                "period": rep}
-        html = mailer.build_report_html(data, appconfig.get("CUSTOM_ERR", ""))
-        subj = "Отчёт по проблемам РЭМД (ответственному за исправление)" + (f" — период {rep}" if rep else "")
-        ok, msg = mailer.send(to, subj, html)
-        storage.log_send("[отчёт] ошибки РЭМД", to, len(data["unassigned"]), msg, kind="Ошибки РЭМД",
-                         subject=subj, period=rep, by_user=_acting_user())
+    if not letter:
+        flash("Первички ЭМД не загружены — отчёт об ошибках строится из витрины.", "warn")
+        return redirect(request.referrer or url_for("errors"))
+    subj, html, cnt, label = letter
+    ok, msg = mailer.send(to, subj, html)
+    storage.log_send("[отчёт] ошибки РЭМД", to, cnt, msg, kind="Ошибки РЭМД",
+                     subject=subj, period=label, by_user=_acting_user())
     audit("Отправка отчёта", f"Ошибки РЭМД → {to}: {msg}")
     dry = " (DRYRUN)" if mailer.is_dryrun() else ""
     flash(f"Отчёт об ошибках ({to}): {msg}.{dry}", "ok" if ok else "warn")
@@ -937,9 +908,8 @@ def errors():
     if b["hi"]:
         dfrom = (_dt.date.fromisoformat(b["hi"]) - _dt.timedelta(days=27)).isoformat()
         vit = storage.emd_summary(dfrom, b["hi"])
-    return render_template("errors.html", e=storage.errors_summary(),
+    return render_template("errors.html",
                            unassigned=storage.unassigned_summary(),
-                           docerr=storage.docerr_list(),
                            resp=storage.resp_list("err"),
                            vit=vit)
 
@@ -1263,20 +1233,11 @@ def send_all():
                       + (f" — период {rep}" if rep else ""),
                       mailer.build_dept_report_html(depts, rep, cust), period=rep)
 
-    # Ошибки РЭМД — ответственному: из витрины (если наполнена), иначе старый ФЛК-отчёт
-    letter = _emd_err_letter() if {"detail", "state", "flk", "docerr"} & loaded else None
+    # Ошибки РЭМД — ответственному: из витрины первички
+    letter = _emd_err_letter() if {"detail", "state"} & loaded else None
     if letter:
         subj, html_err, cnt, label = letter
         report_to("err", "Ошибки РЭМД", cnt, subj, html_err, period=label)
-    elif {"flk", "docerr"} & loaded:
-        rep = storage.report_period("vrachi")
-        data = {"funnel": storage.funnel(), "errors": storage.errors_summary()["by_code"],
-                "unassigned": storage.unassigned_summary(), "docerr": storage.docerr_list(),
-                "period": rep}
-        report_to("err", "Ошибки РЭМД", len(data["unassigned"]),
-                  "Отчёт по проблемам РЭМД (ответственному за исправление)"
-                  + (f" — период {rep}" if rep else ""),
-                  mailer.build_report_html(data, appconfig.get("CUSTOM_ERR", "")), period=rep)
 
     # ФАП — ответственному
     if "fap" in loaded:

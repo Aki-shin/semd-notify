@@ -28,25 +28,6 @@
 {% set ckey = 'CUSTOM_ERR' %}{% set clabel = 'Отчёт ответственному за исправление ошибок РЭМД' %}
 {% include "_custom_text.html" %}
 
-<div class="cols">
-  <div>
-    <h2>По кодам ошибок <span class="small muted">— из отчёта ФЛК (переходный период)</span></h2>
-    <table>
-      <tr><th>Код</th><th>Кол-во</th></tr>
-      {% for c in e.by_code %}<tr><td>{{ c.code }}</td><td class="r">{{ c.c }}</td></tr>
-      {% else %}<tr><td colspan="2" class="empty">Отчёт ФЛК не загружен.</td></tr>{% endfor %}
-    </table>
-  </div>
-  <div>
-    <h2>По сотрудникам (топ-50)</h2>
-    <table>
-      <tr><th>Сотрудник</th><th>СНИЛС</th><th>Ошибок</th></tr>
-      {% for p in e.by_person %}<tr><td>{{ p.fio }}</td><td>{{ p.snils }}</td><td class="r">{{ p.c }}</td></tr>
-      {% else %}<tr><td colspan="3" class="empty">—</td></tr>{% endfor %}
-    </table>
-  </div>
-</div>
-
 <h2>Документы без указанного врача («Не указан»)</h2>
 <p class="muted">Не привязаны к врачу — рассылкой врачам не закрываются, входят в отчёт ответственному за исправление.</p>
 <table>
@@ -55,20 +36,4 @@
   {% else %}<tr><td colspan="3" class="empty">нет</td></tr>{% endfor %}
 </table>
 
-<h2>Ошибки по видам документов <span class="small muted">— из отчёта «Статистика по ошибкам документов»</span></h2>
-<table>
-  <tr><th>Вид документа</th><th>Не найдена запись справочника</th><th>Ошибка валидации</th><th>Должность</th><th>Всего</th></tr>
-  {% for d in docerr %}<tr>
-    <td>{{ d.doc_type }}</td><td class="r {{ 'bad' if d.not_found }}">{{ d.not_found }}</td>
-    <td class="r">{{ d.validation }}</td><td class="r">{{ d.position }}</td><td class="r"><b>{{ d.total }}</b></td></tr>
-  {% else %}<tr><td colspan="5" class="empty">Отчёт «Статистика по ошибкам документов» не загружен.</td></tr>{% endfor %}
-</table>
-<p class="muted small">«Не найдена запись справочника» = тот самый OBJECT_NOT_FOUND (маппинг подразделений/должностей в ФРМО) — чинится не врачами.</p>
-
-<h2>Частые описания</h2>
-<table>
-  <tr><th>Код</th><th>Описание</th><th>Кол-во</th></tr>
-  {% for s in e.samples %}<tr><td>{{ s.code }}</td><td>{{ s.descr }}</td><td class="r">{{ s.c }}</td></tr>
-  {% else %}<tr><td colspan="3" class="empty">—</td></tr>{% endfor %}
-</table>
 {% endblock %}

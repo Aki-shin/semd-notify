@@ -20,7 +20,7 @@
     <li><b>За какой период смотреть</b> — переключатель «Отчётный период» в шапке (день/неделя/месяц/квартал/год).
       Данные копятся, ничего не пропадает.</li>
     <li><b>Загрузили тот же файл повторно</b> — данные этого периода просто заменятся, дублей не будет.
-      Все загрузки видны в «Истории» внизу: файл можно скачать, вернуть «в работу» или удалить.</li>
+      Все загрузки видны на «Карте загрузок» внизу: клик по ячейке — скачать файл, вернуть «в работу» или удалить.</li>
   </ol>
 </div>
 
@@ -83,7 +83,7 @@
       <th>Рассылка</th><th>Комментарий</th><th>Статус</th><th>Период</th><th>Загружен</th><th>Действия</th></tr>
   {% for r in reports %}
   {% set m = meta_by_rtype.get(r.key) %}
-  <tr data-tags="|{{ r.tags|map('lower')|join('|') }}|">
+  <tr data-tags="|{{ r.tags|map('lower')|join('|') }}|" data-rtype="{{ r.key }}">
     <td><b>{{ r.title }}</b>{% if r.note %}<br><span class="small muted">{{ r.note }}</span>{% endif %}</td>
     <td class="tags-cell">
       {% for t in r.tags %}
@@ -105,9 +105,9 @@
     <td class="small">{% if r.mailing %}{{ ic('mail', 12) }} {{ r.mailing }}{% else %}<span class="muted">—</span>{% endif %}</td>
     <td><input type="text" name="comment__{{ r.key }}" form="rcfg" value="{{ r.comment }}" placeholder="—" style="width:150px"></td>
     <td>{% if m %}<span class="pill ok">загружен</span>{% else %}<span class="pill warn">нет</span>{% endif %}</td>
-    <td>{{ m.period if m else '—' }}</td>
-    <td class="small">{{ m.uploaded_at if m else '—' }}</td>
-    <td style="white-space:nowrap">
+    <td class="rt-period">{{ m.period if m else '—' }}</td>
+    <td class="small rt-up">{{ m.uploaded_at if m else '—' }}</td>
+    <td class="rt-act" style="white-space:nowrap">
       {%- if m %}
         <a class="small" href="{{ url_for('export', rtype=r.key) }}">{{ ic('download', 13) }} скачать</a>
         <form method="post" action="{{ url_for('period_delete_report') }}" style="display:inline;margin:0"
@@ -132,7 +132,7 @@
   <tr>
     <td class="um-name">{{ r.title }}</td>
     {% for c in r.cells %}
-    <td class="um {{ c.st }}{{ ' work' if c.work }}"{% if c.tip %} title="{{ c.tip }}"{% endif %}>{% if c.n > 1 %}{{ c.n }}{% endif %}</td>
+    <td class="um {{ c.st }}{{ ' work' if c.work }}"{% if c.tip %} title="{{ c.tip }}"{% endif %}{% if c.st == 'ok' %} data-rt="{{ r.rtype }}" data-files='{{ c.files|tojson }}'{% endif %}>{% if c.n > 1 %}{{ c.n }}{% endif %}</td>
     {% endfor %}
   </tr>
   {% endfor %}
@@ -141,41 +141,12 @@
 <p class="muted small" style="margin:6px 0 14px">
   <span class="um-lg ok"></span> файл загружен (цифра — несколько файлов, светлая рамка — сейчас в работе) ·
   <span class="um-lg gap"></span> выгрузки за эту неделю не хватает ·
-  <span class="um-lg off"></span> вне периода наблюдения · синяя дата — текущая неделя.
+  <span class="um-lg off"></span> вне периода наблюдения · синяя дата — текущая неделя.<br>
+  <b>Клик по синей ячейке</b> — показать её файлы в таблице отчётов ниже (скачать, вернуть в работу, удалить);
+  повторный клик — вернуть текущее.
 </p>
 {% endif %}
 
-{% if history %}
-<details class="hist">
-<summary>Все загруженные файлы ({{ history|length }}) — скачать, вернуть в работу, удалить</summary>
-<table>
-  <tr><th>Отчёт</th><th>Период</th><th>Файл</th><th>Загружен</th><th>Статус</th><th>Действия</th></tr>
-  {% for h in history %}
-  <tr>
-    <td style="text-align:left">{{ rtype_ru.get(h.rtype, h.rtype) }}</td>
-    <td>{{ h.period }}</td>
-    <td class="small" style="text-align:left">{{ h.filename }}</td>
-    <td class="small">{{ h.ts_h }}</td>
-    <td>{% if h.in_work %}<span class="pill ok">в работе</span>{% else %}<span class="pill warn">в истории</span>{% endif %}</td>
-    <td style="white-space:nowrap">
-      <a class="small" href="{{ url_for('export', rtype=h.rtype, period=h.period) }}">{{ ic('download', 13) }}</a>
-      {% if not h.in_work %}
-      <form method="post" action="{{ url_for('history_restore') }}" style="display:inline;margin:0">
-        <input type="hidden" name="period" value="{{ h.period }}"><input type="hidden" name="rtype" value="{{ h.rtype }}">
-        <button type="submit" class="small" title="Вернуть в работу">{{ ic('undo', 13) }} в работу</button>
-      </form>
-      {% endif %}
-      <form method="post" action="{{ url_for('history_delete') }}" style="display:inline;margin:0"
-            onsubmit="return confirm('Удалить файл «{{ rtype_ru.get(h.rtype, h.rtype) }}» за «{{ h.period }}» из истории?')">
-        <input type="hidden" name="period" value="{{ h.period }}"><input type="hidden" name="rtype" value="{{ h.rtype }}">
-        <button type="submit" class="danger" style="padding:2px 8px;font-size:12px">{{ ic('trash', 13) }}</button>
-      </form>
-    </td>
-  </tr>
-  {% endfor %}
-</table>
-</details>
-{% endif %}
 </div>
 
 <script>
@@ -189,6 +160,70 @@
     rows.forEach(function(r){
       var dt=r.getAttribute('data-tags');
       r.style.display=(t==='*' || (t==='-' ? dt==='||' : dt.indexOf('|'+t+'|')>=0)) ? '' : 'none';
+    });
+  });
+})();
+</script>
+<script>
+(function(){
+  // Клик по синей ячейке карты — файлы этой ячейки показываются в строке таблицы отчётов
+  var RESTORE_URL = {{ url_for('history_restore')|tojson }},
+      DELETE_URL  = {{ url_for('history_delete')|tojson }},
+      EXPORT_TPL  = {{ url_for('export', rtype='__RT__')|tojson }};
+  var sel = null, saved = {};
+  function esc(s){ var d=document.createElement('div'); d.textContent = s==null ? '' : String(s); return d.innerHTML; }
+  function row(rt){ return document.querySelector('#rtable tr[data-rtype="'+rt+'"]'); }
+  function unselect(){
+    if(!sel) return;
+    var r = row(sel.rt), s = saved[sel.rt];
+    if(r && s){
+      r.querySelector('.rt-period').innerHTML = s.p;
+      r.querySelector('.rt-up').innerHTML = s.u;
+      r.querySelector('.rt-act').innerHTML = s.a;
+      r.classList.remove('rt-sel');
+    }
+    sel.el.classList.remove('sel'); sel = null;
+  }
+  function formHtml(url, f, rt, label, cls, del_){
+    return '<form method="post" action="'+url+'"'+(del_ ? ' class="js-del" data-period="'+esc(f.period)+'"' : '')+
+      ' style="display:inline;margin:0">'+
+      '<input type="hidden" name="period" value="'+esc(f.period)+'">'+
+      '<input type="hidden" name="rtype" value="'+esc(rt)+'">'+
+      '<button type="submit"'+(cls ? ' class="'+cls+'"' : '')+' style="padding:2px 8px;font-size:12px">'+label+'</button></form>';
+  }
+  document.querySelectorAll('td.um.ok[data-files]').forEach(function(td){
+    td.addEventListener('click', function(){
+      var same = sel && sel.el === td;
+      unselect();
+      if(same) return;
+      var rt = td.getAttribute('data-rt'), files;
+      try { files = JSON.parse(td.getAttribute('data-files') || '[]'); } catch(e){ files = []; }
+      var r = row(rt);
+      if(!r || !files.length) return;
+      var pc = r.querySelector('.rt-period'), uc = r.querySelector('.rt-up'), ac = r.querySelector('.rt-act');
+      if(!pc || !uc || !ac) return;
+      if(!saved[rt]) saved[rt] = {p: pc.innerHTML, u: uc.innerHTML, a: ac.innerHTML};
+      pc.innerHTML = files.map(function(f){
+        return '<div style="white-space:nowrap">'+esc(f.period)+
+               (f.work ? ' <span class="pill ok">в работе</span>' : '')+'</div>';
+      }).join('');
+      uc.innerHTML = files.map(function(f){
+        return '<div style="white-space:nowrap">'+esc(f.ts)+'</div>';
+      }).join('');
+      ac.innerHTML = files.map(function(f){
+        var dl = '<a class="small" href="'+EXPORT_TPL.replace('__RT__', encodeURIComponent(rt))+
+                 '?period='+encodeURIComponent(f.period)+'" title="'+esc(f.filename)+'">скачать</a> ';
+        var restore = f.work ? '' : formHtml(RESTORE_URL, f, rt, 'в работу', '', false)+' ';
+        return '<div style="white-space:nowrap;margin:1px 0">'+dl+restore+
+               formHtml(DELETE_URL, f, rt, 'удалить', 'danger', true)+'</div>';
+      }).join('');
+      ac.querySelectorAll('form.js-del').forEach(function(fm){
+        fm.addEventListener('submit', function(ev){
+          if(!confirm('Удалить файл за «'+fm.getAttribute('data-period')+'» из истории?')) ev.preventDefault();
+        });
+      });
+      r.classList.add('rt-sel'); td.classList.add('sel'); sel = {el: td, rt: rt};
+      r.scrollIntoView({behavior: 'smooth', block: 'center'});
     });
   });
 })();

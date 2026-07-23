@@ -6,8 +6,6 @@
 Поддерживаемые типы:
   - vrachi   : «Отчет по отправке документов в РЭМД в разрезе врачей»
   - debts    : «Список пациентов с неподписанными документами ...»
-  - flk      : «РЭМД. Детализация по ошибкам ФЛК»
-  - status   : «Статистика по статусам документов в РЭМД» (воронка дашборда)
   - koiki    : «Сводная ведомость движения пациентов и коечного фонда»
   - max      : «Отчёт о количестве записей и оказания услуг ТМК через чат-бот MAX»
   - xray     : «Отчёт по обработке лучевых исследований сервисом ИИ» (.xlsx, без периода)
@@ -337,18 +335,10 @@ def parse(path):
         res["records"] = _parse_vrachi(rows)
     elif rtype == "debts":
         res["records"] = _parse_debts(rows)
-    elif rtype == "flk":
-        res["records"] = _parse_flk(rows)
     elif rtype == "notrans":
         res["records"] = _parse_notrans(rows)
     elif rtype == "fap":
         res["records"] = _parse_fap(rows)
-    elif rtype == "vidy":
-        res["records"] = _parse_vidy(rows)
-    elif rtype == "docerr":
-        res["records"] = _parse_docerr(rows)
-    elif rtype == "status":
-        res["records"] = _parse_status(rows)
     elif rtype == "max":
         res["records"] = _parse_max(rows)
     elif rtype == "xray":
@@ -382,60 +372,6 @@ def _parse_fap(rows):
             "telemed": int(_num(r.get(16, "")) or 0),
             "er": int(_num(r.get(17, "")) or 0),
         })
-    return out
-
-
-def _parse_vidy(rows):
-    """Статистика по видам документов: c2 вид, c4 зарегистрировано, c5 отправлено,
-    c6 ошибка синхронной отправки, c7 ошибка регистрации, c8 общий итог."""
-    out = []
-    for r in rows:
-        vid = (r.get(2, "") or "").strip()
-        total = _num(r.get(8, ""))
-        if not vid or vid.isdigit() or total is None:
-            continue
-        if vid.lower().startswith(("вид документ", "итог", "общий")):
-            continue
-        out.append({
-            "doc_type": vid,
-            "zareg": int(_num(r.get(4, "")) or 0),
-            "sent": int(_num(r.get(5, "")) or 0),
-            "err_sync": int(_num(r.get(6, "")) or 0),
-            "err_reg": int(_num(r.get(7, "")) or 0),
-            "total": int(total),
-        })
-    return out
-
-
-def _parse_docerr(rows):
-    """Статистика по ошибкам документов: c3 вид, c4 не найдена запись справочника,
-    c5 ошибка валидации значения, c6 переданная должность."""
-    out = []
-    for r in rows:
-        vid = (r.get(3, "") or "").strip()
-        if not vid or vid.isdigit() or vid.lower().startswith(("вид документ", "итог")):
-            continue
-        nf = int(_num(r.get(4, "")) or 0)
-        val = int(_num(r.get(5, "")) or 0)
-        pos = int(_num(r.get(6, "")) or 0)
-        if nf + val + pos == 0:
-            continue
-        out.append({"doc_type": vid, "not_found": nf, "validation": val,
-                    "position": pos, "total": nf + val + pos})
-    return out
-
-
-def _parse_status(rows):
-    """Статистика по статусам документов: c3 статус, c4 количество."""
-    out = []
-    for r in rows:
-        st = (r.get(3, "") or "").strip()
-        cnt = _num(r.get(4, ""))
-        if not st or st.isdigit() or cnt is None:
-            continue
-        if st.lower().startswith(("итог", "статус документ")):
-            continue
-        out.append({"status": st, "count": int(cnt)})
     return out
 
 
@@ -504,29 +440,6 @@ def _parse_debts(rows):
             "otdelenie": (r.get(9, "") or "").strip(),  # c9 — отделение/кабинет врача
         })
     return [x for x in out if x["vrach"]]
-
-
-def _parse_flk(rows):
-    """Колонки: c1 Фамилия, c2 Имя, c4 Отчество, c5 ДР, c6 СНИЛС,
-    c7 тип запроса, c8 код ошибки, c9 описание, c10 подразделение/доп."""
-    out = []
-    for r in rows[8:]:
-        fam = r.get(1, "")
-        code = r.get(8, "")
-        if not fam and not code:
-            continue
-        if fam.lower() in ("фамилия сотрудника", "фамилия"):
-            continue
-        fio = " ".join(x for x in [r.get(1, ""), r.get(2, ""), r.get(4, "")] if x).strip()
-        out.append({
-            "fio": fio,
-            "snils": (r.get(6, "") or "").replace(" ", ""),
-            "req_type": r.get(7, ""),
-            "code": code,
-            "descr": r.get(9, ""),
-            "extra": r.get(10, ""),
-        })
-    return [x for x in out if x["code"]]
 
 
 def _parse_notrans(rows):

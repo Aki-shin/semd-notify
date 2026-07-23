@@ -28,8 +28,6 @@ def init():
         CREATE TABLE IF NOT EXISTS debts(
             vrach TEXT, patient TEXT, birth TEXT, case_no TEXT,
             d_start TEXT, d_end TEXT, doc_type TEXT, otdelenie TEXT);
-        CREATE TABLE IF NOT EXISTS errors(
-            fio TEXT, snils TEXT, req_type TEXT, code TEXT, descr TEXT, extra TEXT);
         CREATE TABLE IF NOT EXISTS email_map(key TEXT PRIMARY KEY, email TEXT);
         CREATE TABLE IF NOT EXISTS ipa_users(
             uid TEXT PRIMARY KEY, cn TEXT, givenname TEXT, sn TEXT, mail TEXT,
@@ -47,11 +45,6 @@ def init():
             fap TEXT, internet TEXT, fio TEXT, visits INTEGER, visits_doc INTEGER,
             pct INTEGER, naprav INTEGER, recipes INTEGER, naznach INTEGER, eln INTEGER,
             telemed INTEGER, er INTEGER);
-        CREATE TABLE IF NOT EXISTS vidy(
-            doc_type TEXT, zareg INTEGER, sent INTEGER, err_sync INTEGER, err_reg INTEGER, total INTEGER);
-        CREATE TABLE IF NOT EXISTS docerr(
-            doc_type TEXT, not_found INTEGER, validation INTEGER, position INTEGER, total INTEGER);
-        CREATE TABLE IF NOT EXISTS status(status TEXT, count INTEGER);
         CREATE TABLE IF NOT EXISTS koiki(
             otdelenie TEXT PRIMARY KEY, koek INTEGER, kd INTEGER, nach INTEGER,
             postup INTEGER, vyp INTEGER, pered INTEGER, umer INTEGER, kon INTEGER, day INTEGER);
@@ -330,11 +323,6 @@ def replace_report(rtype, filename, period, nrows, records):
                 "INSERT INTO debts(vrach,patient,birth,case_no,d_start,d_end,doc_type,otdelenie) "
                 "VALUES(:vrach,:patient,:birth,:case_no,:d_start,:d_end,:doc_type,:otdelenie)",
                 records)
-        elif rtype == "flk":
-            c.execute("DELETE FROM errors")
-            c.executemany(
-                "INSERT INTO errors VALUES(:fio,:snils,:req_type,:code,:descr,:extra)",
-                records)
         elif rtype == "notrans":
             c.execute("DELETE FROM notrans")
             if records:
@@ -345,15 +333,6 @@ def replace_report(rtype, filename, period, nrows, records):
                 "INSERT INTO fap(fap,internet,fio,visits,visits_doc,pct,naprav,recipes,"
                 "naznach,eln,telemed,er) VALUES(:fap,:internet,:fio,:visits,:visits_doc,"
                 ":pct,:naprav,:recipes,:naznach,:eln,:telemed,:er)", records)
-        elif rtype == "vidy":
-            c.execute("DELETE FROM vidy")
-            c.executemany("INSERT INTO vidy VALUES(:doc_type,:zareg,:sent,:err_sync,:err_reg,:total)", records)
-        elif rtype == "docerr":
-            c.execute("DELETE FROM docerr")
-            c.executemany("INSERT INTO docerr VALUES(:doc_type,:not_found,:validation,:position,:total)", records)
-        elif rtype == "status":
-            c.execute("DELETE FROM status")
-            c.executemany("INSERT INTO status VALUES(:status,:count)", records)
         elif rtype == "koiki":
             c.execute("DELETE FROM koiki")
             c.executemany(
@@ -395,8 +374,8 @@ def reset_reports():
     настройки SMTP/FreeIPA."""
     init()
     with _conn() as c:
-        for t in ("meta", "vrachi", "debts", "errors", "notrans",
-                  "fap", "vidy", "docerr", "status", "koiki", "max_tmk", "xray"):
+        for t in ("meta", "vrachi", "debts", "notrans",
+                  "fap", "koiki", "max_tmk", "xray"):
             c.execute(f"DELETE FROM {t}")
 
 
@@ -504,9 +483,9 @@ def reprocess_current():
 
 # rtype → рабочая таблица данных (для точечного удаления одного отчёта)
 RTYPE_TABLE = {
-    "vrachi": "vrachi", "debts": "debts", "flk": "errors",
-    "notrans": "notrans", "fap": "fap", "vidy": "vidy",
-    "docerr": "docerr", "status": "status", "koiki": "koiki", "max": "max_tmk",
+    "vrachi": "vrachi", "debts": "debts",
+    "notrans": "notrans", "fap": "fap",
+    "koiki": "koiki", "max": "max_tmk",
     "xray": "xray",
 }
 
@@ -605,23 +584,6 @@ def notrans_get():
     with _conn() as c:
         d = {r["k"]: r["v"] for r in c.execute("SELECT * FROM notrans")}
     return d if d.get("total") is not None else None
-
-
-def vidy_list():
-    """Статистика по видам документов (что зарегистрировано/упало), по убыванию объёма."""
-    with _conn() as c:
-        return [dict(r) for r in c.execute("SELECT * FROM vidy ORDER BY total DESC")]
-
-
-def docerr_list():
-    """Ошибки по видам документов (для страницы «Ошибки» и отчёта ответственному)."""
-    with _conn() as c:
-        return [dict(r) for r in c.execute("SELECT * FROM docerr ORDER BY total DESC")]
-
-
-def status_list():
-    with _conn() as c:
-        return [dict(r) for r in c.execute("SELECT * FROM status ORDER BY count DESC")]
 
 
 def fap_list():
@@ -1148,17 +1110,6 @@ def doctor_breakdown(vrach):
                         "AND podrazdelenie<>'' LIMIT 1", (vrach,)).fetchone()
     total = {k: sum(r[k] or 0 for r in rows) for k in ("sform", "podp", "nepodp", "zareg")}
     return {"rows": rows, "total": total, "podrazdelenie": pod["p"] if pod else ""}
-
-
-def errors_summary():
-    with _conn() as c:
-        by_code = [dict(r) for r in c.execute(
-            "SELECT code, COUNT(*) c FROM errors GROUP BY code ORDER BY c DESC")]
-        by_person = [dict(r) for r in c.execute(
-            "SELECT fio, snils, COUNT(*) c FROM errors GROUP BY fio ORDER BY c DESC LIMIT 50")]
-        samples = [dict(r) for r in c.execute(
-            "SELECT code, descr, COUNT(*) c FROM errors GROUP BY code, descr ORDER BY c DESC LIMIT 20")]
-    return {"by_code": by_code, "by_person": by_person, "samples": samples}
 
 
 def set_email(key, email):
