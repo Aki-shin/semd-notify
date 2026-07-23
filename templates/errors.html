@@ -12,7 +12,7 @@
   <tr><th>Код ошибки</th><th>Тип</th><th>Пример сообщения</th><th>Док-в</th></tr>
   {% for er in vit.errors %}
   <tr>
-    <td style="text-align:left;white-space:nowrap"><code>{{ er.err_code }}</code></td>
+    <td style="text-align:left"><code>{{ er.err_code|codes }}</code></td>
     <td style="text-align:left">{{ er.err_type or '—' }}</td>
     <td style="text-align:left" class="small">{{ (er.sample or '')[:180] }}{% if er.sample and er.sample|length > 180 %}…{% endif %}</td>
     <td class="r">{{ er.n }}</td>

@@ -54,9 +54,9 @@
   {% for s in cum.skipped %}<span class="pill warn" style="margin:2px" title="Исключён как пересекающийся с уже выбранным периодом">⤫ {{ s.label }} (пересечение)</span>{% endfor %}
 </div>
 {% if cum.gaps %}
-<div class="alert">⚠️ <b>Пробелы в покрытии</b> (нет загруженных данных за эти дни):
+<div class="alert"><b>Не хватает выгрузок за некоторые дни</b> — за них данных нет:
   {% for g in cum.gaps %}<br>• между {{ g.after }} и {{ g.before }} — <b>{{ g.days }}</b> дн.{% endfor %}
-  <br>Выполнение считается только за покрытые {{ cum.covered }} дней (пробелы не учитываются).</div>
+  <br>Выполнение плана считается только по дням, за которые данные есть ({{ cum.covered }} дн.).</div>
 {% endif %}
 
 <table>

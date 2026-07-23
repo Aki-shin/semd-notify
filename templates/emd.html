@@ -38,15 +38,15 @@
 устойчиво большое число означает затор на подписи организации.</p>
 {% endif %}
 
-<h2>Покрытие витрины по неделям <span class="small muted">— по дате создания документа</span></h2>
+<h2>Загруженные недели <span class="small muted">— сколько документов создано за каждую неделю (по дате документа)</span></h2>
 <div class="tagbar">
   {% for w in cov.weeks %}
   <span class="tchip" style="cursor:default" title="документов: {{ w.n }}, ошибок: {{ w.err }}">{{ w.w }} <span class="tcnt">{{ w.n }}</span></span>
   {% endfor %}
 </div>
 {% if cov.gaps %}
-<div class="alert">⚠️ Дырки в покрытии: {% for g in cov.gaps %}между {{ g.after }} и {{ g.before }} ({{ g.weeks }} нед.){% if not loop.last %}; {% endif %}{% endfor %} —
-догрузите недельные выгрузки за пропущенные недели, и картина срастётся.</div>
+<div class="alert">Не хватает выгрузок: {% for g in cov.gaps %}между {{ g.after }} и {{ g.before }} — {{ g.weeks }} нед. без данных{% if not loop.last %}; {% endif %}{% endfor %}.
+Загрузите на «Загрузке» недельные выгрузки за эти недели — аналитика дополнится задним числом.</div>
 {% endif %}
 
 <div class="cols">
@@ -81,7 +81,7 @@
   <tr><th>Код ошибки</th><th>Тип</th><th>Пример сообщения</th><th>Док-в</th></tr>
   {% for e in s.errors %}
   <tr>
-    <td style="text-align:left;white-space:nowrap"><code>{{ e.err_code }}</code></td>
+    <td style="text-align:left"><code>{{ e.err_code|codes }}</code></td>
     <td style="text-align:left">{{ e.err_type or '—' }}</td>
     <td style="text-align:left" class="small">{{ (e.sample or '')[:220] }}{% if e.sample and e.sample|length > 220 %}…{% endif %}</td>
     <td class="r">{{ e.n }}</td>
@@ -103,7 +103,7 @@
     <td class="small" style="white-space:nowrap">{{ d.snils or '—' }}</td>
     <td style="text-align:left">{{ d.vrach or '—' }}</td>
     <td class="small" style="text-align:left">{{ d.podr or '—' }}</td>
-    <td class="small" style="text-align:left"><code>{{ d.err_code }}</code></td>
+    <td class="small" style="text-align:left"><code>{{ d.err_code|codes }}</code></td>
     <td class="small" style="text-align:left">{{ (d.err_text or '')[:160] }}{% if d.err_text and d.err_text|length > 160 %}…{% endif %}</td>
     <td class="r">{{ d.attempts }}</td>
   </tr>

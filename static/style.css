@@ -21,11 +21,11 @@ body { font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 
   cursor: pointer; white-space: nowrap; text-align: left; transition: background .13s, color .13s; }
 .nav-group .ic { width: 20px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
 .nav-group:hover { background: rgba(255,255,255,.16); color: #fff; }
-.nav-group.inside { color: #fff; font-weight: 600; }
+.nav-group.inside { color: #fff; font-weight: 600; background: rgba(255,255,255,.14); }
 .nav-group .chev { margin-left: auto; display: inline-flex; opacity: .7; transition: transform .15s; }
 .nav-group.open .chev { transform: rotate(180deg); }
-.nav-sub { display: none; }
-.nav-sub.open { display: flex; flex-direction: column; gap: 3px; }
+.nav-sub { display: none; }  /* в узком рельсе подпункты скрыты — видны при выезде меню */
+.sidebar:hover .nav-sub.open { display: flex; flex-direction: column; gap: 3px; }
 .sidebar:hover .nav-sub.open a.sub { padding-left: 27px; }
 .side-nav a.active { background: rgba(255,255,255,.97); color: #0d6efd; font-weight: 600; }
 .sidebar .lbl { opacity: 0; transition: opacity .14s ease .02s; }
@@ -55,6 +55,7 @@ footer { text-align: center; color: #9aa3af; font-size: 12px; padding: 20px; }
   .side-nav { flex-direction: row; flex-wrap: wrap; }
   .side-nav a { padding: 8px 11px; }
   .sidebar .lbl, .sidebar:hover .lbl { opacity: 1; }
+  .nav-sub.open { display: flex; flex-direction: column; gap: 3px; }
   .side-brand .lbl br { display: none; }
   .side-foot { opacity: 1; flex-direction: row; align-items: center; gap: 12px; }
   .main-wrap { margin-left: 0; }
@@ -135,6 +136,11 @@ button.danger { background: #b91c1c; } button.danger:hover { background: #991b1b
 .inline input { margin-right: 6px; }
 a.back { font-size: 13px; }
 code { background: #eef0f2; padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+td code { white-space: normal; overflow-wrap: anywhere; }
+/* Карточка «Как это работает» на Загрузке */
+.howto { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 12px 16px; margin: 12px 0; font-size: 13.5px; color: #374151; }
+.howto ol { margin: 6px 0 0; padding-left: 20px; }
+.howto li { margin: 5px 0; }
 /* Получатели сводных отчётов (чипсы) */
 .resp-chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .chip { display: inline-flex; align-items: center; gap: 4px; background: #eef2f7; border: 1px solid #dbe2ea; border-radius: 14px; padding: 3px 8px 3px 11px; font-size: 13px; }

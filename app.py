@@ -778,6 +778,21 @@ def departments_report_send():
     return redirect(url_for("departments"))
 
 
+def _dedupe_codes(s):
+    """«VALIDATION_ERROR VALIDATION_ERROR X» -> «VALIDATION_ERROR ×2 · X».
+    В выгрузке код повторяется на каждую попытку отправки — для чтения это шум."""
+    parts = [p for p in re.split(r"[\s;,]+", s or "") if p]
+    order, cnt = [], {}
+    for p in parts:
+        if p not in cnt:
+            order.append(p)
+        cnt[p] = cnt.get(p, 0) + 1
+    return " · ".join(p + (f" ×{cnt[p]}" if cnt[p] > 1 else "") for p in order)
+
+
+app.add_template_filter(_dedupe_codes, "codes")
+
+
 def _emd_err_window():
     """Окно сводки об ошибках из витрины: последние 4 недели по дате создания.
     Возвращает (dfrom, dto, подпись окна) либо (None, None, None), если витрина пуста."""
@@ -796,6 +811,8 @@ def _emd_err_letter():
     if not label:
         return None
     s = storage.emd_summary(dfrom, dto)
+    for e in s["errors"]:  # повторяющиеся коды попыток сворачиваем и в письме
+        e["err_code"] = _dedupe_codes(e["err_code"])
     html = mailer.build_emd_err_report_html(
         label, s["totals"], s["errors"], s["by_podr"],
         storage.emd_err_by_vrach(dfrom, dto), appconfig.get("CUSTOM_ERR", ""))
